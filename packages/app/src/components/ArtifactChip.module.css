@@ -1,0 +1,31 @@
+/* F17 (W19) artifact chip — geometry 1:1 from the mock's showArtifacts block:
+   raised bg, --line border, radius 4, padding 0 8px. */
+.chip {
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-chip);
+  padding: 0 8px;
+  color: var(--hover-name);
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.glyph {
+  color: var(--muted);
+}
+
+.size {
+  color: var(--faint);
+}
+
+.plus {
+  color: var(--success);
+}
+
+.minus {
+  color: var(--danger);
+}

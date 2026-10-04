@@ -1,0 +1,182 @@
+name: Build desktop release candidates
+
+# Native signing/building is opt-in; publication and clean-user acceptance are separate gates.
+# release.yml calls this on a v* tag; a manual dispatch builds candidates without publishing.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Must match tauri.conf.json
+        required: true
+        default: '0.1.0'
+      package_name:
+        required: true
+        default: '@nedimyilmaz/chimera'
+      include_windows:
+        description: Build and sign Windows (needs the Windows signing secrets and thumbprint)
+        type: boolean
+        default: false
+      windows_publisher_thumbprint:
+        description: Public SHA1 thumbprint of the Windows signing certificate
+        required: false
+  workflow_call:
+    inputs:
+      version: { type: string, required: true }
+      package_name: { type: string, required: true }
+      include_windows: { type: boolean, default: false }
+      windows_publisher_thumbprint: { type: string, required: false, default: '' }
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-22.04, target: linux-x64 }
+          - { os: ubuntu-22.04-arm, target: linux-arm64 }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/release-build-setup
+        with:
+          version: ${{ inputs.version }}
+          package_name: ${{ inputs.package_name }}
+          windows_publisher_thumbprint: ${{ inputs.windows_publisher_thumbprint }}
+      - name: Linux native dependencies
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev patchelf
+      - name: Build Linux AppImage
+        run: pnpm --filter @chimera/app tauri build --bundles appimage
+      - name: Verify and name native artifact
+        run: node scripts/package-desktop-release.mjs
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: desktop-${{ matrix.target }}
+          path: dist/chimera-desktop-*
+          if-no-files-found: error
+
+  macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-15, target: darwin-arm64 }
+          - { os: macos-15-intel, target: darwin-x64 }
+    runs-on: ${{ matrix.os }}
+    # The Apple signing material is scoped to this environment, so only the jobs that sign wait
+    # for its reviewer; Linux builds need no secret and never do.
+    environment: release
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/release-build-setup
+        with:
+          version: ${{ inputs.version }}
+          package_name: ${{ inputs.package_name }}
+          windows_publisher_thumbprint: ${{ inputs.windows_publisher_thumbprint }}
+      - name: Build signed and notarized macOS app
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: bash scripts/release-macos-app.sh
+      - name: Verify and name native artifact
+        run: node scripts/package-desktop-release.mjs
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: desktop-${{ matrix.target }}
+          path: dist/chimera-desktop-*
+          if-no-files-found: error
+
+  # Windows stays out of a release until a code-signing certificate exists. The npm metadata then
+  # carries no publisher pin, and the installer refuses Windows before downloading anything.
+  windows:
+    if: inputs.include_windows
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, target: win32-x64 }
+          - { os: windows-11-arm, target: win32-arm64 }
+    runs-on: ${{ matrix.os }}
+    environment: release
+    timeout-minutes: 60
+    env:
+      WINDOWS_THUMBPRINT: ${{ inputs.windows_publisher_thumbprint }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Require the publisher pin
+        shell: bash
+        run: '[[ "$WINDOWS_THUMBPRINT" =~ ^[A-Fa-f0-9]{40}$ ]] || { echo "include_windows needs the 40-hex publisher thumbprint" >&2; exit 1; }'
+      - uses: ./.github/actions/release-build-setup
+        with:
+          version: ${{ inputs.version }}
+          package_name: ${{ inputs.package_name }}
+          windows_publisher_thumbprint: ${{ inputs.windows_publisher_thumbprint }}
+      - name: Build Windows app
+        run: pnpm --filter @chimera/app tauri build --no-bundle
+      - name: Sign Windows app
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not $env:WINDOWS_CERTIFICATE -or -not $env:WINDOWS_CERTIFICATE_PASSWORD) { throw 'Windows signing secrets are required.' }
+          $pfx = Join-Path $env:RUNNER_TEMP 'chimera-signing.pfx'
+          $certs = @()
+          try {
+            [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+            $password = ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
+            $certs = @(Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $password)
+            $cert = $certs | Where-Object { $_.Thumbprint -eq $env:WINDOWS_THUMBPRINT -and $_.HasPrivateKey }
+            if (@($cert).Count -ne 1) { throw 'Signing certificate does not match the npm publisher pin.' }
+            $exe = 'packages/app/src-tauri/target/release/chimera-app.exe'
+            $signature = Set-AuthenticodeSignature -LiteralPath $exe -Certificate $cert -HashAlgorithm SHA256 -TimestampServer 'http://timestamp.digicert.com'
+            if ($signature.Status -ne 'Valid') { throw 'Windows code signing failed.' }
+          } finally {
+            Remove-Item -LiteralPath $pfx -Force -ErrorAction SilentlyContinue
+            foreach ($cert in $certs) { Remove-Item -LiteralPath "Cert:\CurrentUser\My\$($cert.Thumbprint)" -Force }
+          }
+      - name: Verify and name native artifact
+        run: node scripts/package-desktop-release.mjs
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: desktop-${{ matrix.target }}
+          path: dist/chimera-desktop-*
+          if-no-files-found: error
+
+  manifest:
+    needs: [linux, macos, windows]
+    # `windows` is skipped unless requested; a skipped job must not skip the manifest.
+    if: ${{ !cancelled() && needs.linux.result == 'success' && needs.macos.result == 'success' && contains(fromJSON('["success","skipped"]'), needs.windows.result) }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: desktop-*
+          merge-multiple: true
+          path: desktop-assets
+      - run: node scripts/release-checksums.mjs desktop-assets/chimera-desktop-* > desktop-assets/SHA256SUMS
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: desktop-release-candidates
+          path: desktop-assets/*

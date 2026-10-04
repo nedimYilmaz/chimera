@@ -1,0 +1,25 @@
+/* TERMINAL-RUNTIME: the transcript body, replaced by a live attachment. */
+.wrap {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;   /* without this the terminal grows past the pane instead of scrolling inside it */
+  background: var(--panel);
+}
+.notice {
+  padding: 10px 12px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.hint {
+  flex: none;
+  padding: 4px 12px 6px;
+  border-top: 1px solid var(--line-soft);
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  /* Selectable on purpose: this is a command the operator is meant to copy. */
+  user-select: text;
+}
+.wrap > :global(div):nth-child(1) { flex: 1 1 auto; min-height: 0; }

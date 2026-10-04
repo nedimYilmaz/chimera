@@ -1,0 +1,209 @@
+/* Create/edit-workflow form — same 620/680 card, 90px labels, input-bg fields
+   convention as TeamFormCard/ScheduleFormCard.module.css, plus the F15
+   chip-selector pattern (command/artifact/approval/none) and a repeatable
+   step-block list. */
+.fields {
+  padding: 10px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: var(--fs-meta);
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.pair {
+  display: flex;
+  gap: 16px;
+}
+
+.pair > .field {
+  flex: 1;
+}
+
+.field {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+}
+
+.label {
+  width: 90px;
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
+.input {
+  flex: 1;
+  min-width: 0;
+  background: var(--input-bg);
+  border: 1px solid var(--field-idle);
+  border-radius: var(--radius-chip);
+  padding: 3px 8px;
+  font: inherit;
+  color: var(--fg-soft);
+  outline: none;
+}
+
+.input:focus {
+  border-color: var(--field-active);
+  color: var(--fg);
+}
+
+.input::placeholder {
+  color: var(--faint);
+}
+
+.input:disabled {
+  color: var(--faint);
+  cursor: not-allowed;
+}
+
+.select {
+  composes: input;
+}
+
+.textarea {
+  composes: input;
+  min-height: 44px;
+  resize: vertical;
+  font: inherit;
+}
+
+.checkboxRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+}
+
+.error {
+  color: var(--danger);
+}
+
+.stepsHead {
+  margin-top: 8px;
+  color: var(--faint);
+  font-size: var(--fs-tiny);
+  letter-spacing: 0.05em;
+}
+
+.stepBlock {
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.stepHeadRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.stepIndex {
+  color: var(--faint);
+  width: 20px;
+  flex-shrink: 0;
+}
+
+.removeChip {
+  color: var(--danger);
+  cursor: pointer;
+  padding: 0 6px;
+  flex-shrink: 0;
+}
+
+.removeChip:hover {
+  text-decoration: underline;
+}
+
+/* the F15 chip-selector: a row of clickable pills, one active at a time
+   (mirrors submitChip/cancelChip's border+radius language, but toggled by
+   selection rather than by role). */
+.gateChipRow {
+  display: flex;
+  gap: 6px;
+  padding-left: 100px;
+}
+
+.gateChip {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-chip);
+  padding: 1px 9px;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: var(--fs-meta);
+}
+
+.gateChip:hover {
+  border-color: var(--field-active);
+}
+
+.gateChipActive {
+  composes: gateChip;
+  border-color: var(--accent);
+  background: var(--sel-bg);
+  color: var(--fg);
+}
+
+/* a gateChip row nested INSIDE a labeled .field (artifact-gate scope picker,
+   WF-6) — no left padding, unlike the top-level .gateChipRow which aligns
+   under the step title with no label of its own. */
+.inlineChipRow {
+  display: flex;
+  gap: 6px;
+  flex: 1;
+}
+
+.addStepChip {
+  align-self: flex-start;
+  margin-top: 4px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-chip);
+  padding: 2px 10px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.addStepChip:hover {
+  border-color: var(--field-active);
+  color: var(--fg-soft);
+}
+
+.footer {
+  padding: 8px 16px 12px;
+  display: flex;
+  gap: 12px;
+  font-size: var(--fs-meta);
+  border-top: 1px solid var(--line-soft);
+}
+
+.submitChip {
+  border: 1px solid var(--field-active);
+  background: var(--sel-bg);
+  border-radius: var(--radius-chip);
+  padding: 2px 10px;
+  cursor: pointer;
+}
+
+.submitKey {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.submitVerb {
+  color: var(--fg-soft);
+}
+
+.cancelChip {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-chip);
+  padding: 2px 10px;
+  color: var(--muted);
+  cursor: pointer;
+}

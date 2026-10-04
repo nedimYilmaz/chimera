@@ -1,0 +1,150 @@
+/* FLEET-TELEMETRY: the live panel's chrome. Every colour is a theme token — the panel has no
+   palette of its own, so it follows the app into whatever theme is active. Animation is CSS
+   only: transitions on width/stroke-dashoffset carry the 1Hz samples so the eye reads them as
+   continuous motion rather than a once-a-second jump. */
+
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-6);
+  padding: var(--sp-6) 14px;
+  border-bottom: 1px solid var(--line-soft);
+  flex-shrink: 0;
+}
+
+.headline {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+}
+
+.ringCell {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  flex-shrink: 0;
+}
+
+.ring { width: 64px; height: 64px; }
+.ringTrack { fill: none; stroke: var(--line-soft); stroke-width: 6; }
+
+.ringValue {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 6;
+  stroke-linecap: round;
+  /* the sweep: a new dash length eases in instead of snapping */
+  transition: stroke-dasharray 900ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.ringText {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  pointer-events: none;
+}
+
+.ringPct { color: var(--fg); font-size: var(--fs-meta); font-weight: 700; }
+.ringCaption { color: var(--ghost); font-size: var(--fs-meta); }
+
+.statGrid {
+  flex: 1;
+  display: grid;
+  /* FORM-GRID discipline: fixed columns, so a value growing from "9" to "1.2k" never reflows
+     its neighbours into new positions. */
+  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+  gap: var(--sp-4) var(--sp-6);
+  min-width: 0;
+}
+
+.stat { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.statLabel { color: var(--ghost); font-size: var(--fs-meta); }
+.statSub { color: var(--ghost); font-size: var(--fs-meta); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.statValue {
+  color: var(--fg);
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;   /* digits keep their width — no jitter as numbers change */
+}
+
+.statValuePulse {
+  composes: statValue;
+  color: var(--accent);
+  animation: pulse var(--pulse-duration, 1.2s) ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.62; }
+}
+
+/* An operator who prefers less motion gets the data without the animation. */
+@media (prefers-reduced-motion: reduce) {
+  .statValuePulse { animation: none; }
+  .ringValue, .barFill, .barFillWarn { transition: none; }
+}
+
+.row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--sp-6);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  min-width: 0;
+}
+
+.panelHead { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-4); }
+.panelTitle { color: var(--muted); font-size: var(--fs-meta); }
+.panelMeta { color: var(--ghost); font-size: var(--fs-meta); white-space: nowrap; }
+
+.spark { width: 100%; height: 34px; display: block; }
+.sparkEmpty { height: 34px; display: flex; align-items: center; color: var(--ghost); font-size: var(--fs-meta); }
+
+.sparkLine { fill: none; stroke: var(--accent); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.sparkFill { fill: var(--accent); opacity: 0.12; stroke: none; }
+.sparkLineWarn { composes: sparkLine; stroke: var(--warn); }
+.sparkFillWarn { composes: sparkFill; fill: var(--warn); }
+
+.bars { display: flex; flex-direction: column; gap: var(--sp-2); }
+
+.barRow {
+  display: grid;
+  /* TOOL-METRICS-BASH-BREAKDOWN: the labels grew from "Bash" to "Bash · gcloud" and from a
+     truncated "mcp__plugin…" to "plugin_atlassian · getJiraIssue". 88px turned every one of them
+     into an ellipsis, which is the problem the breakdown exists to solve. */
+  grid-template-columns: minmax(88px, 26%) 1fr auto;
+  align-items: center;
+  gap: var(--sp-4);
+  min-width: 0;
+}
+
+.barLabel { color: var(--fg-soft); font-size: var(--fs-meta); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.barMeta { color: var(--ghost); font-size: var(--fs-meta); white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+.barTrack {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--line-soft);
+  overflow: hidden;
+  min-width: 0;
+}
+
+.barFill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+  transition: width 900ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.barFillWarn { composes: barFill; background: var(--warn); }
+
+.empty { color: var(--ghost); font-size: var(--fs-meta); padding: var(--sp-2) 0; }

@@ -1,0 +1,92 @@
+/* TerminalDock — resizable pane below the transcript body, inside the right pane. */
+.dock {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--line);
+  background: var(--raised);
+  min-height: 0;
+}
+
+/* PANE-RESIZE: the hand-rolled .handle is gone — the shared PaneDivider draws this seam now. */
+
+.tabBar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--line-soft);
+  flex-shrink: 0;
+  overflow-x: auto;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px 2px 8px;
+  border-radius: var(--radius-chip);
+  color: var(--muted);
+  font-size: var(--fs-meta);
+  cursor: pointer;
+}
+.tabActive { background: var(--sel-bg); color: var(--fg); }
+
+.tabButton {
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+
+.tabPopOut {
+  background: none;
+  border: none;
+  color: var(--faint);
+  font: inherit;
+  cursor: pointer;
+  padding: 0 2px;
+}
+.tabPopOut:hover { color: var(--muted); }
+
+.tabClose {
+  background: none;
+  border: none;
+  color: var(--faint);
+  font: inherit;
+  cursor: pointer;
+  padding: 0 2px;
+}
+.tabClose:hover { color: var(--danger); }
+
+.newTab {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+  padding: 2px 8px;
+}
+.newTab:hover { color: var(--fg); }
+
+.tabBody {
+  flex: 1;
+  min-height: 0;
+  padding: 4px 8px;
+}
+
+/* TERMINAL-NAMES: the in-place rename field. Sized and styled to sit exactly where the tab's own
+   label was, so committing does not make the strip jump. */
+.tabRename {
+  background: var(--input-bg);
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  color: var(--fg);
+  font-family: inherit;
+  font-size: inherit;
+  padding: 0 4px;
+  width: 12ch;
+  outline: none;
+}

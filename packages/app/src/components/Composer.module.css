@@ -1,0 +1,185 @@
+/* W4 Composer — geometry 1:1 from the mock strip (line 482-488):
+   panel bg, --line-strong border, radius 6, padding 7px 12px, gap 10. */
+.strip {
+  flex-shrink: 0;
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-panel);
+  padding: 7px 12px;
+}
+
+.row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.prompt {
+  color: var(--accent);
+  font-weight: 700;
+  line-height: var(--lh);
+}
+
+.chipWrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+/* "→ ◇ main ▾" chip (mock line 484): raised bg, radius 4, muted 12px. */
+.targetChip {
+  background: var(--raised);
+  border: none;
+  border-radius: var(--radius-chip);
+  padding: 0 8px;
+  color: var(--muted);
+  font-size: var(--fs-meta);
+  font-family: var(--font-mono);
+  line-height: var(--lh);
+  cursor: pointer;
+}
+
+.modeAsk {
+  color: var(--warn);
+}
+
+.modeBypass {
+  color: var(--success);
+}
+
+.chipCaret {
+  color: var(--ghost);
+}
+
+/* target menu — anchored above the chip, card-styled.
+
+   COMPOSER-TARGET-MENU-CLIPPED: `fixed`, not `absolute`, and portaled to <body> (see Composer.tsx)
+   because the composer band above it is `overflow: hidden` — an absolute box was clipped away
+   entirely by that ceiling. `left`/`bottom` come from the chip's measured rect, so they are set
+   inline rather than here.
+
+   z-index 60 sits above the whole ordinary app tree (which tops out at 20 inside its own stacking
+   contexts) and below the full-screen layers — WorkflowStudio 80, the image lightbox 100, the file
+   viewer 200 — none of which a composer chip should ever cover. It also paints over the decision
+   cards in the right column, which matches the esc chain: resolveEscTier already answers
+   "targetMenu" ahead of a visible question, so the menu is the topmost thing in BOTH orderings. */
+.targetMenu {
+  position: fixed;
+  min-width: 200px;
+  background: var(--card);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+}
+
+.targetOption {
+  background: none;
+  border: none;
+  border-left: 2px solid transparent;
+  text-align: left;
+  padding: 2px 12px;
+  color: var(--fg-soft);
+  font-size: var(--fs-small);
+  font-family: var(--font-mono);
+  cursor: pointer;
+}
+
+.targetOption:hover {
+  background: var(--hover-bg);
+}
+
+.targetOptionActive {
+  background: var(--sel-bg);
+  border-left: 2px solid var(--accent);
+  color: var(--fg);
+}
+
+/* the controlled input — transparent, borderless, native caret as the
+   blinking cursor; JS auto-sizes its height to content incl. soft-wrapped
+   lines (≤8 rows — Composer.tsx's autosizeInput), then scrolls internally. */
+/* COMPOSER-MARKDOWN-PREVIEW: the textarea and its mirror stack here. The flex sizing moved off the
+   textarea onto this wrapper so both layers resolve to exactly the same box. */
+.inputWrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+}
+
+/* Every metric below MUST stay identical to .input. They are not decoration: the mirror wraps the
+   same way the textarea does only because the font, size, line-height, padding and wrapping rules
+   agree, and a highlight that wraps differently sits off the text it marks. `break-word` matches a
+   textarea's own default wrapping, which is not the CSS initial value. */
+.inputMirror {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  font-family: var(--font-mono);
+  font-size: var(--fs-body);
+  line-height: var(--lh);
+  padding: 0;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  /* Transparent, not hidden: the run has to occupy exactly the space its characters do, so the
+     background lands under the real ones. */
+  color: transparent;
+}
+
+/* Matches the transcript's inline-code chip, so what you type looks like what you will get. */
+.mirrorCode {
+  background: var(--raised);
+  border-radius: 3px;
+}
+
+.input {
+  flex: 1;
+  min-width: 0;
+  /* Above the mirror, so the real characters and the caret are what you see. */
+  position: relative;
+  background: none;
+  border: none;
+  outline: none;
+  resize: none;
+  color: var(--fg);
+  caret-color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: var(--fs-body);
+  line-height: var(--lh);
+  padding: 0;
+}
+
+.input:disabled {
+  opacity: 0.5;
+}
+
+/* F13: placeholder-only key hints — dim, native, gone the instant text (or an
+   inline image tag) exists; replaces the old always-on .hints right-side label. */
+.input::placeholder {
+  color: var(--faint);
+}
+
+/* F13: "N/8 lines · grows with content" — shown only while the input has
+   content, self-aligned to the input row's bottom like the mock. */
+.growHint {
+  align-self: flex-end;
+  color: var(--ghost);
+  font-size: var(--fs-meta);
+  white-space: nowrap;
+  line-height: var(--lh);
+  flex-shrink: 0;
+}
+
+.strip { container-type:inline-size; container-name:composer; min-width:0; }
+.row { flex-wrap:wrap; min-width:0; }
+.chipWrap { max-width:100%; }
+.targetChip { overflow-wrap:anywhere; }
+.inputWrap { flex:1 1 220px; }
+@container composer (max-width:650px) {
+  .row { gap:8px; }
+  .inputWrap { order:1; flex-basis:100%; }
+  .growHint { order:2; white-space:normal; }
+}

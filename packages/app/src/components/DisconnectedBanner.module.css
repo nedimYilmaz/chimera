@@ -1,0 +1,15 @@
+/* Geometry 1:1 from the mock's disconnected banner block. Tokens only. */
+.banner {
+  flex-shrink: 0;
+  margin: 0 12px 6px;
+  background: var(--bg-danger-tint);
+  border: 1px solid var(--edge-confirm);
+  border-radius: 6px;
+  padding: 3px 12px;
+  font-size: var(--fs-meta);
+  color: var(--danger-soft);
+}
+
+.dim {
+  color: var(--muted);
+}

@@ -1,0 +1,101 @@
+/* Create/edit-queue form (W16 F15/D11), 1:1 with TeamFormCard's own field
+   pattern: 620 card, 110px labels, input-bg fields, active border
+   --field-active vs idle --field-idle. */
+.fields {
+  padding: 10px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: var(--fs-meta);
+}
+
+.field {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+}
+
+.label,
+.labelActive {
+  width: 110px;
+  flex-shrink: 0;
+}
+
+.label {
+  color: var(--muted);
+}
+
+.labelActive {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.input,
+.inputActive {
+  flex: 1;
+  min-width: 0;
+  background: var(--input-bg);
+  border-radius: var(--radius-chip);
+  padding: 3px 8px;
+  font: inherit;
+  color: var(--fg-soft);
+  outline: none;
+}
+
+.input {
+  border: 1px solid var(--field-idle);
+}
+
+.inputActive {
+  border: 1px solid var(--field-active);
+  color: var(--fg);
+}
+
+.input:disabled,
+.inputActive:disabled {
+  color: var(--faint);
+  cursor: not-allowed;
+}
+
+.input::placeholder,
+.inputActive::placeholder {
+  color: var(--faint);
+}
+
+.error {
+  color: var(--danger);
+}
+
+.footer {
+  padding: 8px 16px 12px;
+  display: flex;
+  gap: 12px;
+  font-size: var(--fs-meta);
+  border-top: 1px solid var(--line-soft);
+}
+
+.submitChip {
+  border: 1px solid var(--field-active);
+  background: var(--sel-bg);
+  border-radius: var(--radius-chip);
+  padding: 2px 10px;
+  cursor: pointer;
+}
+
+.submitKey {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.submitVerb {
+  color: var(--fg-soft);
+}
+
+.cancelChip {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-chip);
+  padding: 2px 10px;
+  color: var(--muted);
+  cursor: pointer;
+}

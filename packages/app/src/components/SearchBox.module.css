@@ -1,0 +1,53 @@
+/* Shared per-tab search input (mirrors the memory screen's search row). */
+.searchRow {
+  padding: 6px 14px 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid var(--line-soft);
+  flex-shrink: 0;
+  /* SEARCHBOX-UNCLICKABLE: the agents panel's row (slash + input + count +
+     up to 3 nowrap chips) can structurally exceed a 430px pane even with the
+     input at its width floor and the count fully ellipsized — e.g. "+ spawn"
+     + the done toggle + "close all sessions" together already run ~370px
+     before the input/count take any space. Wrapping lets the trailing chips
+     drop to a second line instead of clipping or squeezing the input. */
+  flex-wrap: wrap;
+}
+
+.slash {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.searchInput {
+  flex: 1;
+  /* SEARCHBOX-UNCLICKABLE: a floor so crowded rows (agents panel) squeeze
+     .countMeta instead of collapsing the input to an unclickable sliver. */
+  min-width: 64px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-chip);
+  outline: none;
+  font: inherit;
+  color: var(--fg);
+  padding: 2px 6px;
+}
+
+.searchInput:focus {
+  border-color: var(--field-active);
+  background: var(--input-bg);
+}
+
+.searchInput::placeholder {
+  color: var(--faint);
+}
+
+.countMeta {
+  color: var(--faint);
+  font-size: var(--fs-meta);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}

@@ -1,0 +1,5 @@
+node_modules
+dist
+dist-types
+src-tauri/target
+src-tauri/gen/schemas

@@ -1,0 +1,18 @@
+/* F17 (W19) artifact preview card — body geometry mirrors ResultCard's own
+   scrollable body block. */
+.body {
+  padding: 10px 16px 14px;
+  color: var(--result-body);
+  font-size: var(--fs-small);
+  line-height: 1.55;
+  max-height: 480px;
+  overflow-y: auto;
+}
+
+.emptyNote {
+  color: var(--faint);
+}
+
+.errorNote {
+  color: var(--danger);
+}

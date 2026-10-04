@@ -1,0 +1,39 @@
+node_modules
+dist/
+*.tsbuildinfo
+*.bun-build
+.superpowers/
+.chimera/
+*.log
+.DS_Store
+
+# Local credentials and publisher signing material must never enter source releases.
+.env
+.env.*
+!.env.example
+*.p12
+*.pfx
+*.p8
+*.key
+*.pem
+
+# W2-6 EFFORT-AB-HARNESS: per-run scratch copies of packages/client/bench/effort-ab/fixtures/
+# — must live inside the repo tree (not os.tmpdir()) so tsc/vitest inside a scratch dir can
+# resolve `vitest`/`typescript` by walking up to the repo's own node_modules.
+packages/client/bench/effort-ab/.runs/
+# Generated, platform-specific desktop runtime (contains Node/npm/Git and dependencies).
+packages/app/src-tauri/standalone/
+
+# docs/superpowers/ is a private development journal. Only the public contract docs linked
+# from README/CLAUDE/AGENTS/INSTALL and the measurement fixtures read by tests are published.
+docs/superpowers/**
+!docs/superpowers/**/
+!docs/superpowers/measurements/*
+!docs/superpowers/design-plans/handoff/plans/PLAN-TAURI.md
+!docs/superpowers/design-plans/THREAT-MODEL-LOOPBACK-MCP.md
+!docs/superpowers/plans/codex-openai-readiness.md
+!docs/superpowers/plans/native-codex-voice.md
+!docs/superpowers/plans/managed-mcp-packages.md
+!docs/superpowers/plans/native-voice-meetings.md
+!docs/superpowers/specs/2026-07-28-kimi-backend-s0-findings.md
+docs/PRE-PUBLICATION-AUDIT.md

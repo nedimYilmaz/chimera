@@ -1,0 +1,26 @@
+.workspace { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; container-type: inline-size; }
+.switches, .toolbar, .heading { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 8px 14px; border-bottom: 1px solid var(--line-soft); }
+.switches { flex-shrink: 0; }
+.switches button, .toolbar button, .heading button { padding: 4px 8px; border-radius: var(--radius-chip); color: var(--fg-soft); }
+.switches button[aria-pressed="true"], .toolbar button[aria-pressed="true"] { color: var(--accent); background: var(--sel-bg); }
+.panes { display: flex; flex: 1; min-height: 0; min-width: 0; gap: 10px; padding-top: 10px; }
+.conversation { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; }
+.panes[data-view="design"] > .conversation { display: none; }
+.panel { flex: 1; min-width: 0; }
+.heading strong { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.controls { display: flex; flex-wrap: wrap; gap: 12px; padding: 10px 14px; }
+.controls label { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; color: var(--muted); }
+.controls select { width: 100%; min-width: 0; }
+.controls select, .toolbar select { color: var(--fg); background: var(--input-bg); border: 1px solid var(--line-strong); padding: 5px; border-radius: var(--radius-chip); font: inherit; }
+.toolbar label { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--muted); }
+.note { padding: 8px 14px; color: var(--muted); overflow-wrap: anywhere; font-size: var(--fs-meta); }
+.empty { padding: 22px; overflow: auto; color: var(--fg-soft); max-width: 640px; }
+.empty h3 { color: var(--fg); font-weight: 500; }
+.empty p { margin-top: 14px; line-height: 1.6; }
+.canvas { flex: 1; min-height: 180px; overflow: auto; background: var(--bg); }
+.canvas iframe { display: block; height: 100%; min-height: 360px; border: 0; margin: 0 auto; background: Canvas; color-scheme: light; }
+.source { flex: 1; min-height: 0; overflow: auto; margin: 0; padding: 14px; color: var(--fg); background: var(--input-bg); font: inherit; white-space: pre; }
+@container (max-width: 760px) {
+  .panes[data-view="split"] { flex-direction: column; overflow: auto; }
+  .panes[data-view="split"] > .conversation, .panes[data-view="split"] > .panel { flex: 1 0 400px; }
+}

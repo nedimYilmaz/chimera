@@ -1,0 +1,45 @@
+/* A2A-UX-OVERHAUL · PART 2 — the ephemeral live-traffic indicator, pinned to the
+   bottom of the AgentList panel (above the footer). Each row runs the a2aFlash
+   keyframe ONCE: slide+fade in (~6%), hold (~76%), fade out (~18%) over ~4.8s,
+   then onAnimationEnd unmounts it. Non-focusable, single line, ellipsized. */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 10px;
+  flex-shrink: 0;
+  border-top: 1px solid var(--line);
+}
+
+.row {
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  opacity: 0;
+  animation: a2aFlash 4800ms ease-in-out forwards;
+}
+
+.agent { color: var(--accent); }
+.arrow { color: var(--muted); }
+.text { color: var(--faint); }
+
+@keyframes a2aFlash {
+  0%   { opacity: 0; transform: translateY(4px); }
+  6%   { opacity: 1; transform: translateY(0); }
+  82%  { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(0); }
+}
+
+/* Honor reduced-motion: skip the slide, keep the fade so it still appears/clears. */
+@media (prefers-reduced-motion: reduce) {
+  .row { animation: a2aFadeOnly 4800ms ease-in-out forwards; }
+  @keyframes a2aFadeOnly {
+    0%   { opacity: 0; }
+    6%   { opacity: 1; }
+    82%  { opacity: 1; }
+    100% { opacity: 0; }
+  }
+}

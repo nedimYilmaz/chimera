@@ -1,0 +1,14 @@
+/* HoldPauseBanner — same strip geometry as BudgetPauseBanner but warn-toned
+   (a session-limit/crash-loop/reattach HOLD auto-resumes; budget does not). */
+.banner {
+  background: var(--bg-warn-tint);
+  border: 1px solid var(--warn);
+  border-radius: var(--radius-panel);
+  padding: 4px 12px;
+  font-size: var(--fs-meta);
+  color: var(--warn);
+}
+
+.dim {
+  color: var(--muted);
+}

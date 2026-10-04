@@ -1,0 +1,10 @@
+{
+  "bundle": {
+    "resources": {
+      "standalone/runtime/": "runtime/"
+    },
+    "windows": {
+      "nsis": { "installMode": "currentUser" }
+    }
+  }
+}

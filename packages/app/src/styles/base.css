@@ -1,0 +1,110 @@
+/* Base reset + app-wide chrome. Colors reference tokens.css vars ONLY. */
+:root {
+  /* Native select menus, date pickers and form controls must match the app even
+     when the host OS is in light mode. This also avoids white WebKit flash states. */
+  color-scheme: dark;
+}
+
+/* Zero specificity: component styles keep ownership of layout and semantic
+   colours; controls without a CSS module still get a readable dark fallback. */
+:where(button, input, select, textarea) {
+  font: inherit;
+  color: var(--fg-soft);
+  accent-color: var(--accent);
+}
+:where(button, select, textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"])) {
+  background: var(--input-bg);
+  border: 1px solid var(--field-idle);
+  border-radius: var(--radius-chip);
+  padding: 3px 8px;
+}
+:where(button) { cursor: pointer; }
+:where(button:hover:not(:disabled)) { background: var(--hover-bg); color: var(--fg); }
+:where(input, textarea)::placeholder { color: var(--muted); }
+:where(select option, select optgroup) { background: var(--panel); color: var(--fg); }
+:where(button, input, select, textarea):focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+:where(button, input, select, textarea):disabled { color: var(--muted); cursor: not-allowed; }
+:where(textarea) { resize: vertical; max-width: 100%; }
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--fg);
+  caret-color: var(--fg);
+  -webkit-box-shadow: 0 0 0 1000px var(--input-bg) inset;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: var(--fs-body);
+  line-height: var(--lh);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--select-hl);
+  color: var(--select-hl-fg);
+}
+
+/* thin scrollbars everywhere, matching the mock's 3px rail */
+::-webkit-scrollbar {
+  width: 3px;
+  height: 3px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 2px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Shared chrome is intentionally low-specificity; semantic component styles win. */
+:where(button, select, input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"])) {
+  min-height: var(--control-h);
+  max-width: 100%;
+}
+:where(button) { line-height: 1.35; overflow-wrap: anywhere; }
+:where(input, select, textarea) { min-width: 0; }
+:where(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
+:where(table) { border-collapse: collapse; font-variant-numeric: tabular-nums; }
+:where(pre) { max-width: 100%; overflow: auto; }
+[data-screen-layout] { min-width: 0; padding: var(--screen-gutter); gap: 0; }
+[data-screen-layout] > * { min-width: 0; }
+/* Keep every pane available on small screens. Nested lists retain their own scroll. */
+@media (max-width: 760px) {
+  [data-screen-layout="split"], [data-screen-layout="memory"] {
+    flex-direction: column; overflow-y: auto; gap: var(--section-gap);
+  }
+  [data-screen-layout="split"] > :not([role="separator"]),
+  [data-screen-layout="memory"] > :not([role="separator"]) {
+    width: 100%; max-width: 100%; flex: 0 0 auto; min-height: 280px;
+  }
+  [data-screen-layout="split"] > [role="separator"],
+  [data-screen-layout="memory"] > [role="separator"] { display: none; }
+  [data-screen-layout="split"] > :last-child { min-height: 440px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; }
+}
+
+html[data-reduce-motion="true"] *, html[data-reduce-motion="true"] *::before, html[data-reduce-motion="true"] *::after { animation-duration:0.01ms !important; animation-iteration-count:1 !important; transition-duration:0.01ms !important; scroll-behavior:auto !important; }

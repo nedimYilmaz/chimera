@@ -1,0 +1,133 @@
+/* W4 ToolDetailCard — geometry 1:1 from the mock showToolDetail block
+   (line 148-162): --line border, radius 6, --input-bg fill; call rows;
+   selected row --detail-row-sel; input/result block --code-bg. */
+.card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--input-bg);
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+
+.header {
+  padding: 4px 12px;
+  color: var(--muted);
+  font-size: var(--fs-meta);
+  border-bottom: 1px solid var(--line-soft);
+  cursor: pointer;
+}
+
+.headerHint {
+  color: var(--faint);
+}
+
+.closeBtn {
+  float: right;
+  color: var(--faint);
+  cursor: pointer;
+}
+
+.closeBtn:hover {
+  color: var(--fg-soft);
+}
+
+.callRow {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 2px 12px;
+  color: var(--muted);
+  font-size: var(--fs-meta);
+  font-family: var(--font-mono);
+  background: none;
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.callRowSelected {
+  background: var(--detail-row-sel);
+}
+
+.pathHint {
+  color: var(--faint);
+}
+
+.block {
+  margin: 4px 12px 8px;
+  padding: 6px 10px;
+  background: var(--code-bg);
+  border-radius: var(--radius-chip);
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}
+
+.blockLabel {
+  color: var(--faint);
+}
+
+.blockLabel + .blockLabel,
+.inputText + .blockLabel,
+.resultText + .blockLabel {
+  margin-top: 4px;
+}
+
+.inputText {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.resultText {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.deniedLine {
+  color: var(--danger);
+  margin-top: 4px;
+}
+
+.diffPlus {
+  color: var(--success);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.diffMinus {
+  color: var(--danger);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.success {
+  color: var(--success);
+}
+
+.successBold {
+  color: var(--success);
+  font-weight: 700;
+}
+
+.danger {
+  color: var(--danger);
+}
+
+.dangerBold {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.warnPulse {
+  color: var(--warn);
+  animation: cometGlow var(--pulse-duration) linear infinite;
+}
+
+.ghost {
+  color: var(--ghost);
+}

@@ -1,0 +1,133 @@
+/* Read-only bound-workflow view (mock `?screen=queues&showWorkflow=1`) — same
+   OverlayCard shell as every other card; a chip row (TeamsScreen's
+   .chipRow/.chip precedent) for the ● enforced badge + version/onFail meta,
+   a step list, and the dim engine-parity note. */
+.body {
+  padding: 10px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: var(--fs-meta);
+}
+
+.chipRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: var(--muted);
+}
+
+.chip {
+  background: var(--raised);
+  border-radius: var(--radius-chip);
+  padding: 0 8px;
+}
+
+.enforcedChip {
+  composes: chip;
+  color: var(--success);
+}
+
+.stepRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.stepRow:last-of-type {
+  border-bottom: none;
+}
+
+.stepIndex {
+  width: 20px;
+  flex-shrink: 0;
+  color: var(--faint);
+}
+
+.stepMain {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+  gap: 2px;
+}
+
+.stepHeadRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.stepTitle {
+  min-width: 120px;
+  color: var(--fg-soft);
+}
+
+.stepGate {
+  color: var(--muted);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* F16.1 Phase 3 (WF-10): per-step role chip, same visual language as .chip. */
+.roleChip {
+  composes: chip;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.stepInstructions {
+  color: var(--faint);
+  font-size: var(--fs-tiny);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.empty {
+  color: var(--faint);
+}
+
+.note {
+  color: var(--faint);
+  font-size: var(--fs-tiny);
+  padding-top: 4px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.footer {
+  padding: 8px 16px 12px;
+  display: flex;
+  gap: 12px;
+  font-size: var(--fs-meta);
+  border-top: 1px solid var(--line-soft);
+}
+
+.actionChip {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-chip);
+  padding: 2px 10px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.actionChip:hover {
+  border-color: var(--field-active);
+  color: var(--fg-soft);
+}
+
+.cancelChip {
+  composes: actionChip;
+}
+
+.dangerChip {
+  composes: actionChip;
+  border-color: var(--edge-confirm);
+  background: var(--bg-danger-tint);
+  color: var(--danger-soft);
+}

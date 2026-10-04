@@ -1,0 +1,71 @@
+/* MEM-5 folder rail — a slim third column left of the note list, styled off the
+   same tokens the master list rows use (sel-bg fill + accent left-border for
+   the active entry). */
+.rail {
+  /* PANE-RESIZE: inherited from the memory row; 172px stays the shipped default. */
+  width: var(--pane-rail-w, 172px);
+  flex-shrink: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  padding: 8px 0;
+  font-size: var(--fs-meta);
+}
+
+.rail::-webkit-scrollbar {
+  width: 3px;
+}
+.rail::-webkit-scrollbar-thumb {
+  background: var(--scroll-thumb);
+  border-radius: 2px;
+}
+
+.entry,
+.entrySelected {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px 2px 0;
+  border-left: 2px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.entry:hover {
+  background: var(--hover-bg);
+}
+
+.entrySelected {
+  background: var(--sel-bg);
+  border-left-color: var(--accent);
+}
+
+.entry:focus-visible,
+.entrySelected:focus-visible {
+  outline: 2px solid var(--accent-bright);
+  outline-offset: -2px;
+}
+
+.caret,
+.caretSpacer {
+  width: 12px;
+  flex-shrink: 0;
+  text-align: center;
+  color: var(--faint);
+}
+.caret {
+  cursor: pointer;
+}
+
+.name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.count {
+  color: var(--faint);
+  font-size: var(--fs-tiny);
+  flex-shrink: 0;
+}

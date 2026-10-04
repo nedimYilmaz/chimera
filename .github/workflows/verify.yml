@@ -1,0 +1,67 @@
+name: Verify
+
+# Tests only: this workflow never builds installers or publishes anything, so it runs on every
+# push and PR. Fork PRs get a read-only token and no secrets. The native shell build stays an
+# explicit opt-in (dispatch, or release.yml); `inputs` is empty on push, so it defaults off.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      native_build:
+        description: 'Also compile/test the native desktop shell (explicit build opt-in)'
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      native_build: { type: boolean, default: false }
+
+# Only a superseded PR run is cancelled; every main push and release keeps its own verdict.
+concurrency:
+  group: verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  source:
+    # The private development repository shares this file but not the public repo's free minutes:
+    # pushes and PRs there are verified only by an explicit dispatch.
+    if: github.repository == 'nedimYilmaz/chimera' || github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-24.04, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - run: npm install --global pnpm@11.11.0
+      - run: pnpm install --frozen-lockfile
+      - run: node scripts/audit-secrets.mjs
+      - run: git diff --check
+      - name: Portable source tests
+        run: pnpm exec vitest run --maxWorkers=4 packages/protocol/test packages/app/test packages/client/test/doctor.test.ts packages/core/test/paths-platform.test.ts
+      - name: Full Unix source suite
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          git config --global user.name 'Chimera CI'
+          git config --global user.email 'ci@example.invalid'
+          pnpm exec vitest run --maxWorkers=4
+      - name: Linux native prerequisites
+        if: inputs.native_build && runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev
+      - name: Native verification (explicit opt-in; not a signed release)
+        if: inputs.native_build
+        run: |
+          pnpm typecheck
+          pnpm --filter @chimera/app build
+          cargo test --manifest-path packages/app/src-tauri/Cargo.toml --locked

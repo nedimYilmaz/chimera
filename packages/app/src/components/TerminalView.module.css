@@ -1,0 +1,48 @@
+/* TERMINAL-USABILITY: the find bar. Overlaid rather than docked so opening it never reflows the
+   terminal — a resize mid-search would reflow the very output being searched. */
+.wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+.screen {
+  width: 100%;
+  height: 100%;
+}
+.find {
+  position: absolute;
+  top: 6px;
+  right: 12px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--raised);
+  box-shadow: 0 4px 14px rgb(0 0 0 / 45%);
+}
+.findInput {
+  width: 180px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  /* An input that inherits the page's default color renders black-on-dark and looks empty —
+     the exact bug reported on the settings card. State it here rather than inherit. */
+  color: var(--fg);
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.findInput::placeholder { color: var(--faint); }
+.findBtn {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0 4px;
+  font-size: 12px;
+  line-height: 1;
+}
+.findBtn:hover { color: var(--fg); }

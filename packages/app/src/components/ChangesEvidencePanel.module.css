@@ -1,0 +1,66 @@
+/* FEATURE-10 (Changes & Evidence Review) — the in-place panel TaskInspector expands
+   into. Same card silhouette as TaskInspector.module.css's .card, nested one level in. */
+.panel {
+  margin: 4px 0 0;
+  padding: 6px 10px;
+  background: var(--bg-inset, var(--input-bg));
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-panel);
+  font-size: var(--fs-meta);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sectionLabel {
+  color: var(--fg-soft);
+}
+
+.stepList {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  color: var(--muted);
+}
+
+.stepFail {
+  color: var(--danger);
+}
+
+.fileList {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding-left: 10px;
+}
+
+.fileRow {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.fileGlyph {
+  color: var(--faint);
+}
+
+.filePlus {
+  color: var(--accent);
+}
+
+.fileMinus {
+  color: var(--danger);
+}
+
+.hint {
+  color: var(--ghost);
+}
+
+.error {
+  color: var(--danger);
+}

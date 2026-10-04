@@ -1,0 +1,73 @@
+/* W4 QuestionCard — geometry 1:1 from the mock showQuestion card
+   (line 259-280): prompt row, option rows (selected bar), freeform row,
+   footer hint. */
+.prompt {
+  padding: 10px 16px 4px;
+}
+
+.options {
+  padding: 4px 16px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--fs-body);
+}
+
+.option {
+  padding: 2px 10px;
+  color: var(--fg-soft);
+  border: none;
+  border-left: 2px solid transparent;
+  background: none;
+  text-align: left;
+  font: inherit;
+  font-family: var(--font-mono);
+  cursor: pointer;
+  line-height: var(--lh);
+}
+
+.optionSelected {
+  background: var(--sel-bg);
+  border-left: 2px solid var(--accent);
+  border-radius: 0 var(--radius-chip) var(--radius-chip) 0;
+  color: var(--fg);
+}
+
+.desc {
+  color: var(--muted);
+}
+
+.defaultMark {
+  color: var(--human);
+  font-size: var(--fs-meta);
+}
+
+.checkOn {
+  color: var(--accent);
+}
+
+.checkOff {
+  color: var(--faint);
+}
+
+.freeform {
+  padding: 2px 10px;
+  color: var(--fg-soft);
+  border-left: 2px solid transparent;
+}
+
+.freeformLabel {
+  color: var(--muted);
+}
+
+.cursor {
+  border-left: 1.5px solid var(--fg);
+  animation: cometGlow var(--pulse-duration) linear infinite;
+}
+
+.footer {
+  padding: 6px 16px 10px;
+  color: var(--faint);
+  font-size: var(--fs-meta);
+  border-top: 1px solid var(--line-soft);
+}

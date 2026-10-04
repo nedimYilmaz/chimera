@@ -1,0 +1,224 @@
+/* Schedule detail — mirrors the queue/memory detail pane: a fixed header + a
+   flex:1 scrollable body (fields + full prompt) that fills the pane. */
+.head {
+  flex-shrink: 0;
+  padding: 12px 18px 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.spacer { flex: 1; }
+
+.enabled { color: var(--success); }
+.disabled { color: var(--muted); }
+
+.timeMeta {
+  color: var(--faint);
+  font-size: var(--fs-meta);
+}
+
+.disabledReason {
+  margin-top: 4px;
+  color: var(--warn);
+  font-size: var(--fs-meta);
+}
+
+.deadLetter {
+  margin-top: 4px;
+}
+
+.deadLetterHead {
+  color: var(--danger);
+  font-size: var(--fs-meta);
+}
+
+.deadLetterList {
+  margin: 2px 0 0;
+  padding-left: 16px;
+  color: var(--muted);
+  font-size: var(--fs-meta);
+}
+
+.wakeNoticeWarn {
+  margin-top: 4px;
+  color: var(--warn);
+  font-size: var(--fs-meta);
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px 18px;
+}
+
+.fields {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  gap: 4px 12px;
+  margin: 0 0 14px;
+}
+
+.fields dt {
+  color: var(--faint);
+  font-size: var(--fs-meta);
+}
+
+.fields dd {
+  margin: 0;
+  color: var(--fg-soft);
+  word-break: break-word;
+}
+
+.faint { color: var(--faint); }
+.mono { font-family: var(--font-mono); color: var(--muted); word-break: break-all; }
+
+.toneSuccess { color: var(--success); }
+.toneDanger { color: var(--danger); }
+.toneMuted { color: var(--muted); }
+
+.promptLabel {
+  color: var(--faint);
+  font-size: var(--fs-meta);
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+}
+
+.sectionHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+}
+
+.sectionHead .promptLabel {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.runList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 0 16px;
+  padding: 0;
+  list-style: none;
+}
+
+.runRow {
+  display: grid;
+  grid-template-columns: 72px 60px 1fr auto;
+  align-items: baseline;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: var(--fs-meta);
+}
+
+/* A failed/skipped run gets a left rule so it reads at a glance against a
+   wall of "ok" rows (W17 incident: 20 consecutive "ok" runs hid a dropped
+   deliverTo for ~14h — the failure signal must not be just a color swap that
+   blends into scrollback). */
+.runRowDanger { border-left: 2px solid var(--danger); padding-left: 6px; margin-left: -8px; }
+.runRowMuted { border-left: 2px solid var(--muted); padding-left: 6px; margin-left: -8px; }
+.runRowLate { border-left: 2px solid var(--warn); padding-left: 6px; margin-left: -8px; }
+
+.runWhen { color: var(--fg-soft); }
+.runTrigger { color: var(--faint); }
+.runResult { }
+.runCost { color: var(--faint); text-align: right; white-space: nowrap; }
+
+.runAgent {
+  grid-column: 1 / -1;
+  font-family: var(--font-mono);
+  color: var(--muted);
+  word-break: break-all;
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+}
+.runAgent:hover { color: var(--fg-soft); text-decoration: underline; }
+
+.runError {
+  grid-column: 1 / -1;
+  color: var(--danger);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* F01(a): the wake block sits between the fields and the run history — the honest answer to
+   "will this schedule actually be kept while the Mac sleeps", grouped so the status line, the
+   setup command and the live caffeinate hold read as one statement rather than three strays. */
+.wakeBlock {
+  margin-bottom: 12px;
+}
+
+.wakeSetup {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.wakeCmd {
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+  color: var(--fg-soft);
+  word-break: break-all;
+}
+
+/* Mirrors FederationPairing's .linkBtn — the app's existing "inline text action" affordance. */
+.wakeCopy {
+  background: none;
+  border: none;
+  color: var(--ghost);
+  font: inherit;
+  font-size: var(--fs-tiny);
+  padding: 0 4px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.wakeCopy:hover { color: var(--accent); }
+
+.wakeHold {
+  margin-top: 4px;
+  color: var(--accent);
+  font-size: var(--fs-meta);
+}
+
+/* F01(c): the late-run sentence. Full width like .runError because the trigger column is 60px
+   and this is a sentence, not a token. */
+.runLate {
+  grid-column: 1 / -1;
+  color: var(--warn);
+  font-size: var(--fs-meta);
+}
+
+/* F04.UI: the skip/failure reason sentence. Same full-width sub-row shape as .runLate (the trigger
+   column is 60px and this is a sentence), muted rather than warn — a refused duplicate is the
+   scheduler working, not a problem. */
+.runReason {
+  grid-column: 1 / -1;
+  color: var(--faint);
+  font-size: var(--fs-meta);
+}
+
+/* F04.UI: "recovered after restart" on the in-flight row — a state marker, so it borrows the warn
+   tone the wake notice uses rather than introducing a new colour. */
+.recovered {
+  color: var(--warn);
+  font-size: var(--fs-meta);
+}

@@ -1,0 +1,175 @@
+/* W21 (F19 · coverage §B23/§C17) — usage & cost card. Section rhythm mirrors
+   AccountsCard/NotifyRulesCard (16px side padding, --line-soft dividers,
+   token-only colors — the F11 CI hex guard covers this file). */
+
+.section {
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.sectionLabel {
+  color: var(--faint);
+  font-size: var(--fs-tiny);
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+}
+
+.meterRow {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+  font-size: var(--fs-body);
+}
+
+.meterOk {
+  color: var(--success);
+}
+
+.meterWarn {
+  color: var(--warn);
+}
+
+.meterDanger {
+  color: var(--danger);
+}
+
+.meterEmpty {
+  color: var(--meter-empty);
+}
+
+.faint {
+  color: var(--faint);
+}
+
+.emptyHint {
+  color: var(--faint);
+  padding: 4px 0;
+}
+
+.groupHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.groupChip,
+.groupChipActive {
+  border: 1px solid var(--line);
+  background: var(--input-bg);
+  border-radius: 4px;
+  padding: 0 6px;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: var(--fs-tiny);
+}
+
+.groupChipActive {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.rows {
+  font-size: var(--fs-small);
+}
+
+.barRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+}
+
+.barLabel {
+  width: 110px;
+  flex-shrink: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg-soft);
+}
+
+.barTrack {
+  flex: 1;
+  height: 8px;
+  background: var(--meter-track);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.barFill {
+  display: block;
+  height: 100%;
+  background: var(--select-hl);
+}
+
+.barValue {
+  width: 110px;
+  flex-shrink: 0;
+  text-align: right;
+  color: var(--fg-soft);
+}
+
+.runRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 0;
+}
+
+.runLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg-soft);
+}
+
+.runValue {
+  flex-shrink: 0;
+  color: var(--fg-soft);
+}
+
+.jobsRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.jobTag {
+  border: 1px solid var(--line);
+  background: var(--raised);
+  border-radius: var(--radius-chip);
+  padding: 1px 6px;
+  color: var(--info);
+  font-size: var(--fs-tiny);
+}
+
+.footer {
+  padding: 8px 16px 12px;
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  font-size: var(--fs-tiny);
+}
+
+.chip {
+  border: 1px solid var(--line);
+  background: var(--input-bg);
+  border-radius: 4px;
+  padding: 0 6px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.chipKey {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.footSpacer {
+  flex: 1;
+}
+
+.footNote {
+  color: var(--ghost);
+}

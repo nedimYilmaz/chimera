@@ -1,0 +1,37 @@
+/* A2A-UX-OVERHAUL: the pinned ⇄ a2a ticker BAR is retired (live traffic → the
+   AgentList A2AIndicator); only the ⇄ a2a HISTORY overlay's styles remain. */
+.agent {
+  color: var(--fg);
+}
+
+.arrowStatic {
+  color: var(--accent);
+}
+
+.text {
+  color: var(--muted);
+}
+
+.age {
+  color: var(--ghost);
+}
+
+/* ---- history card ---- */
+.historyBody {
+  padding: 6px 16px 10px;
+  font-size: var(--fs-small);
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.historyRow {
+  padding: 2px 0;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.historyRow:hover {
+  background: var(--hover-bg);
+}

@@ -1,0 +1,58 @@
+/* AgentsScreen — the two-pane row, 1:1 from the mock's s_agents wrapper. */
+.row {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  /* PANE-RESIZE: the 10px gap and the 12px side padding are gone — the panes are flush and the
+     PaneDivider between them IS the border now. The old gap read as two floating cards with dead
+     space between; a seam reads as one surface with a split you can move. */
+  padding: 6px 0 0;
+}
+
+/* right column: overlays (W4) land here — keep it relative. gap 8px is the
+   mock's right-column stack rhythm (line 118) so W4's banners/composer sit
+   correctly under the transcript from day one. */
+.right {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  /* PANE-RESIZE: the 8px stack gap is gone too (the second gap reported). The composer band below
+     draws its own top border instead, so the transcript and the composer read as one column. */
+}
+
+/* W4 — the composer band (SlashPopup + QueuedBar + strip) at the column
+   bottom; measured for the decision cards' bottomInset (mock: scrim bottom
+   48px = the strip + stack gap). */
+.band {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  /* PANE-RESIZE + COMPOSER-BOTTOM-ANCHOR: the seam sets how much room the composer MAY take, not
+     how much it always takes. It was a flat `height`, so a one-line input left the rest of the
+     band as dead space UNDER the input — the window's bottom edge was empty and the transcript
+     stopped short of it for no reason.
+     As a max, the band hugs its content (input pinned to the bottom, nothing below it) and the
+     transcript above, being flex:1, expands into whatever the composer is not using. Dragging the
+     seam still governs the composer: it is the ceiling it grows to — as strips arrive and the
+     input wraps — before it scrolls internally instead of pushing the transcript off screen. */
+  max-height: var(--pane-h, 148px);
+  min-height: 0;
+  overflow: auto;
+  padding-top: 6px;
+}
+.fleetShell { display:flex; flex-direction:column; height:100%; min-height:0; }
+
+/* FLEET-TELEMETRY: live panel stacked over the fleet table; the table keeps the scroll. */
+.dashboardStack {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+}
+
+.fleetShell { position:relative; min-width:0; }
+.focus > :not(.right) { display:none; }

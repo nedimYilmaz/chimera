@@ -1,0 +1,116 @@
+/* Add-memory-note form, values 1:1 from the mock's showMemoryForm block
+   (s_memory 777-798): 620 card, 70px labels, shared-pool note on the footer. */
+.fields {
+  padding: 10px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: var(--fs-meta);
+}
+
+.pair {
+  display: flex;
+  gap: 16px;
+}
+
+.pair > .field {
+  flex: 1;
+}
+
+.field {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+}
+
+/* MEM-5: wraps the input so the `[[` autocomplete popup anchors to it; stays a
+   flex row so the input's own flex:1 keeps filling the field. */
+.inputWrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+}
+
+.label,
+.labelActive {
+  width: 70px;
+  flex-shrink: 0;
+}
+
+.label {
+  color: var(--muted);
+}
+
+.labelActive {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.input,
+.inputActive {
+  flex: 1;
+  min-width: 0;
+  background: var(--input-bg);
+  border-radius: var(--radius-chip);
+  padding: 3px 8px;
+  font: inherit;
+  color: var(--fg-soft);
+  outline: none;
+}
+
+.input {
+  border: 1px solid var(--field-idle);
+}
+
+.inputActive {
+  border: 1px solid var(--field-active);
+  color: var(--fg);
+}
+
+.error {
+  color: var(--danger);
+}
+
+.footer {
+  padding: 8px 16px 12px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  font-size: var(--fs-meta);
+  border-top: 1px solid var(--line-soft);
+}
+
+.submitChip {
+  border: 1px solid var(--field-active);
+  background: var(--sel-bg);
+  border-radius: var(--radius-chip);
+  padding: 2px 10px;
+  cursor: pointer;
+}
+
+.submitKey {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.submitVerb {
+  color: var(--fg-soft);
+}
+
+.cancelChip {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-chip);
+  padding: 2px 10px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.poolNote {
+  color: var(--faint);
+}

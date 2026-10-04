@@ -1,0 +1,92 @@
+/* HelpScreen — geometry 1:1 from the mock's s_help block (821-870). */
+.wrap {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  padding: 6px 12px 0;
+}
+
+.panel {
+  flex: 1;
+  min-width: 0;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  position: relative;
+  padding: 14px 0 8px;
+  display: flex;
+  flex-direction: column;
+}
+
+.paneLabel {
+  position: absolute;
+  top: -9px;
+  left: 14px;
+  background: var(--panel);
+  padding: 0 8px;
+  color: var(--muted);
+  font-size: var(--fs-meta);
+  white-space: nowrap;
+}
+
+.labelDim {
+  color: var(--faint);
+}
+
+.columns {
+  display: flex;
+  gap: 56px;
+  padding: 8px 24px;
+  font-size: var(--fs-small);
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.columnTitle {
+  color: var(--accent);
+  font-weight: 700;
+  margin-bottom: 4px;
+  letter-spacing: 0.05em;
+}
+
+.row {
+  display: flex;
+}
+
+.chord {
+  width: 150px;
+  color: var(--fg);
+}
+
+.label {
+  color: var(--muted);
+}
+
+.flex { flex: 1; }
+
+.footer {
+  padding: 6px 18px 0;
+  border-top: 1px solid var(--line-soft);
+  color: var(--faint);
+  font-size: var(--fs-meta);
+}
+
+.wrap { padding: var(--screen-gutter); min-width: 0; }
+.panel { padding: 0; overflow: auto; }
+.paneLabel { position: static; padding: var(--sp-4) var(--content-pad); min-height: var(--heading-h); border-bottom: 1px solid var(--line-soft); white-space: normal; }
+.columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 24px; padding: var(--content-pad); }
+.column { min-width: 0; gap: var(--sp-4); }
+.row { display: grid; grid-template-columns: minmax(100px, 1fr) minmax(0, 1.2fr); gap: var(--sp-4); }
+.chord { width: auto; overflow-wrap: anywhere; }
+.label { overflow-wrap: anywhere; }
+.footer { padding: var(--sp-4) var(--content-pad); }
+
+.paneLabel { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4); }
+.preferences { display: grid; gap: var(--section-gap); padding: var(--content-pad); border-bottom: 1px solid var(--line-soft); }
+.preferences p { margin: 0; color: var(--muted); }
+.preferences label { display: flex; flex-direction: column; gap: var(--sp-2); min-width: 0; }
+.bindingForm { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(200px,100%),1fr)); gap: var(--sp-4); align-items: end; }

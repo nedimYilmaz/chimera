@@ -1,0 +1,182 @@
+/* F23-2B — standalone styles for ProviderCatalogCard (mirrors the relevant
+   subset of SettingsScreen.module.css's card/chip/button tokens; kept in its
+   own module since this component lives in its own file, same discipline as
+   WorkflowCard.module.css / AccountsCard.module.css). */
+.card {
+  background: var(--bg);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-panel);
+  padding: 8px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cardHead {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.cardTitle {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.spacer { flex: 1; }
+
+.muted { color: var(--muted); }
+.faint { color: var(--faint); }
+.value { color: var(--fg); }
+.ok { color: var(--success); }
+.warn { color: var(--warn); }
+.danger { color: var(--danger); }
+
+.chipRow {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.chipOn,
+.chipOff {
+  font-size: var(--fs-tiny);
+  border-radius: var(--radius-chip, 4px);
+  padding: 1px 8px;
+  border: 1px solid var(--line-soft);
+}
+
+.chipOn {
+  color: var(--accent);
+  border-color: var(--field-active);
+}
+
+.chipOff {
+  color: var(--faint);
+}
+
+.tosNote {
+  color: var(--muted);
+  font-size: var(--fs-meta);
+  background: var(--input-bg);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-panel);
+  padding: 6px 10px;
+}
+
+.accountChipRow {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.accountChip {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-size: var(--fs-meta);
+  color: var(--fg-soft);
+  background: var(--sel-bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-chip, 4px);
+  padding: 1px 4px 1px 8px;
+}
+
+.metaRow {
+  display: flex;
+  gap: 18px;
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}
+
+.authRow {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font-size: var(--fs-meta);
+  flex-wrap: wrap;
+}
+
+.input {
+  flex: 1;
+  min-width: 0;
+  background: var(--input-bg);
+  border: 1px solid var(--field-idle);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font: inherit;
+  font-size: var(--fs-meta);
+  color: var(--fg-soft);
+  outline: none;
+}
+
+.input:focus {
+  border-color: var(--field-active);
+}
+
+.rowActions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.ghostBtn,
+.primaryBtn,
+.linkBtn {
+  font: inherit;
+  font-size: var(--fs-meta);
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 2px 10px;
+}
+
+.ghostBtn {
+  background: var(--sel-bg);
+  border: 1px solid var(--line);
+  color: var(--fg-soft);
+}
+
+.ghostBtn:hover {
+  border-color: var(--field-active);
+}
+
+.ghostBtn:disabled {
+  color: var(--faint);
+  cursor: default;
+  border-color: var(--line);
+}
+
+/* SUBSCRIPTION-CONNECT: the "connect with subscription" button reads green/connected
+   once a subscription account exists for the provider. */
+.subscriptionConnectedBtn {
+  background: var(--sel-bg);
+  border: 1px solid var(--success);
+  color: var(--success);
+}
+
+.primaryBtn {
+  background: var(--sel-bg);
+  border: 1px solid var(--field-active);
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.linkBtn {
+  background: none;
+  border: none;
+  color: var(--ghost);
+  padding: 0 4px;
+}
+
+.linkBtn:hover {
+  color: var(--accent);
+}
+
+/* Provider details share the same grid at every pane width, including large text. */
+.card { min-width:0; overflow-wrap:anywhere; }
+.cardHead,.accountChip { flex-wrap:wrap; min-width:0; }
+.cardHead > * { min-width:0; }
+.metaRow { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(180px,100%),1fr)); gap:12px; }
+.metaRow > * { min-width:0; overflow-wrap:anywhere; }
+.authRow .input { flex:1 1 180px; }

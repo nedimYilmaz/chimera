@@ -1,0 +1,124 @@
+/* MEM-6 §5.2 — the neural graph canvas surface. Token-only (the canvas itself
+   reads tokens via getComputedStyle; these style only the chrome overlays).
+   The canvas fills the host; toolbar/legend/status float in the content column. */
+.host {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: var(--radius-panel);
+  background: var(--bg);
+}
+
+.canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none; /* we own wheel/drag gestures */
+}
+
+/* ---- toolbar (top-right) ---- */
+.toolbar {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  display: flex;
+  gap: 6px;
+}
+
+.toggle,
+.toggleOn {
+  font: inherit;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: var(--radius-chip);
+  border: 1px solid var(--line-strong);
+  background: var(--panel);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.toggleOn {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* ---- legend (top-left) ---- */
+.legend {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.dot[data-kind="decision"] { background: var(--accent); }
+.dot[data-kind="fact"] { background: var(--success); }
+.dot[data-kind="todo"] { background: var(--warn); }
+.dot[data-kind="question"] { background: var(--human); }
+.dot[data-kind="note"] { background: var(--muted); }
+
+/* ---- status / selection readout (bottom-left) ---- */
+.status {
+  position: absolute;
+  left: 12px;
+  bottom: 10px;
+  right: 12px;
+  font-size: 12px;
+  color: var(--fg-soft);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.hint {
+  color: var(--muted);
+}
+
+.err {
+  color: var(--danger);
+}
+
+.selKind {
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  padding: 1px 6px;
+  border-radius: var(--radius-chip);
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  color: var(--muted);
+}
+.selKind[data-kind="decision"] { color: var(--accent); }
+.selKind[data-kind="fact"] { color: var(--success); }
+.selKind[data-kind="todo"] { color: var(--warn); }
+.selKind[data-kind="question"] { color: var(--human); }
+
+.selFolder {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.selLabel {
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

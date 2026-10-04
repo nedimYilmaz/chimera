@@ -1,0 +1,55 @@
+/* W16 action-chip row: mirrors the submitChip/cancelChip/confirmChip token
+   pattern already used by the form/confirm cards (safe = --line border +
+   --accent key; danger = --edge-confirm border + --bg-danger-tint fill +
+   --danger key), so a footer chip reads consistently with the overlay it
+   opens. */
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  border-radius: var(--radius-chip);
+  padding: 2px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.safe {
+  border: 1px solid var(--line);
+}
+
+.safe .chipKey {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.safe .chipLabel {
+  color: var(--muted);
+}
+
+.danger {
+  border: 1px solid var(--edge-confirm);
+  background: var(--bg-danger-tint);
+}
+
+.danger .chipKey {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.danger .chipLabel {
+  color: var(--fg-soft);
+}
+
+.disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.chipKey {
+}
+
+.chipLabel {
+}

@@ -1,0 +1,111 @@
+/* W20 (F18) — notify-rule form, field styling borrowed 1:1 from
+   SettingsScreen's add-provider form (formRow/input/select/ghostBtn/
+   primaryBtn) so the two forms read as one system. Token-only colors. */
+
+.formGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 16px 0;
+  font-size: var(--fs-meta);
+}
+
+.formRow {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.formLabel {
+  width: 90px;
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
+.input,
+.select {
+  flex: 1;
+  min-width: 0;
+  background: var(--input-bg);
+  border: 1px solid var(--field-idle);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font: inherit;
+  font-size: var(--fs-meta);
+  color: var(--fg-soft);
+  outline: none;
+}
+
+.inputSmall {
+  width: 110px;
+  flex-shrink: 0;
+  background: var(--input-bg);
+  border: 1px solid var(--field-idle);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font: inherit;
+  font-size: var(--fs-meta);
+  color: var(--fg-soft);
+  outline: none;
+}
+
+.input:focus,
+.select:focus,
+.inputSmall:focus {
+  border-color: var(--field-active);
+}
+
+.checkRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  margin-left: 12px;
+}
+
+.errorLine {
+  color: var(--danger);
+  font-size: var(--fs-meta);
+  padding: 6px 16px 0;
+}
+
+.actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin: 8px 16px 12px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.primaryBtn,
+.ghostBtn {
+  font: inherit;
+  font-size: var(--fs-meta);
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 2px 10px;
+}
+
+.primaryBtn {
+  background: var(--sel-bg);
+  border: 1px solid var(--field-active);
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.primaryBtn:disabled {
+  color: var(--faint);
+  cursor: default;
+  border-color: var(--line);
+}
+
+.ghostBtn {
+  background: var(--sel-bg);
+  border: 1px solid var(--line);
+  color: var(--fg-soft);
+}
+
+.ghostBtn:hover {
+  border-color: var(--field-active);
+}

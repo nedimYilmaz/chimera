@@ -1,0 +1,226 @@
+/* Geometry and colors 1:1 from the mock's top bar block. Tokens only.
+   Status-CHIP styles live in TopBarChips.module.css (different owner). */
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  padding: 10px 16px 8px;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.brand {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-4);
+}
+
+.brandMark {
+  color: var(--accent);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.brandVersion {
+  color: var(--faint);
+  font-size: var(--fs-tiny);
+}
+
+.tabs {
+  display: flex;
+  gap: 22px;
+  flex: 1;
+  min-width: 0;
+  /* TOPBAR-OVERFLOW-POPUP-SCROLLBAR: no overflow property here at all — the
+     "»" control (.tabWrap) and its popup are direct children of THIS row,
+     never descendants of anything clipped, so the popup can never be
+     affected by an ancestor's overflow. See .tabList for why the clip moved
+     there instead of living on .tabs (a prior fix tried overflow-x:hidden +
+     overflow-y:visible on .tabs itself — see git history — which looks
+     right but isn't: per the CSS overflow spec, an element with one axis
+     not "visible" computes its other "visible" axis to "auto", so .tabs
+     still became a scroll container once the popup's ~230px height
+     overflowed its ~22px box. The popup didn't render clipped so much as
+     scrolled out of view, AND the resulting scrollbar painted as a stray
+     vertical bar right where the tab strip meets the status chips —
+     TAB-STRIP-STILL-WRONG-AT-TEN-SLOTS). */
+}
+
+.tabList {
+  display: flex;
+  gap: 22px;
+  min-width: 0;
+  /* Only the tab pills clip horizontally — .tabWrap (button + popup) is a
+     sibling outside this box, so it's never inside an overflow-clipped
+     ancestor (see .tabs's comment above). */
+  overflow: hidden;
+}
+
+.tab,
+.tabActive,
+.tabInert {
+  appearance: none;
+  background: none;
+  border: 0;
+  /* Reset the browser button's horizontal padding too: the off-screen width
+     measurer is a div, so leaving UA button padding here makes the live strip
+     wider than the geometry split that decided these slots fit. */
+  padding: 0 0 1px;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  cursor: pointer;
+  font: inherit;
+}
+
+.tab {
+  color: var(--muted);
+}
+
+/* W5: the projects slot — visually the mock's inactive tab (muted), but inert
+   until W7 lands its screen: no pointer affordance, no dispatch. */
+.tabInert {
+  color: var(--muted);
+  cursor: default;
+}
+
+.tab:focus-visible,
+.tabActive:focus-visible,
+.overflowBtn:focus-visible,
+.overflowRow:focus-visible {
+  outline: 2px solid var(--accent-bright);
+  outline-offset: 2px;
+}
+
+.tabActive {
+  color: var(--fg);
+  font-weight: 500;
+  border-bottom-color: var(--accent);
+}
+
+.tabNumber {
+  color: var(--faint);
+}
+
+.badge {
+  display: inline-block;
+  vertical-align: middle;
+  margin-left: var(--sp-3);
+  margin-top: -2px;
+  background: var(--bg-warn-tint);
+  border: 1px solid var(--edge-permission);
+  color: var(--warn);
+  border-radius: var(--radius-badge);
+  font-size: 10px;
+  line-height: 13px;
+  padding: 0 5px;
+}
+
+.chips {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-7);
+  font-size: var(--fs-meta);
+  flex-shrink: 0;
+}
+
+/* TOPBAR-OVERFLOW: the "»" control + its popup, anchored at the strip's end. */
+.tabWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.overflowBtn {
+  width: 32px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  padding: 0;
+  background: none;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-badge);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.overflowBtn:hover {
+  color: var(--fg);
+  border-color: var(--line-strong);
+}
+
+.overflowBadge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  background: var(--bg-warn-tint);
+  border: 1px solid var(--edge-permission);
+  color: var(--warn);
+  border-radius: var(--radius-badge);
+  font-size: 9px;
+  line-height: 12px;
+  padding: 0 4px;
+}
+
+.overflowPopup {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 6px;
+  min-width: 160px;
+  display: flex;
+  flex-direction: column;
+  background: var(--card);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+  z-index: 3;
+}
+
+.overflowRow,
+.overflowRowInert {
+  appearance: none;
+  width: 100%;
+  border: 0;
+  background: none;
+  padding: 5px 12px;
+  white-space: nowrap;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.overflowRow:hover {
+  background: var(--sel-bg);
+  color: var(--fg);
+}
+
+.overflowRowInert {
+  cursor: default;
+}
+
+/* Off-screen shadow copy for measuring natural per-tab widths — see
+   TopBar.tsx's module doc comment. */
+.measure {
+  position: absolute;
+  visibility: hidden;
+  pointer-events: none;
+  height: 0;
+  overflow: hidden;
+  display: flex;
+  gap: 22px;
+}
+
+.brand { flex-shrink: 0; white-space: nowrap; }
+@media (max-width: 760px) {
+  .bar { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--sp-4) var(--sp-6); }
+  .brand { grid-column: 1; grid-row: 1; }
+  .chips { grid-column: 2; grid-row: 1; min-width: 0; flex-wrap: wrap; justify-content: flex-end; gap: var(--sp-2); }
+  .chips > * { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+  .tabs { grid-column: 1 / -1; grid-row: 2; width: 100%; }
+  .overflowMenu { max-width: calc(100vw - 32px); }
+}

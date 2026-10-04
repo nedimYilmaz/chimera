@@ -1,0 +1,8 @@
+{
+  "name": "@chimera/ui-state",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "exports": { ".": "./src/index.ts" },
+  "dependencies": { "@chimera/protocol": "workspace:*" }
+}

@@ -1,0 +1,9 @@
+{
+  "name": "@chimera/client",
+  "private": true,
+  "type": "module",
+  "main": "src/client.ts",
+  "exports": { ".": "./src/client.ts", "./cli": "./src/cli.ts" },
+  "bin": { "chimera": "bin/chimera.js" },
+  "dependencies": { "@chimera/core": "workspace:*", "@chimera/protocol": "workspace:*", "@chimera/daemon": "workspace:*" }
+}

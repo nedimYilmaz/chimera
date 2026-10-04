@@ -1,0 +1,28 @@
+// Package an already signed/notarized app; no signing bypass and no implicit publication.
+import { readFile, mkdir } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+import { resolve, join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+if (process.platform !== 'darwin') throw new Error('Run on macOS after scripts/release-macos-app.sh');
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const config = JSON.parse(await readFile(join(root, 'packages/app/src-tauri/tauri.conf.json'), 'utf8'));
+const npm = JSON.parse(await readFile(join(root, 'dist/npm/package.json'), 'utf8'));
+if (config.version !== npm.version) throw new Error('Tauri and npm package versions must match');
+const app = join(root, 'packages/app/src-tauri/target/release/bundle/macos/chimera.app');
+const run = (command, args) => execFileSync(command, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] });
+if (run('/usr/libexec/PlistBuddy', ['-c', 'Print :CFBundleShortVersionString', join(app, 'Contents/Info.plist')]).trim() !== npm.version) throw new Error('Built app version differs from npm release');
+if (run('/usr/libexec/PlistBuddy', ['-c', 'Print :CFBundleIdentifier', join(app, 'Contents/Info.plist')]).trim() !== 'dev.chimera.desktop') throw new Error('Unexpected app identifier');
+run('/usr/bin/codesign', ['--verify', '--deep', '--strict', app]);
+run('/usr/sbin/spctl', ['--assess', '--type', 'execute', app]);
+run('/usr/bin/xcrun', ['stapler', 'validate', app]);
+const executable = run('/usr/libexec/PlistBuddy', ['-c', 'Print :CFBundleExecutable', join(app, 'Contents/Info.plist')]).trim();
+if (!/^[\w.-]+$/.test(executable)) throw new Error('Unexpected app executable name');
+const architectures = run('/usr/bin/lipo', ['-archs', join(app, 'Contents/MacOS', executable)]).trim().split(/\s+/);
+const archiveArch = process.arch;
+if (!architectures.includes(archiveArch === 'x64' ? 'x86_64' : archiveArch)) throw new Error('App architecture differs from the release host');
+await mkdir(join(root, 'dist'), { recursive: true });
+const artifact = join(root, 'dist', `chimera-desktop-${npm.version}-darwin-${archiveArch}.tar.gz`);
+run('/usr/bin/tar', ['-czf', artifact, '-C', dirname(app), 'chimera.app']);
+console.log(artifact);
+console.log('Generate a combined SHA256SUMS with scripts/release-checksums.mjs for all release assets.');

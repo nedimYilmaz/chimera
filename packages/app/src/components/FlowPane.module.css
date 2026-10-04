@@ -1,0 +1,62 @@
+/* FlowPane — geometry/colors 1:1 from the mock's lv_flow block. Tokens only. */
+.pane {
+  width: 430px;
+  flex-shrink: 0;
+}
+
+.body {
+  padding: 2px 14px;
+  font-size: var(--fs-small);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.row,
+.rowRoot,
+.rowPending {
+  border-left: 2px solid transparent;
+  margin-left: -2px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.row { color: var(--muted); }
+.rowRoot { color: var(--fg); }
+.rowPending { color: var(--faint); }
+
+.selected {
+  background: var(--sel-bg);
+  border-left-color: var(--accent);
+  color: var(--fg);
+}
+
+.tree { color: var(--ghost); }
+.rootIcon { color: var(--accent); }
+
+.rootMeta {
+  color: var(--faint);
+  font-size: var(--fs-tiny);
+}
+
+.faint { color: var(--faint); }
+.ghost { color: var(--ghost); }
+
+.toneSuccess { color: var(--success); }
+.toneWarn { color: var(--warn); }
+.toneDanger { color: var(--danger); }
+
+/* running node pulses with the shared cometGlow keyframes (tokens.css). */
+.pulse {
+  animation: global(cometGlow) var(--pulse-duration) linear infinite;
+}
+
+.empty {
+  color: var(--faint);
+  font-size: var(--fs-meta);
+}

@@ -1,0 +1,55 @@
+/* PANE-RESIZE: this replaces the 10px gap that used to separate the panes, so it has to read as a
+   SEAM rather than as another panel border — thicker than --line, and it responds to the pointer.
+   The hit area is wider than the visible rule (a 1px target is a frustration, not a control);
+   the extra width is transparent padding, so the panes still look flush. */
+.divider {
+  flex: none;
+  position: relative;
+  background: transparent;
+  touch-action: none;      /* the pointer events own the gesture — no scroll hijack mid-drag */
+  z-index: 2;
+}
+/* The hit area overhangs the visible rule on both axes: a 1px target is a frustration, not a
+   control. The negative margin pulls the panes back flush so the overhang costs no layout. */
+.vertical {
+  width: 7px;
+  margin: 0 -2px;
+  cursor: col-resize;
+}
+.horizontal {
+  height: 7px;
+  margin: -2px 0;
+  cursor: row-resize;
+}
+/* The visible rule: deliberately heavier than --line, which every other panel edge uses. */
+.divider::before {
+  content: "";
+  position: absolute;
+  background: var(--line-strong);
+}
+.vertical::before { inset: 0 3px; }
+.horizontal::before { inset: 3px 0; }
+.divider:hover::before,
+.divider:focus-visible::before,
+.dragging::before {
+  background: var(--accent);
+}
+.divider:focus-visible {
+  outline: none;   /* the rule itself turns accent — an outline on a 7px strip is noise */
+}
+/* Three dots, only on hover: the affordance appears when the pointer is near enough to use it,
+   and stays out of the way the rest of the time. */
+.grip {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--faint);
+  opacity: 0;
+  transition: opacity 90ms ease-out;
+}
+/* The grip runs ALONG the seam, so it reads as a handle on that axis rather than a stray tick. */
+.vertical .grip { width: 1px; height: 22px; }
+.horizontal .grip { width: 22px; height: 1px; }
+.divider:hover .grip, .dragging .grip { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .grip { transition: none; } }

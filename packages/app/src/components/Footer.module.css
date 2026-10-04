@@ -1,0 +1,22 @@
+/* Footer — 1:1 from the mock's bottom line. Tokens only. */
+.footer {
+  flex-shrink: 0;
+  padding: 5px 16px 8px;
+  display: flex;
+  font-size: var(--fs-meta);
+  color: var(--faint);
+}
+
+.spacer { flex: 1; }
+
+/* right cluster — mock 881: inline-flex, gap 14 (PerfHud slot + legend) */
+.right {
+  display: inline-flex;
+  gap: 14px;
+}
+
+.on { color: var(--success); }
+
+.footer { flex-wrap: wrap; gap: var(--sp-4); padding: var(--sp-4) var(--content-pad); min-width: 0; }
+.footer > span { min-width: 0; overflow-wrap: anywhere; }
+.right { flex-wrap: wrap; gap: var(--sp-4); }

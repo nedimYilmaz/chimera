@@ -1,0 +1,180 @@
+/* EventsScreen — geometry 1:1 from the mock's s_events block (732-755):
+   full-width pane, columns time 90 / agent 110 / kind 170 / data flex,
+   12.5px rows. */
+.row {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  padding: 6px 12px 0;
+}
+
+.pane {
+  flex: 1;
+  min-width: 0;
+}
+
+.labelMeta {
+  color: var(--faint);
+}
+
+.colHead {
+  padding: 0 18px 4px;
+  display: flex;
+  color: var(--faint);
+  font-size: var(--fs-tiny);
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+/* header cells reuse the width classes but never the row tint/weight */
+.colHead > div {
+  color: var(--faint);
+  font-weight: 400;
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 18px 0;
+  font-size: var(--fs-small);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.body::-webkit-scrollbar {
+  width: 3px;
+}
+
+.body::-webkit-scrollbar-track {
+  background: var(--scroll-rail);
+  border-radius: 2px;
+}
+
+.body::-webkit-scrollbar-thumb {
+  background: var(--scroll-thumb);
+  border-radius: 2px;
+}
+
+.eventRow {
+  display: flex;
+  flex-shrink: 0;
+  transition: background-color 140ms ease, box-shadow 140ms ease;
+}
+
+.colPin {
+  width: 22px;
+  flex-shrink: 0;
+}
+
+.pinButton {
+  border: 0;
+  background: none;
+  color: var(--ghost);
+  font: inherit;
+  line-height: 1;
+  padding: 0 2px;
+  cursor: pointer;
+}
+
+.pinButton:hover {
+  color: var(--accent);
+}
+
+/* F01 row-level pin: the cursor row `p` acts on — a subtle accent left rail,
+   token-only (mock has no explicit selection band for the events table).
+   Click the SAME row again to toggle it off (F-TOGGLE-ANIM) — no separate
+   detail pane here, so the animated bit is just this highlight fading. */
+.selected {
+  background: var(--raised);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .eventRow {
+    transition: none;
+  }
+}
+
+/* F05 jsonl paging: the "loading older…" affordance pinned above the feed. */
+.olderHint {
+  flex-shrink: 0;
+  padding: 2px 6px;
+  color: var(--faint);
+  font-size: var(--fs-meta);
+  text-align: center;
+}
+
+.colTime {
+  width: 90px;
+  flex-shrink: 0;
+  color: var(--faint);
+}
+
+.colAgent,
+.agentCell,
+.agentLink {
+  width: 110px;
+  flex-shrink: 0;
+  color: var(--accent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.colAgent {
+  color: var(--faint); /* the header cell */
+}
+
+.agentLink {
+  cursor: pointer;
+}
+
+.agentLink:hover {
+  text-decoration: underline;
+}
+
+.remoteGlyph {
+  color: var(--success);
+}
+
+.colKind {
+  width: 170px;
+  flex-shrink: 0;
+  font-weight: 500;
+}
+
+.tone_human { color: var(--human); }
+.tone_danger { color: var(--danger); }
+.tone_info { color: var(--info); }
+/* HOOK-6: tones for the new hook/subscription event kinds (eventKindTone). */
+.tone_success { color: var(--success); }
+.tone_warn { color: var(--warn); }
+.tone_accent { color: var(--accent); }
+
+.colData {
+  flex: 1;
+  min-width: 0;
+  color: var(--faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.filterMeta {
+  color: var(--warn);
+}
+
+.emptyHint {
+  color: var(--faint);
+  font-size: var(--fs-meta);
+  padding: 8px 0;
+}
+
+@media (max-width: 760px) {
+  .colHead, .eventRow { display: grid; grid-template-columns: 24px 72px minmax(0, 1fr) minmax(0, 1fr); gap: var(--sp-2); }
+  .colHead > *, .eventRow > * { width: auto; min-width: 0; overflow-wrap: anywhere; }
+  .eventRow > :last-child, .colHead > :last-child { grid-column: 2 / -1; }
+  .eventRow { padding: var(--sp-4) 0; border-bottom: 1px solid var(--line-soft); }
+}

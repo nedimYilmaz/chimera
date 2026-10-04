@@ -1,0 +1,156 @@
+/* W4 PermissionCard — geometry 1:1 from the mock showPermission card
+   (line 244-254). */
+
+/* the FULL command block: input-bg, pre-wrap, NEVER truncated (TUI-015).
+   PERMISSION-CARD-READABILITY: this is now a container for several rows
+   (summary/primary/text/meta) rather than one JSON blob — it still owns the
+   ONLY scroll in the card, so a long command scrolls instead of clipping. */
+.inputBlock {
+  padding: 10px 16px;
+  background: var(--input-bg);
+  color: var(--fg-soft);
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+/* description (Bash's human summary) — a plain sentence above the command,
+   not a labelled field. */
+.summary {
+  color: var(--fg);
+  font-weight: 600;
+  margin-bottom: 8px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* the thing being approved (Bash's `command`, etc.) — the most visual weight
+   in the card: bigger, bold, and set off from the surrounding text fields.
+   Still a bare <pre> — real line breaks, no reflow, no markdown/HTML. */
+.primaryBlock {
+  margin: 0 0 10px 0;
+  padding: 8px 10px;
+  border-left: 3px solid var(--warn);
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: 1.05em;
+  font-weight: 600;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* other read-me string fields (file_path, pattern, url, prompt, old_string,
+   new_string, ...) — real text, a dim label above the value. */
+.textField {
+  margin-bottom: 10px;
+}
+
+.fieldLabel {
+  font-size: var(--fs-meta);
+  color: var(--faint);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 2px;
+}
+
+.fieldValue {
+  margin: 0;
+  font-family: var(--font-mono);
+  color: var(--fg-soft);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* quiet scalar metadata (timeout, etc.) — never JSON key/value syntax. */
+.metaRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  color: var(--faint);
+  font-size: var(--fs-meta);
+}
+
+.metaChip {
+  white-space: nowrap;
+}
+
+.ghost {
+  color: var(--faint);
+}
+
+/* mod+e raw / unknown-shape fallback — exact JSON.stringify or a readable
+   listing, still plain preformatted text. */
+.rawBlock {
+  margin: 0;
+  font-family: var(--font-mono);
+  color: var(--fg-soft);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.footer {
+  padding: 10px 16px;
+  display: flex;
+  gap: 12px;
+  font-size: var(--fs-meta);
+  align-items: center;
+}
+
+.allowChip {
+  border: 1px solid var(--edge-allow);
+  background: var(--bg-allow-tint);
+  border-radius: var(--radius-chip);
+  padding: 2px 10px;
+  font: inherit;
+  font-family: var(--font-mono);
+  cursor: pointer;
+}
+
+.allowKey {
+  color: var(--success);
+  font-weight: 700;
+}
+
+.denyChip {
+  border: 1px solid var(--edge-confirm);
+  background: var(--bg-danger-tint);
+  border-radius: var(--radius-chip);
+  padding: 2px 10px;
+  font: inherit;
+  font-family: var(--font-mono);
+  cursor: pointer;
+}
+
+.denyKey {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+/* ALWAYS-ALLOW-UI: the persist chips read as a SECONDARY action (info blue,
+   no tinted fill) so they never masquerade as the safety-critical allow/deny. */
+.persistChip {
+  border: 1px solid var(--info);
+  background: transparent;
+  border-radius: var(--radius-chip);
+  padding: 2px 10px;
+  font: inherit;
+  font-family: var(--font-mono);
+  cursor: pointer;
+}
+
+.persistKey {
+  color: var(--info);
+  font-weight: 700;
+}
+
+.chipLabel {
+  color: var(--fg-soft);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.hint {
+  color: var(--faint);
+}

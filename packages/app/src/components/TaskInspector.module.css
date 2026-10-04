@@ -1,0 +1,83 @@
+/* Inline inspector card, geometry 1:1 from the mock (s_queues 676) — the same
+   silhouette as AgentInspector's (both blocks share the mock's inspector
+   pattern). */
+.card {
+  margin: 4px 18px 8px;
+  padding: 8px 12px;
+  background: var(--input-bg);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-panel);
+  font-size: var(--fs-meta);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.row {
+  display: flex;
+  min-width: 0;
+}
+
+.rowLabel {
+  width: 100px;
+  flex-shrink: 0;
+  color: var(--faint);
+}
+
+.rowValue {
+  min-width: 0;
+  flex: 1;
+}
+
+.owner {
+  color: var(--accent);
+}
+
+.meta {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.prompt {
+  color: var(--fg-soft);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.hint {
+  color: var(--ghost);
+}
+
+/* F17 (W19): this task's own artifacts row (ArtifactChip list). */
+.artifacts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* F16.1 Phase 2 (WF-6): a failed step's gate-failure reason, inline in the
+   workflow row. */
+.stepFail {
+  color: var(--danger);
+}
+
+/* F16.1 Phase 3 (WF-10): dim marker between steps whose boundary was a
+   role-switch handoff (WF-8/WF-9), replacing the plain " · " separator. */
+.handoffMarker {
+  color: var(--faint);
+  font-style: italic;
+}
+
+/* FEATURE-10 (Changes & Evidence Review): the "view changes & evidence" toggle row. */
+.evidenceToggle {
+  color: var(--accent);
+  cursor: pointer;
+}
+
+/* TASK-EDIT-VERSIONING: the compact edit-history indicator (v{n} · edited
+   {ago}), clickable to expand the read-only prior-versions list below it. */
+.versionIndicator {
+  color: var(--accent);
+  cursor: pointer;
+}

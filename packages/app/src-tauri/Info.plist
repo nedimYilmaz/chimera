@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Chimera uses your microphone for voice input and native conversations with your Codex agents.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Chimera recognizes meeting speech on this Mac to send your question only to the participant you address.</string>
+</dict>
+</plist>

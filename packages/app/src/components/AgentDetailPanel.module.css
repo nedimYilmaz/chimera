@@ -1,0 +1,103 @@
+/* AGENT-INFO-PANEL — same raised-block geometry as AgentInspector.module.css
+   (margin/padding/input-bg/line-soft/radius), capped + scrollable since role
+   + task prompts can run long (overflow-fix: wrap long lines, scroll the
+   whole card rather than grow the transcript pane unbounded). */
+.card {
+  margin: 4px 18px 8px;
+  padding: 8px 12px;
+  background: var(--input-bg);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-panel);
+  font-size: var(--fs-meta);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex-shrink: 0;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+.titleRow {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.title {
+  font-weight: 700;
+  color: var(--fg-soft);
+}
+
+.spacer { flex: 1; }
+
+.closeBtn {
+  background: none; border: 0; font: inherit; padding: 4px;
+  color: var(--faint);
+  cursor: pointer;
+}
+
+.closeBtn:hover {
+  color: var(--fg-soft);
+}
+
+.row {
+  display: flex;
+  min-width: 0;
+}
+
+.rowLabel {
+  width: 100px;
+  flex-shrink: 0;
+  color: var(--faint);
+}
+
+.rowValue {
+  min-width: 0;
+  flex: 1;
+}
+
+.meta {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+/* GROUP-SELECT-THEME: this control was styled with `.meta` — a TEXT style — so the browser fell
+   back to a native macOS select: light chrome and a blue focus ring inside a dark panel. Matches
+   the card-form field chrome instead (SpawnCard's .inputBox/.input pair), including the same
+   idle/active border tokens, so it reads as part of the app rather than as an OS widget. */
+.groupSelect {
+  background: var(--input-bg);
+  border: 1px solid var(--field-idle);
+  border-radius: var(--radius-chip);
+  padding: 2px 6px;
+  color: var(--fg);
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+  cursor: pointer;
+  outline: none;
+}
+
+.groupSelect:hover {
+  border-color: var(--field-active);
+}
+
+.groupSelect:focus-visible {
+  border-color: var(--field-active);
+}
+
+.prompt {
+  color: var(--fg-soft);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.hint {
+  color: var(--ghost);
+}
+
+.spawnAgainChip {
+  color: var(--accent);
+  cursor: pointer;
+}

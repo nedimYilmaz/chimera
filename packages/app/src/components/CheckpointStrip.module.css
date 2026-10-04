@@ -1,0 +1,52 @@
+/* F20 (W22) checkpoint strip — geometry from the mock's showCheckpoints
+   composer-area block (lines 610-611): dim meta row, dashed rule filling the
+   gap before the chips, gold ⚑ mark (--warn matches the mock's #d6b06a).
+   Token-only colors. */
+.strip {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  padding: 0 4px;
+  font-size: var(--fs-meta);
+  color: var(--faint);
+  cursor: pointer;
+}
+
+.mark {
+  color: var(--warn);
+}
+
+.id {
+  color: var(--fg);
+}
+
+.trigger {
+  color: var(--faint);
+}
+
+.rule {
+  flex: 1;
+  border-top: 1px dashed var(--line-soft);
+  align-self: center;
+}
+
+.ts {
+  color: var(--faint);
+}
+
+.chip {
+  border: 1px solid var(--line);
+  background: var(--input-bg);
+  border-radius: 4px;
+  padding: 0 6px;
+  color: var(--muted);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.chipKey {
+  color: var(--accent);
+  font-weight: 700;
+}

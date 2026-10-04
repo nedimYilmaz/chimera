@@ -1,0 +1,78 @@
+/* ResultCard — geometry/copy 1:1 from the mock's showResult block (350-364). */
+.body {
+  padding: 10px 16px;
+  color: var(--result-body);
+  font-size: var(--fs-small);
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.emptyNote {
+  color: var(--faint);
+}
+
+.footer {
+  padding: 8px 16px 12px;
+  display: flex;
+  gap: 12px;
+  font-size: var(--fs-meta);
+  border-top: 1px solid var(--line-soft);
+  align-items: center;
+}
+
+/* F17 (W19): this run's own artifacts (ArtifactChip — same chip the composer
+   strip renders). */
+.artifacts {
+  padding: 6px 16px 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.artifactsLabel {
+  color: var(--faint);
+  font-size: var(--fs-tiny);
+}
+
+.copyChip {
+  border: 1px solid var(--field-active);
+  background: var(--sel-bg);
+  border-radius: var(--radius-chip);
+  padding: 2px 10px;
+  cursor: pointer;
+}
+
+.copyKey {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.copyVerb {
+  color: var(--fg-soft);
+}
+
+.openChip {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-chip);
+  padding: 2px 10px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.spacer { flex: 1; }
+
+.hint {
+  color: var(--faint);
+}
+
+/* state-word tones (header meta) */
+.success { color: var(--success); font-size: var(--fs-meta); }
+.info { color: var(--info); font-size: var(--fs-meta); }
+.warn { color: var(--warn); font-size: var(--fs-meta); }
+.danger { color: var(--danger); font-size: var(--fs-meta); }
+.muted { color: var(--muted); font-size: var(--fs-meta); }

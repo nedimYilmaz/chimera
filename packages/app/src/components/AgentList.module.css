@@ -1,0 +1,470 @@
+/* AgentList — geometry/colors 1:1 from the mock's lv_list block. Tokens only. */
+.pane {
+  /* PANE-RESIZE: the operator's width, set as an inline custom property by AgentList; 430px is the
+     shipped default and the fallback when nothing has been dragged. */
+  width: var(--pane-w, 430px);
+  flex-shrink: 0;
+}
+
+/* column header row */
+.columns {
+  padding: 0 14px 4px;
+  display: flex;
+  color: var(--faint);
+  font-size: var(--fs-tiny);
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
+}
+
+.colGlyph { width: 20px; }
+.colAgent { flex: 1; }
+.colState { width: 76px; }
+.colCost { width: 56px; text-align: right; }
+.colTokens { width: 64px; text-align: right; }
+
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.faint { color: var(--faint); }
+
+/* rows: 2px left border always present; selection swaps padding 14 -> 12 so
+   the text column never shifts (mock's compensation). */
+.row,
+.rowSelected {
+  display: flex;
+  align-items: center;
+  padding: 2px 14px 2px 12px;
+  border-left: 2px solid transparent;
+  cursor: pointer;
+}
+
+.row:hover {
+  background: var(--hover-bg);
+}
+
+.rowSelected {
+  background: var(--sel-bg);
+  border-left-color: var(--accent);
+}
+
+.glyphCol {
+  width: 20px;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.conductorGlyph { color: var(--accent); }
+.remoteGlyph { color: var(--success); }
+.workflowGlyph { color: var(--accent); }
+
+.name {
+  flex: 1;
+  min-width: 0;
+  color: var(--fg-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nameSelected {
+  composes: name;
+  color: var(--fg);
+}
+
+.row:hover .name {
+  color: var(--hover-name); /* mock line 74: the hover row's exact name-tint hex, now a named token (finding 10) */
+}
+
+.id {
+  color: var(--faint);
+  font-size: var(--fs-meta);
+}
+
+.question { color: var(--human); }
+
+.state {
+  width: 76px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.stateValue {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rowActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.rowAction {
+  border: 0;
+  background: none;
+  color: var(--ghost);
+  font: inherit;
+  line-height: 1;
+  padding: 0 1px;
+  cursor: pointer;
+}
+
+.rowAction:hover {
+  color: var(--accent);
+}
+
+/* AGENT-MARK-VISIBILITY: the mark box carried .rowAction alone, so ☑ and ☐ both painted in
+   --ghost (#3c424e) — the palette's "barely-there hints" tone. Against the row background a
+   MARKED agent was indistinguishable from an unmarked one, which defeats the whole point of a
+   batch selection: the set is the one thing that must be legible before a send/kill/hold runs on
+   it. Reported with three marked rows on screen that looked identical to the unselected ones.
+
+   Unmarked lifts to --muted — discoverable without competing with the row's own text. Marked
+   takes --accent, the tone this app already means "this is the one" by, plus weight so a tick
+   carries across a long list at a glance. Both sit AFTER .rowAction here: equal specificity, so
+   source order is what makes them win. */
+.markAction {
+  color: var(--muted);
+}
+
+.markActionOn {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* .rowAction:hover would otherwise resolve to the same --accent a marked box already sits at,
+   leaving the one control whose whole job is toggling with no hover feedback. */
+.markActionOn:hover {
+  color: var(--accent-bright);
+}
+
+.killAction:hover {
+  color: var(--danger);
+}
+
+.cost {
+  width: 56px;
+  flex-shrink: 0;
+  text-align: right;
+  color: var(--muted);
+}
+
+.tokens {
+  width: 64px;
+  flex-shrink: 0;
+  text-align: right;
+  color: var(--muted);
+}
+
+/* AGENT-STATE-VISUAL: a running+busy row's state glyph now gets its OWN tone
+   (.toneBusy, --accent-bright) instead of a green-with-pulse trick — busy vs.
+   running-but-idle (steady --success, no animation) is a color difference
+   first. The pulse below is a secondary, purely-motion reinforcement layered
+   on top of that color; because color alone already distinguishes busy from
+   idle, prefers-reduced-motion can just turn the animation off — unlike the
+   old green-on-green scheme, there's no longer a "silently degrades to the
+   idle look" risk to guard against. */
+.busyPulse {
+  animation: agentBusyPulse 1.6s ease-in-out infinite;
+}
+
+@keyframes agentBusyPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .busyPulse {
+    animation: none;
+  }
+}
+
+.toneSuccess { color: var(--success); }
+.toneInfo { color: var(--info); }
+
+/* Reserve the same trailing space on read rows and the header so attention
+   changes never move the numeric columns or change the row height. */
+.unseenSlot {
+  flex: 0 0 20px;
+  width: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.unseenBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  min-height: 20px;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  padding: 0;
+  cursor: pointer;
+}
+.unseenDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--info);
+}
+.unseenBadge:hover { background: var(--raised); }
+
+.toneWarn { color: var(--warn); }
+.toneDanger { color: var(--danger); }
+.toneMuted { color: var(--muted); }
+/* AGENT-STATE-VISUAL: busy tone — reuses --accent-bright (the "comet head"
+   token already meaning "active generation happening now" in the streaming
+   glow) rather than a new hex. Distinct from every Tone color (success
+   green/info blue/warn amber/danger red/muted gray) and from --accent itself
+   (reserved for UI chrome: conductor mark, selection, workflow glyph) and
+   from --human (already owns "needs a human" on the very same row's "?"
+   badge) and the team-badge palette (explicitly not a state cue — see
+   tokens.css). */
+.toneBusy { color: var(--accent-bright); }
+
+/* P3-T3 follow-up: the team badge is now a compact COLORED GLYPH (teamIcon)
+   instead of the full team name repeated on every row. A trailing spacer keeps
+   it off the tokens column; the glyph carries the team's stable hue and a
+   title tooltip carries the full name for discoverability. */
+.teamBadge {
+  margin-left: 6px;
+  font-size: var(--fs-meta);
+  cursor: default;
+}
+.teamBlue { color: var(--team-blue); }
+.teamGreen { color: var(--team-green); }
+.teamAmber { color: var(--team-amber); }
+.teamPurple { color: var(--team-purple); }
+.teamCyan { color: var(--team-cyan); }
+.teamMagenta { color: var(--team-magenta); }
+.teamRed { color: var(--team-red); }
+.teamTeal { color: var(--team-teal); }
+
+.empty {
+  padding: 2px 14px;
+  color: var(--faint);
+  font-size: var(--fs-meta);
+}
+
+/* AGENTS-HIDE-DONE: the header chip toggling terminal-agent visibility — sits
+   in the SearchBox row, after the count (SearchBox's `children` slot). */
+/* SEARCHBOX-ACTION-ROW: see AgentList.tsx's wrapper comment. flex-basis:100% inside the search
+   row's flex container guarantees a row of its own instead of a wrap that depends on width. */
+.listActions {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  padding-top: 2px;
+}
+
+.doneToggle {
+  flex-shrink: 0;
+  background: none;
+  border: 1px solid var(--line-soft);
+  border-radius: 999px;
+  padding: 1px 8px;
+  color: var(--faint);
+  font: inherit;
+  font-size: var(--fs-meta);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.doneToggle:hover {
+  color: var(--fg-soft);
+  border-color: var(--muted);
+}
+
+/* DONE-AGENTS-HIDDEN-AFTER-RESTART: when hidden-done agents outnumber the
+   visible rows (e.g. right after a daemon restart moved everything to
+   "done" at once), the chip's default faint styling reads as chrome — bump
+   it to the warn color so it's noticed instead of skimmed past. */
+.doneToggleEmphasis {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+
+.doneToggleEmphasis:hover {
+  color: var(--warn);
+}
+
+.spawnButton {
+  composes: doneToggle;
+  color: var(--accent);
+}
+
+/* JOB-FLEET-GROUPING: one box per scheduled job, at the end of the list. jobGroupBody's
+   max-height is ~3 row-heights (row: 2px+2px padding, ~13px content — see .row above) so
+   exactly JOB_GROUP_DEFAULT_VISIBLE rows show before scrolling kicks in; growing the loaded
+   window (jobGroupLoadMore) never removes the clamp — a job with hundreds of runs stays
+   scoped to this one box, never spilling hundreds of rows into the outer list. */
+.jobGroup {
+  border-top: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.jobGroupHeader {
+  display: flex;
+  align-items: center;
+  padding: 4px 14px 2px 12px;
+}
+
+.jobGlyph {
+  color: var(--faint);
+}
+
+.jobGroupBody {
+  max-height: 84px;
+  overflow-y: auto;
+}
+
+.jobGroupLoadMore {
+  display: block;
+  width: 100%;
+  background: none;
+  border: 0;
+  border-top: 1px solid var(--line-soft);
+  padding: 3px 14px;
+  color: var(--faint);
+  font: inherit;
+  font-size: var(--fs-meta);
+  text-align: left;
+  cursor: pointer;
+}
+
+.jobGroupLoadMore:hover {
+  color: var(--fg-soft);
+  background: var(--hover-bg);
+}
+
+/* AGENT-GROUPS Phase 1: an operator-defined wrapper box. Originally a full coloured border, but
+   a rectangle drawn around a slice of a dense list competes with the list itself — it reads as a
+   separate panel rather than as a marked stretch of the same column, and it indents its rows out
+   of alignment with every ungrouped row above and below.
+   Now a LEFT STRIPE, the same 2px edge .row/.rowSelected already use for selection, so a group is
+   read the way everything else in this column is read: by its left edge. Sits between jobGroup's
+   plain top/bottom rule and the old box.
+   Colour lives ONLY on that border — never row text/state cell/GlyphCell (see merge 833c9e20's
+   fix; a group colour reaching those would reintroduce the exact bug that merge closed). */
+.groupBox {
+  border-left: 2px solid var(--line-soft);
+  margin: 4px 0;
+}
+
+/* Deliberately NOT `currentColor`/border color-derived — the box wrapper must never set a
+   `color` a nested row's text could inherit (see the class header comment above), so the
+   active highlight uses a fixed accent instead of the group's own hue. With no box left to ring,
+   it thickens the stripe rather than outlining anything. */
+.groupBoxActive {
+  box-shadow: -2px 0 0 0 var(--accent);
+}
+
+/* GROUP-DROP-TARGET: while an agent card hovers over the box. Deliberately distinct from
+   .groupBoxActive (which means "new spawns land here"), so a drag never looks like it already
+   changed the active group. */
+.groupBoxDropTarget {
+  border-left-style: dashed;
+  background: var(--sel-bg);
+}
+
+/* Padded to sit exactly where .jobGroupHeader sits, so the two kinds of group read as the same
+   kind of thing: a header a couple of pixels left of the rows it owns, both inside one stripe. */
+.groupBoxHeader {
+  display: flex;
+  align-items: center;
+  padding: 4px 14px 2px 12px;
+  cursor: default;
+}
+
+.groupBoxHeader:hover {
+  background: var(--hover-bg);
+}
+
+.groupBoxHeader .spacer {
+  flex: 1;
+}
+
+.groupBoxAction {
+  margin-left: 6px;
+  color: var(--faint);
+  font-size: var(--fs-meta);
+  cursor: pointer;
+}
+
+.groupBoxAction:hover {
+  color: var(--fg-soft);
+}
+
+.groupBoxBody {
+  padding-bottom: 2px;
+}
+
+.groupBoxEmpty {
+  padding: 3px 14px;
+  color: var(--faint);
+  font-size: var(--fs-meta);
+}
+
+.groupCreateForm {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.groupCreateInput {
+  width: 110px;
+  background: none;
+  border: 1px solid var(--line-soft);
+  border-radius: 999px;
+  padding: 1px 8px;
+  color: var(--fg-soft);
+  font: inherit;
+  font-size: var(--fs-meta);
+}
+
+/* border-LEFT-color only — no `color` property here (see the class header comment: a nested
+   row's text/state cell must never inherit this), and no other edge to colour now that the box
+   is a stripe. */
+.groupBorderBlue { border-left-color: var(--team-blue); }
+.groupBorderGreen { border-left-color: var(--team-green); }
+.groupBorderAmber { border-left-color: var(--team-amber); }
+.groupBorderPurple { border-left-color: var(--team-purple); }
+.groupBorderCyan { border-left-color: var(--team-cyan); }
+.groupBorderMagenta { border-left-color: var(--team-magenta); }
+.groupBorderRed { border-left-color: var(--team-red); }
+.groupBorderTeal { border-left-color: var(--team-teal); }
+
+/* Inset markers keep drag feedback from changing row or column geometry. */
+.row[data-drop-position="before"], .rowSelected[data-drop-position="before"], .groupBox[data-drop-position="before"] {
+  box-shadow: inset 0 2px var(--accent);
+}
+.row[data-drop-position="after"], .rowSelected[data-drop-position="after"], .groupBox[data-drop-position="after"] {
+  box-shadow: inset 0 -2px var(--accent);
+}
+.groupBox[data-drop-position="inside"], .ungroupDrop[data-drop-position="inside"] {
+  box-shadow: inset 0 0 0 2px var(--accent);
+  background: var(--sel-bg);
+}
+.groupBoxHeader[draggable="true"] { cursor: grab; }
+.ungroupDrop {
+  flex-shrink: 0;
+  padding: 6px 14px;
+  border-top: 1px dashed var(--line);
+  color: var(--faint);
+  font-size: var(--fs-tiny);
+  overflow-wrap: anywhere;
+}
+.ungroupDrop[data-dragging="true"] { color: var(--accent); }

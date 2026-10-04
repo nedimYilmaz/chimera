@@ -1,0 +1,295 @@
+/* RolesScreen — master/detail geometry mirrors TeamsScreen.module.css (the
+   established row/master/detail layout every master-detail screen shares). */
+.row {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  padding: 6px 12px 0;
+  /* PANE-RESIZE: the gap is the divider now. */
+}
+
+.master {
+  /* PANE-RESIZE: inherited from the row; 430px stays the shipped default. */
+  width: var(--pane-w, 430px);
+  flex-shrink: 0;
+  overflow-y: auto;
+}
+
+.detail {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  overflow-y: auto;
+}
+
+.countMeta {
+  color: var(--faint);
+}
+
+.filler {
+  flex: 1;
+}
+
+.emptyHint {
+  padding: 8px 14px;
+  color: var(--faint);
+  font-size: var(--fs-meta);
+}
+
+.sectionHead {
+  padding: 8px 14px 4px;
+  color: var(--faint);
+  font-size: var(--fs-tiny);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.teamHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 14px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.attachChip {
+  color: var(--accent);
+  cursor: pointer;
+  font-size: var(--fs-meta);
+  font-weight: 400;
+}
+
+.rowItem,
+.rowSelected {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 14px 2px 12px;
+  border-left: 2px solid transparent;
+  cursor: pointer;
+}
+
+.rowSelected {
+  background: var(--sel-bg);
+  border-left-color: var(--accent);
+}
+
+.rowItem:hover {
+  background: var(--hover-bg);
+}
+
+.colName {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.indent {
+  padding-left: 10px;
+}
+
+.colUsage {
+  flex-shrink: 0;
+}
+
+.mutedCell {
+  color: var(--muted);
+}
+
+.badge {
+  background: var(--raised);
+  border-radius: var(--radius-chip);
+  padding: 0 6px;
+  font-size: var(--fs-tiny);
+  color: var(--faint);
+}
+
+/* ROLES-UNIFY §6.1: the real per-field diff replacing the old opaque
+   "shared: <name>" badge — highlighted (accent border) so an overridden
+   binding is visually distinguishable from one that inherits everything. */
+.badgeOverride {
+  background: var(--raised);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-chip);
+  padding: 0 6px;
+  font-size: var(--fs-tiny);
+  color: var(--accent);
+}
+
+.footerRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* ---- detail pane ---- */
+.emptyPane {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--faint);
+}
+
+.emptyGlyph {
+  font-size: 28px;
+  margin-bottom: 6px;
+}
+
+.detailBody {
+  padding: 2px 0;
+}
+
+.detailHead {
+  padding: 2px 18px 10px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.detailTitleRow {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.detailName {
+  font-weight: 700;
+  font-size: var(--fs-title);
+}
+
+.chipRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+  font-size: var(--fs-meta);
+  color: var(--muted);
+  flex-wrap: wrap;
+}
+
+.chip {
+  background: var(--raised);
+  border-radius: var(--radius-chip);
+  padding: 0 8px;
+}
+
+/* §2's permanent template-truth note — never a tooltip. */
+.honesty {
+  margin-top: 8px;
+  padding: 6px 10px;
+  background: var(--raised);
+  border-radius: var(--radius-chip);
+  color: var(--muted);
+  font-size: var(--fs-meta);
+}
+
+.rolePrompt {
+  margin-top: 8px;
+  color: var(--fg-soft);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.actionRow {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.spawnChip {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-chip);
+  padding: 2px 10px;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: var(--fs-meta);
+}
+
+.dangerChip {
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-chip);
+  padding: 2px 10px;
+  color: var(--danger);
+  cursor: pointer;
+  font-size: var(--fs-meta);
+}
+
+.usesSection {
+  padding: 10px 18px;
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}
+
+.usesHead {
+  margin-top: 4px;
+}
+
+.editBlock {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.attachOverlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.attachCard {
+  width: 420px;
+  background: var(--card);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-card);
+  padding: 14px;
+}
+
+.attachTitle {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.attachSelect {
+  width: 100%;
+  background: var(--input-bg);
+  border: 1px solid var(--field-idle);
+  border-radius: var(--radius-chip);
+  padding: 4px 8px;
+  font: inherit;
+  color: var(--fg-soft);
+}
+
+.attachError {
+  color: var(--danger);
+  margin-top: 6px;
+  font-size: var(--fs-meta);
+}
+
+.attachFooter {
+  display: flex;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.submitChip {
+  border: 1px solid var(--field-active);
+  background: var(--sel-bg);
+  border-radius: var(--radius-chip);
+  padding: 2px 10px;
+  cursor: pointer;
+}
+
+.cancelChip {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-chip);
+  padding: 2px 10px;
+  color: var(--muted);
+  cursor: pointer;
+}

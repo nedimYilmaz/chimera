@@ -1,0 +1,71 @@
+/* F22 (W24) QuoteBand — geometry 1:1 from the mock's showQuoting composer
+   block (line 720-726): panel bg, SOLID --line-strong border (unlike
+   QueuedBar's dashed one — a quote is a single resolved slot, not a pending
+   FIFO), radius 6, padding 4px 12px. */
+.band {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-panel);
+  padding: 4px 12px;
+  font-size: var(--fs-meta);
+}
+
+.label {
+  color: var(--faint);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--field-active);
+  background: var(--sel-bg);
+  border-radius: var(--radius-chip);
+  padding: 0 8px;
+  color: var(--hover-name);
+  white-space: nowrap;
+}
+
+.dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.excerpt {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1;
+}
+
+.spacer {
+  flex: 0 0 auto;
+}
+
+.hint {
+  color: var(--ghost);
+  font-size: var(--fs-tiny);
+  white-space: nowrap;
+}
+
+.close {
+  background: none;
+  border: none;
+  padding: 0 2px;
+  margin: 0;
+  color: var(--faint);
+  font: inherit;
+  cursor: pointer;
+}
+.close:hover {
+  color: var(--fg-soft);
+}

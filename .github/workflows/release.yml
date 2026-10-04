@@ -1,0 +1,124 @@
+name: Release
+
+# Pushing a v<version> tag builds, verifies and publishes one release: the signed desktop assets
+# and the npm tarball go to the GitHub release, then the same tarball goes to npm. Nothing else
+# publishes. The tag must match packages/app/src-tauri/tauri.conf.json, and an existing release
+# is never overwritten. A version with a pre-release suffix (v0.2.0-rc.1) is marked as a GitHub
+# pre-release and published to npm under the `next` dist-tag instead of `latest`.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    # Releases come only from the public repository; every other job depends on this one.
+    if: github.repository == 'nedimYilmaz/chimera'
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - id: version
+        name: Tag, app version and release state agree
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          version="${TAG#v}"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || { echo "::error::Tag $TAG is not v<semver>"; exit 1; }
+          app=$(node -p 'require("./packages/app/src-tauri/tauri.conf.json").version')
+          [ "$app" = "$version" ] || { echo "::error::Tag is $version but tauri.conf.json says $app; bump packages/app/src-tauri/tauri.conf.json, commit, and tag that commit"; exit 1; }
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then echo "::error::Release $TAG already exists; cut a new version instead of overwriting"; exit 1; fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$([[ "$version" == *-* ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+  verify:
+    needs: check
+    uses: ./.github/workflows/verify.yml
+
+  npm:
+    needs: check
+    uses: ./.github/workflows/npm-package.yml
+    with:
+      package_name: '@nedimyilmaz/chimera'
+      version: ${{ needs.check.outputs.version }}
+
+  desktop:
+    needs: check
+    uses: ./.github/workflows/desktop-package.yml
+    with:
+      package_name: '@nedimyilmaz/chimera'
+      version: ${{ needs.check.outputs.version }}
+      include_windows: false
+    secrets: inherit
+
+  publish:
+    needs: [check, verify, npm, desktop]
+    runs-on: ubuntu-24.04
+    environment: release
+    permissions:
+      contents: write
+      id-token: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.ref_name }}
+      VERSION: ${{ needs.check.outputs.version }}
+      PRERELEASE: ${{ needs.check.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: chimera-npm-candidate
+          path: release/npm
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: desktop-release-candidates
+          path: release/desktop
+      - name: One checksum manifest for every asset
+        # The installer verifies the desktop download against SHA256SUMS; the tarball is listed
+        # too so a GitHub-release npm install can be checked the same way.
+        run: |
+          shopt -s nullglob
+          tarballs=(release/npm/*.tgz); desktop=(release/desktop/chimera-desktop-*)
+          [ "${#tarballs[@]}" -eq 1 ] || { echo "::error::Expected exactly one npm tarball"; exit 1; }
+          [ "${#desktop[@]}" -ge 1 ] || { echo "::error::No desktop assets"; exit 1; }
+          for asset in "${desktop[@]}"; do [[ "$(basename "$asset")" == "chimera-desktop-$VERSION-"* ]] || { echo "::error::$asset is not version $VERSION"; exit 1; }; done
+          mkdir -p release/assets
+          cp "${tarballs[0]}" "${desktop[@]}" release/assets/
+          node scripts/release-checksums.mjs release/assets/* > release/SHA256SUMS
+          mv release/SHA256SUMS release/assets/SHA256SUMS
+          cat release/assets/SHA256SUMS
+      - name: Create the GitHub release as a draft
+        run: |
+          flags=(--verify-tag --draft --title "Chimera $VERSION" --generate-notes)
+          [ "$PRERELEASE" = true ] && flags+=(--prerelease)
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" "${flags[@]}" release/assets/*
+      # Undraft BEFORE npm: an npm package pointing at a draft release breaks every
+      # `chimera install` download, while a public release without its npm package is only a 404.
+      - name: Publish the GitHub release
+        run: gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false
+      - name: Publish the tested tarball to npm
+        env:
+          # Only needed for the very first publish; once the package exists and Trusted Publishing
+          # is configured, delete the NPM_TOKEN secret and npm authenticates through OIDC.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          dist_tag=latest
+          [ "$PRERELEASE" = true ] && dist_tag=next
+          npm publish release/npm/*.tgz --provenance --access public --tag "$dist_tag"

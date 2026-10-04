@@ -1,0 +1,123 @@
+/* Session-role create/edit form — geometry mirrors TeamFormCard.module.css
+   (620 card, 110px labels, input-bg fields). */
+.honesty {
+  padding: 6px 16px;
+  color: var(--muted);
+  font-size: var(--fs-meta);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.fields {
+  padding: 10px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: var(--fs-meta);
+}
+
+.pair {
+  display: flex;
+  gap: 16px;
+}
+
+.pair > .field {
+  flex: 1;
+}
+
+.field {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.label {
+  width: 130px;
+  flex-shrink: 0;
+  color: var(--muted);
+  padding-top: 3px;
+}
+
+.input,
+.textarea {
+  flex: 1;
+  min-width: 0;
+  background: var(--input-bg);
+  border: 1px solid var(--field-idle);
+  border-radius: var(--radius-chip);
+  padding: 3px 8px;
+  font: inherit;
+  color: var(--fg-soft);
+  outline: none;
+}
+
+.input:focus,
+.textarea:focus {
+  border-color: var(--field-active);
+  color: var(--fg);
+}
+
+.textarea {
+  font-family: var(--font-mono, monospace);
+  resize: vertical;
+}
+
+.input::placeholder,
+.textarea::placeholder {
+  color: var(--faint);
+}
+
+.input:disabled {
+  color: var(--faint);
+  cursor: not-allowed;
+}
+
+.error {
+  color: var(--danger);
+}
+
+.kimiNote {
+  padding: 4px 8px;
+  margin-left: 140px;
+  color: var(--muted);
+  font-size: var(--fs-meta);
+}
+
+.fieldNote {
+  padding: 4px 8px;
+  color: var(--muted);
+  font-size: var(--fs-meta);
+}
+
+.footer {
+  padding: 8px 16px 12px;
+  display: flex;
+  gap: 12px;
+  font-size: var(--fs-meta);
+  border-top: 1px solid var(--line-soft);
+}
+
+.submitChip {
+  border: 1px solid var(--field-active);
+  background: var(--sel-bg);
+  border-radius: var(--radius-chip);
+  padding: 2px 10px;
+  cursor: pointer;
+}
+
+.submitKey {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.submitVerb {
+  color: var(--fg-soft);
+}
+
+.cancelChip {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-chip);
+  padding: 2px 10px;
+  color: var(--muted);
+  cursor: pointer;
+}

@@ -1,0 +1,47 @@
+/* Shared expand/collapse animation for toggle-detail panes (list-item detail
+   panels, inline inspectors, role-instruction blocks — F-TOGGLE-ANIM). A
+   grid-template-rows 0fr→1fr tween animates height without ever measuring
+   "auto" in JS (the standard height-to-auto CSS trick); opacity rides along
+   so the content doesn't just clip, it visibly fades. */
+.collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  min-height: 0;
+  transition: grid-template-rows 180ms ease, opacity 140ms ease;
+}
+.collapse.open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+/* `fill` (Collapse's `fill` prop): bounds the collapse to the REST of its
+   flex parent's height (Panel is a flex column) instead of the grid's 1fr
+   track sizing to the content's own max-content height — required so a
+   wrapped flex:1/overflow-y:auto scroll body (.tasksBody etc.) actually has
+   a finite height to scroll within rather than growing the whole pane past
+   the viewport. */
+.collapse.fill {
+  flex: 1;
+  min-height: 0;
+}
+
+.inner {
+  overflow: hidden;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Clip (overflow: hidden, above) only applies while closed/animating-shut —
+   once fully open, long content scrolls inside instead of clipping or
+   pushing the pane past its bounds. */
+.collapse.open .inner {
+  overflow-y: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .collapse {
+    transition: none;
+  }
+}

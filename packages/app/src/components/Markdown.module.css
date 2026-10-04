@@ -1,0 +1,28 @@
+/* W4 Markdown — token-only; inline code + link-as-text read accent (mock:
+   commit refs / `claude-code-repl-rendering-truth` spans, line 171). */
+.para {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.paraGap {
+  margin-top: 6px;
+}
+
+.code {
+  color: var(--accent);
+  font-family: var(--font-mono);
+}
+
+.link {
+  color: var(--accent);
+}
+
+/* CLICKABLE-LINKS: an http(s) link span opens in the OS browser on click —
+   pointer cursor + underline-on-hover affordance, no live <a> involved. */
+.linkOpenable {
+  cursor: pointer;
+}
+.linkOpenable:hover {
+  text-decoration: underline;
+}

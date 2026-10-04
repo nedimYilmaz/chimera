@@ -1,0 +1,121 @@
+/* RoleBindingOverrideEditor — §6.1/§6.3's legibility requirement: an
+   overridden field must be visually distinguishable from an inherited one at
+   a glance, not just while actively editing. */
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 8px;
+  font-size: var(--fs-meta);
+}
+
+.rowInherited,
+.rowOverridden {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 3px 8px;
+  border-radius: var(--radius-chip);
+  border-left: 2px solid transparent;
+}
+
+.rowInherited {
+  color: var(--faint);
+}
+
+.rowOverridden {
+  border-left-color: var(--accent);
+  background: var(--raised);
+}
+
+.label {
+  width: 140px;
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
+.rowOverridden .label {
+  color: var(--fg-soft);
+  font-weight: 600;
+}
+
+.valueCol {
+  flex: 1;
+  min-width: 0;
+}
+
+.inheritedValue {
+  color: var(--faint);
+  font-style: italic;
+  overflow-wrap: anywhere;
+  /* CLAMP-INHERITED: a role's `instructions` is prose and routinely runs to thousands of
+     characters. Rendered whole it pushed every field below it off the screen — the editor
+     scrolled for pages and nothing else could be reached, which is how "I cannot edit anything"
+     happens to a form that is working exactly as written. Three lines is enough to recognise the
+     value; the full text is on the element's title, and pressing `override` puts all of it in a
+     real textarea, so nothing is hidden that the operator cannot get to. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+}
+
+.input,
+.textarea {
+  width: 100%;
+  background: var(--input-bg);
+  border: 1px solid var(--field-active);
+  border-radius: var(--radius-chip);
+  padding: 2px 6px;
+  font: inherit;
+  color: var(--fg-soft);
+  outline: none;
+}
+
+.textarea {
+  font-family: var(--font-mono, monospace);
+  resize: vertical;
+}
+
+.toggleChip {
+  flex-shrink: 0;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: var(--fs-tiny);
+  white-space: nowrap;
+}
+
+.kimiNote {
+  padding: 2px 8px 4px 150px;
+  color: var(--muted);
+}
+
+.error {
+  color: var(--danger);
+  margin-top: 6px;
+}
+
+.footer {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.submitChip {
+  border: 1px solid var(--field-active);
+  background: var(--sel-bg);
+  border-radius: var(--radius-chip);
+  padding: 2px 10px;
+  cursor: pointer;
+}
+
+.cancelChip {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-chip);
+  padding: 2px 10px;
+  color: var(--muted);
+  cursor: pointer;
+}

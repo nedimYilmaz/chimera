@@ -1,0 +1,328 @@
+/* FederationPairing — geometry 1:1 from the mock's federation·pairing block
+   (Chimera TUI.dc.html lines 935-946) + peers table (942-945). Token-only
+   colors; the hex guard stays empty. Mounted inside SettingsScreen's network
+   section, so it inherits the section's font-size baseline. */
+.card {
+  background: var(--bg);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-panel);
+  padding: 8px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cardHead {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.cardTitle {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.spacer { flex: 1; }
+.muted { color: var(--muted); }
+.faint { color: var(--faint); }
+.value { color: var(--fg); }
+.ok { color: var(--success); }
+.warn { color: var(--warn); }
+.danger { color: var(--danger); }
+
+/* ---- shared row scaffold (74px label gutter, mock) ---- */
+.inviteRow,
+.blobRow,
+.hintRow,
+.joinRow,
+.previewRow,
+.stepRow {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font-size: var(--fs-meta);
+}
+
+.inviteRow { margin-top: 8px; }
+.joinRow { margin-top: 8px; align-items: flex-start; }
+
+.rowLabel {
+  width: 74px;
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
+/* ---- invite generation ---- */
+.ttlGroup {
+  display: flex;
+  gap: 4px;
+}
+
+.ttlChip,
+.ttlChipActive {
+  font: inherit;
+  font-size: var(--fs-tiny);
+  cursor: pointer;
+  border-radius: var(--radius-chip);
+  padding: 1px 8px;
+  background: var(--input-bg);
+  border: 1px solid var(--field-idle);
+  color: var(--fg-soft);
+}
+
+.ttlChipActive {
+  border-color: var(--field-active);
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.blob {
+  flex: 1;
+  min-width: 0;
+  background: var(--input-bg);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 1px 8px;
+  color: var(--fg-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---- active invite list ---- */
+.inviteList {
+  display: flex;
+  flex-direction: column;
+  margin-left: 84px;
+}
+
+.inviteListRow,
+.inviteListRowSel {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 1px 6px;
+  margin: 0 -6px;
+  font-size: var(--fs-tiny);
+  border-left: 2px solid transparent;
+  cursor: pointer;
+}
+
+.inviteListRow:hover { background: var(--hover-bg); }
+
+.inviteListRowSel {
+  background: var(--sel-bg);
+  border-left-color: var(--accent);
+}
+
+/* ---- join step indicator ---- */
+.step {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.arrow { color: var(--faint); }
+
+.comet {
+  animation: fedComet var(--comet-duration, 1.2s) linear infinite;
+}
+
+@keyframes fedComet {
+  0% { opacity: 0.45; }
+  50% { opacity: 1; }
+  100% { opacity: 0.45; }
+}
+
+.joinInput {
+  flex: 1;
+  min-width: 0;
+  resize: none;
+  background: var(--input-bg);
+  border: 1px solid var(--field-active);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font: inherit;
+  font-size: var(--fs-meta);
+  color: var(--fg-soft);
+  outline: none;
+}
+
+.joinInput:focus { border-color: var(--accent); }
+
+/* ---- peers table (mock 942-945) ---- */
+.peersTable {
+  display: flex;
+  flex-direction: column;
+  margin-top: 8px;
+}
+
+.peersHead {
+  display: flex;
+  padding: 0 0 4px;
+  color: var(--faint);
+  font-size: var(--fs-tiny);
+  letter-spacing: 0.05em;
+}
+
+.peerRow,
+.peerRowSel {
+  display: flex;
+  padding: 2px 6px;
+  margin: 0 -6px;
+  font-size: var(--fs-small);
+  border-left: 2px solid transparent;
+  cursor: pointer;
+}
+
+.peerRow:hover { background: var(--hover-bg); }
+
+.peerRowSel {
+  background: var(--sel-bg);
+  border-left-color: var(--accent);
+}
+
+.colEngine { width: 120px; flex-shrink: 0; }
+.colState { width: 170px; flex-shrink: 0; }
+.colIp { width: 130px; flex-shrink: 0; }
+.colGrants { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; }
+
+.emptyHint {
+  color: var(--faint);
+  font-size: var(--fs-meta);
+  padding: 6px 0;
+}
+
+/* ---- grant menu (inline expand) ---- */
+.grantMenu {
+  background: var(--input-bg);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-panel);
+  padding: 8px 12px;
+  margin: 4px 0 4px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.grantRow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: var(--fs-meta);
+  flex-wrap: wrap;
+}
+
+.grantLabel {
+  width: 100px;
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
+.grantNum {
+  width: 64px;
+  background: var(--input-bg);
+  border: 1px solid var(--field-idle);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font: inherit;
+  font-size: var(--fs-meta);
+  color: var(--fg-soft);
+  outline: none;
+}
+
+.grantNum:focus { border-color: var(--field-active); }
+
+.grantActions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line-soft);
+  font-size: var(--fs-meta);
+  flex-wrap: wrap;
+}
+
+/* ---- buttons ---- */
+.ghostBtn,
+.primaryBtn,
+.linkBtn,
+.grantBtn,
+.toggleOn,
+.toggleOff,
+.pickOn,
+.pickOff {
+  font: inherit;
+  font-size: var(--fs-meta);
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.ghostBtn {
+  background: var(--sel-bg);
+  border: 1px solid var(--line);
+  color: var(--fg-soft);
+  padding: 2px 10px;
+}
+
+.ghostBtn:hover { border-color: var(--field-active); }
+
+.ghostBtn:disabled {
+  color: var(--faint);
+  cursor: default;
+  border-color: var(--line);
+}
+
+.primaryBtn {
+  background: var(--sel-bg);
+  border: 1px solid var(--field-active);
+  color: var(--accent);
+  font-weight: 700;
+  padding: 2px 10px;
+}
+
+.primaryBtn:disabled {
+  color: var(--faint);
+  cursor: default;
+  border-color: var(--line);
+}
+
+.linkBtn {
+  background: none;
+  border: none;
+  color: var(--ghost);
+  font-size: var(--fs-tiny);
+  padding: 0 4px;
+}
+
+.linkBtn:hover { color: var(--accent); }
+
+.grantBtn {
+  background: none;
+  border: none;
+  color: var(--faint);
+  font-size: var(--fs-tiny);
+  padding: 0 4px;
+}
+
+.grantBtn:hover { color: var(--accent); }
+
+.toggleOn,
+.toggleOff,
+.pickOn,
+.pickOff {
+  font-size: var(--fs-tiny);
+  padding: 1px 10px;
+  background: var(--input-bg);
+  border: 1px solid var(--field-idle);
+  color: var(--fg-soft);
+}
+
+.toggleOn,
+.pickOn {
+  border-color: var(--field-active);
+  color: var(--accent);
+  font-weight: 700;
+}

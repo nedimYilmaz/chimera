@@ -1,0 +1,142 @@
+/* Status-chip styles, split from TopBar.module.css (see TopBarChips.tsx —
+   chip internals and the tab strip evolve under different owners). */
+.conn {
+  white-space: nowrap;
+}
+
+.connDotOk {
+  color: var(--success);
+}
+
+/* reconnecting: pulsing hollow dot, 1:1 from the mock. cometGlow lives in
+   tokens.css (global scope); global() stops the CSS-module transform from
+   rewriting the reference to a scoped name that matches no keyframes. */
+.connDotRe {
+  color: var(--warn);
+  animation: global(cometGlow) 1s linear infinite;
+}
+
+.connRe {
+  color: var(--warn);
+}
+
+.connOff {
+  color: var(--danger);
+}
+
+.connName {
+  color: var(--muted);
+}
+
+.connRtt {
+  color: var(--ghost);
+}
+
+.chip {
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-chip);
+  padding: 1px 8px;
+  white-space: nowrap;
+}
+
+/* W6: clickable chip variant — clicks dispatch the ctrl+a action id */
+.chipClick {
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-chip);
+  padding: 1px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+/* W6: partitioned peer chip, 1:1 from the mock's peer_part (line 42) */
+.chipPart {
+  background: var(--bg-danger-tint);
+  border: 1px solid var(--edge-confirm);
+  border-radius: var(--radius-chip);
+  padding: 1px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.peerPart {
+  color: var(--danger);
+}
+
+.muted {
+  color: var(--muted);
+}
+
+/* W6: cooling account — warn name + ticking m:ss (coverage B1) */
+.cooling {
+  color: var(--warn);
+}
+
+.dim {
+  color: var(--faint);
+}
+
+.peerName {
+  color: var(--success);
+}
+
+.spend {
+  color: var(--muted);
+}
+
+.meterFill {
+  color: var(--success);
+}
+
+/* W6 (B1): spend threshold tones — warn @70%, danger @90% */
+.meterWarn {
+  color: var(--warn);
+}
+
+.meterDanger {
+  color: var(--danger);
+}
+
+.meterEmpty {
+  color: var(--meter-empty); /* mock's exact spend-meter empty hex, now a named token (finding 10) */
+}
+
+/* ACCOUNT-QUOTA-METERS: each account is its own inline-block box so its top/bottom edges can
+   carry a quota border without widening the chip row (TOPBAR-OVERFLOW owns horizontal space).
+   1px, never --accent — TopBar.module.css's .tabActive already means "selected" with a 2px
+   solid var(--accent) border-bottom; this must read as a visually distinct thing. Padding
+   makes room for the two 1px edges without touching the name text's own line box. */
+.acctBox {
+  position: relative;
+  display: inline-block;
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+
+.quotaEdge {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+}
+
+.quotaEdgeTop {
+  top: 0;
+}
+
+.quotaEdgeBottom {
+  bottom: 0;
+}
+
+/* the pace-marker notch: a 1px "cut" in the edge, colored to match the chip's own background
+   (--raised) so it reads as a break in the bar rather than a stray colored speck. */
+.quotaNotch {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  background: var(--raised);
+}
+
+.chipClick, .chipPart { font: inherit; color: inherit; text-align: inherit; }
+.chipClick:focus-visible, .chipPart:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

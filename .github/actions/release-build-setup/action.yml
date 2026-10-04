@@ -1,0 +1,35 @@
+name: Release build setup
+description: Toolchain, dependencies and the npm package metadata every native release build reads
+inputs:
+  version:
+    description: Release version; must match tauri.conf.json
+    required: true
+  package_name:
+    description: npm package name
+    required: true
+  windows_publisher_thumbprint:
+    description: Public Windows signing certificate thumbprint, empty when Windows is not released
+    required: false
+    default: ''
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      with:
+        node-version: '24'
+    - shell: bash
+      run: npm install --global pnpm@11.11.0
+    - shell: bash
+      run: pnpm install --frozen-lockfile
+    - shell: bash
+      run: node scripts/audit-secrets.mjs
+    - shell: bash
+      run: node --test scripts/npm-install.test.mjs
+    # package-desktop-release.mjs reads dist/npm/package.json to name and version-check the asset.
+    - name: Build matching package metadata
+      shell: bash
+      env:
+        RELEASE_VERSION: ${{ inputs.version }}
+        RELEASE_NAME: ${{ inputs.package_name }}
+        WINDOWS_THUMBPRINT: ${{ inputs.windows_publisher_thumbprint }}
+      run: npm run build:npm -- --name "$RELEASE_NAME" --version "$RELEASE_VERSION" ${WINDOWS_THUMBPRINT:+--windows-publisher-thumbprint "$WINDOWS_THUMBPRINT"}

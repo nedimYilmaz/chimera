@@ -1,0 +1,20 @@
+{
+  "name": "@chimera/core",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "dependencies": {
+    "@agentclientprotocol/sdk": "^1.4.0",
+    "@anthropic-ai/claude-agent-sdk": "^0.3.289",
+    "@chimera/protocol": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@openai/codex-sdk": "^0.160.0",
+    "zod": "^4.4.3"
+  },
+  "//optionalDependencies": "MEM-4 (PLAN-MEMORY.md §6.1): @huggingface/transformers powers local semantic memory search, reached only through a computed-specifier dynamic import in memory-embed.ts (never a static import — see that file's header) so its absence degrades to Ollama→lexical and never breaks the `bun build --compile` single-binary (docs/RELEASE-BUNDLING.md — zero native deps). Declared HERE, not on packages/daemon, because pnpm's non-hoisted node_modules resolves a bare specifier relative to the physical location of the file performing the import — declaring it only on a sibling package (daemon) left packages/core/node_modules without the symlink and the dynamic import failed with ERR_MODULE_NOT_FOUND every time, silently degrading semantic search to lexical.",
+  "optionalDependencies": { "@huggingface/transformers": "^4.0.0" }
+}

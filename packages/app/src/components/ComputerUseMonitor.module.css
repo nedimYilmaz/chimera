@@ -1,0 +1,49 @@
+/* Floats over the top-right of ONE transcript's scroll area (its .bodyFrame is the positioning
+   context), so it never overlaps the header chips or the composer below the transcript. */
+.monitor, .reopen {
+  position: absolute;
+  top: 8px;
+  right: 14px;
+  z-index: 5;
+  box-sizing: border-box;
+  color: var(--fg);
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-toast);
+}
+.monitor {
+  width: min(320px, calc(100% - 28px));
+  max-height: calc(100% - 16px);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  overflow: auto;
+  font-size: 12px;
+}
+.reopen { padding: 4px 10px; font-size: 12px; }
+.bar { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.state { flex: 1; min-width: 0; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.iconButton { justify-content: center; min-width: 24px; min-height: 24px; border: 1px solid var(--line-strong); border-radius: var(--radius-chip); }
+.preview { height: 150px; flex-shrink: 0; background: var(--bg); border: 1px solid var(--line-strong); border-radius: var(--radius-chip); display: grid; place-items: center; overflow: hidden; }
+.preview img { width: 100%; height: 100%; object-fit: contain; min-height: 0; }
+.preview span { padding: 12px; overflow-wrap: anywhere; text-align: center; color: var(--muted); }
+.monitor small, .activity time { color: var(--muted); }
+.monitor p { margin: 0; overflow-wrap: anywhere; }
+.activity { margin: 0; padding: 0; list-style: none; }
+.activity li { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; padding: 3px 0; border-bottom: 1px solid var(--line-strong); }
+.activity li span { overflow-wrap: anywhere; min-width: 0; }
+.activity [data-action-state="failed"], .error { color: var(--danger); }
+.monitor footer { display: grid; gap: 4px; }
+.stop { justify-content: center; padding: 4px 8px; border: 1px solid var(--line-strong); border-radius: var(--radius-chip); }
+.stop:disabled { opacity: 0.5; cursor: default; }
+
+/* A phone-width transcript keeps most of its height for reading: just the frame and the controls
+   stay; the recent-actions list and the live-preview caption return when the pane is wide again. */
+@media (max-width: 480px) {
+  .monitor { width: min(260px, calc(100% - 28px)); }
+  .preview { height: 72px; }
+  .activity, .caption, .note { display: none; }
+}

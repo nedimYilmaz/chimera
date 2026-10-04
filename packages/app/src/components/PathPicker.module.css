@@ -1,0 +1,42 @@
+/* CWD-PICKER — the browse button is a small chip that sits inside the
+   caller's own bordered field box (see PathPicker.tsx); .input is only the
+   fallback style for standalone use with no caller className override. */
+.input {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--fg);
+  caret-color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+  padding: 0;
+}
+
+.input::placeholder {
+  color: var(--faint);
+}
+
+.browse {
+  flex-shrink: 0;
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-chip);
+  padding: 1px 8px;
+  color: var(--muted);
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: var(--fs-tiny);
+  cursor: pointer;
+}
+
+.browse:hover:not(:disabled) {
+  color: var(--fg-soft);
+  border-color: var(--field-active);
+}
+
+.browse:disabled {
+  color: var(--ghost);
+  cursor: default;
+}

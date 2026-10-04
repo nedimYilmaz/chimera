@@ -1,0 +1,60 @@
+/* ReplayBar — geometry/copy 1:1 from the mock's showReplay strip (473-481):
+   amber theme (warn tint bg + the permission-edge amber border). */
+.bar {
+  background: var(--bg-warn-tint);
+  border: 1px solid var(--edge-permission);
+  border-radius: var(--radius-panel);
+  padding: 4px 12px;
+  font-size: var(--fs-meta);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.label {
+  color: var(--warn);
+  font-weight: 700;
+}
+
+.controls {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.btn {
+  cursor: pointer;
+}
+
+.btn:hover {
+  color: var(--fg);
+}
+
+.turn {
+  color: var(--fg);
+}
+
+.meter {
+  display: inline-block;
+  width: 120px;
+  height: 5px;
+  background: var(--meter-track);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.meterFill {
+  display: block;
+  height: 100%;
+  background: var(--warn);
+}
+
+.dim {
+  color: var(--faint);
+}
+
+.spacer { flex: 1; }
+
+.hint {
+  color: var(--ghost);
+  cursor: pointer;
+}

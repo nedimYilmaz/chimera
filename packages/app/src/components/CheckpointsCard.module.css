@@ -1,0 +1,123 @@
+/* F20 (W22 · coverage §B24/§C18) — checkpoints card, geometry from the
+   mock's showCheckpoints modal (lines 435-452): 560 card, selected row
+   --sel-bg + gold accent left bar pulled -10px (NotifyRulesCard's inset
+   convention), danger revert chip, dim footer note. Token-only colors. */
+
+.dim {
+  color: var(--faint);
+  font-size: var(--fs-tiny);
+}
+
+.body {
+  padding: 8px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--fs-small);
+}
+
+.row,
+.rowSelected {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 10px 2px 8px;
+  cursor: pointer;
+}
+
+.rowSelected {
+  background: var(--sel-bg);
+  border-left: 2px solid var(--warn);
+  margin: 0 -10px;
+}
+
+.mark {
+  color: var(--warn);
+}
+
+.rowSelected .mark {
+  color: var(--warn);
+}
+
+.row .mark {
+  color: var(--faint);
+}
+
+.id {
+  color: var(--fg);
+}
+
+.row .id {
+  color: var(--fg-soft);
+}
+
+.trigger {
+  color: var(--muted);
+}
+
+.row .trigger {
+  color: var(--faint);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.ts {
+  color: var(--faint);
+}
+
+.filesSince {
+  color: var(--faint);
+  font-size: var(--fs-tiny);
+}
+
+.emptyHint {
+  color: var(--faint);
+  padding: 4px 0;
+}
+
+.footer {
+  padding: 8px 16px 12px;
+  border-top: 1px solid var(--line-soft);
+  font-size: var(--fs-meta);
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.chip,
+.chipDanger {
+  border: 1px solid var(--line);
+  background: var(--input-bg);
+  border-radius: var(--radius-chip);
+  padding: 1px 10px;
+  color: var(--muted);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.chipDanger {
+  border-color: var(--edge-confirm);
+  background: var(--bg-danger-tint);
+  color: var(--danger-soft);
+}
+
+.chipKey {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.chipKeyDanger {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.footSpacer {
+  flex: 1;
+}
+
+.footNote {
+  color: var(--ghost);
+  font-size: var(--fs-tiny);
+}

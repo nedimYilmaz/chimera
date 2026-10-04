@@ -1,0 +1,25 @@
+/* WorkflowStepDots — N small dots replacing/augmenting a workflow-bound
+   agent's state cell. Tokens only, cometGlow pulse shared with the rest of
+   the app (tokens.css). */
+.dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dotPending { background: var(--muted); opacity: 0.4; }
+.dotDone { background: var(--success); }
+.dotFailed { background: var(--danger); }
+.dotWaiting { background: var(--warn); }
+
+.dotCurrent {
+  background: var(--success);
+  animation: global(cometGlow) var(--pulse-duration) linear infinite;
+}

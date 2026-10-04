@@ -1,0 +1,203 @@
+/* SHADOW-WORKFLOW-VISIBILITY: the workflow shadow inspector (inner-agent roster + drill-down
+   transcript). Reuses the app's design tokens 1:1 with the rest of the shadow pane. */
+
+.wrap {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  gap: 8px;
+}
+
+.metaRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--fs-meta);
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.runId {
+  background: var(--raised);
+  border-radius: var(--radius-chip);
+  padding: 0 8px;
+  color: var(--fg-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.runningPill {
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-chip);
+  padding: 0 8px;
+}
+
+.spacer { flex: 1; }
+.faint { color: var(--faint); }
+
+/* roster ------------------------------------------------------------------ */
+.roster {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+  min-height: 0;
+  /* cap so the drill panel below always has room; grows to fill when nothing is selected */
+  max-height: 45%;
+  flex-shrink: 0;
+}
+
+.row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-chip);
+  padding: 5px 8px;
+  cursor: pointer;
+  color: var(--fg);
+  font: inherit;
+}
+
+.row:hover { background: var(--raised); }
+.rowSelected { background: var(--raised); outline: 1px solid var(--line-soft); }
+
+.dot { flex-shrink: 0; font-size: var(--fs-meta); }
+.dotRunning { color: var(--accent); }
+.dotDone { color: var(--success); }
+
+.rowMain {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}
+
+.rowLabel {
+  color: var(--fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rowResult {
+  color: var(--faint);
+  font-size: var(--fs-meta);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rowMeta {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-shrink: 0;
+  font-size: var(--fs-meta);
+}
+
+.typeChip {
+  background: var(--raised);
+  border-radius: var(--radius-chip);
+  padding: 0 6px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* drill-down transcript --------------------------------------------------- */
+.drill {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  border-top: 1px solid var(--line-soft);
+  padding-top: 8px;
+  gap: 6px;
+}
+
+.drillHead {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.drillTitle {
+  font-weight: 600;
+  color: var(--fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 60%;
+}
+
+.closeBtn {
+  background: transparent;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-chip);
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--fs-meta);
+  padding: 0 8px;
+}
+.closeBtn:hover { color: var(--fg); }
+
+.drillHint {
+  color: var(--faint);
+  font-size: var(--fs-meta);
+  border-top: 1px solid var(--line-soft);
+  padding-top: 8px;
+  flex-shrink: 0;
+}
+
+.transcript {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+  min-height: 0;
+  flex: 1;
+  font-size: var(--fs-body);
+}
+
+.line {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.role {
+  flex-shrink: 0;
+  width: 66px;
+  text-align: right;
+  font-size: var(--fs-tiny);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.roleUser { color: var(--info); }
+.roleAssistant { color: var(--fg-soft); }
+.roleTool { color: var(--warn); }
+.roleSystem { color: var(--faint); }
+
+.lineText {
+  color: var(--fg);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.note {
+  color: var(--faint);
+  font-size: var(--fs-meta);
+}
+
+.reason {
+  margin-top: 6px;
+  color: var(--muted);
+}

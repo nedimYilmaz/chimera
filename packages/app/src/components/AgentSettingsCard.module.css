@@ -1,0 +1,32 @@
+/* AGENT-RECONFIGURE: the settings card borrows SpawnCard's form geometry, but that stylesheet's
+   `.inputBox` is a flex CONTAINER — in SpawnCard the text lives in a child element that carries
+   its own colour and font. Applied straight to a native <input>/<select>, as this card does, the
+   control inherits neither: a native form control does not take `color`/`font` from the page, it
+   falls back to the user-agent default. On a dark theme that is black text on a dark field —
+   reported as "the text isn't visible, the letters are black".
+   So these are the properties a NATIVE control needs and a container never did. */
+.nativeField {
+  color: var(--fg);
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+  /* The border/background come from .inputBox; the UA adds its own on top of a native control. */
+  appearance: none;
+  -webkit-appearance: none;
+  outline: none;
+}
+
+.nativeField::placeholder {
+  color: var(--ghost);
+}
+
+.nativeField:focus {
+  border-color: var(--field-active);
+}
+
+/* A <select>'s option list is drawn by the OS, which does not read the page's variables — set
+   both so the popup is legible in a dark theme rather than white-on-white. */
+.nativeField option {
+  background: var(--panel);
+  color: var(--fg);
+}

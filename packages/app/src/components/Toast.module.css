@@ -1,0 +1,41 @@
+/* Toasts — geometry/copy 1:1 from the mock's toast_note / toast_err blocks
+   (872-877): absolute bottom-right (right 16 / bottom 38), toast shadow. */
+.stack {
+  position: absolute;
+  right: 16px;
+  bottom: 38px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-end;
+  z-index: 3;
+}
+
+.note {
+  background: var(--bg-warn-tint);
+  border: 1px solid var(--edge-permission);
+  border-radius: var(--radius-panel);
+  padding: 4px 12px;
+  font-size: var(--fs-meta);
+  color: var(--warn);
+  box-shadow: var(--shadow-toast);
+}
+
+.noteHint {
+  color: var(--faint);
+}
+
+.error {
+  background: var(--bg-danger-tint);
+  border: 1px solid var(--edge-confirm);
+  border-radius: var(--radius-panel);
+  padding: 4px 12px;
+  font-size: var(--fs-meta);
+  color: var(--danger);
+  box-shadow: var(--shadow-toast);
+}
+
+.errorHint {
+  color: var(--muted);
+  cursor: pointer;
+}

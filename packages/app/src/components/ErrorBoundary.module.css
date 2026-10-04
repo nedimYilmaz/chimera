@@ -1,0 +1,45 @@
+/* Compact fallback surface — token colors only (hex guard). Sits inside the
+ * Panel frame so a contained crash reads as a degraded pane, not a blank app. */
+.panel {
+  flex: 1;
+  min-height: 0;
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px 16px;
+  text-align: center;
+}
+
+.message {
+  color: var(--danger-soft);
+  font-size: var(--fs-body);
+}
+
+.retry {
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-chip);
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--fs-meta);
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.retry:hover {
+  border-color: var(--accent);
+  color: var(--fg);
+}
+
+.kbd {
+  color: var(--fg);
+  font-family: inherit;
+}

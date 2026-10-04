@@ -1,0 +1,33 @@
+/* BudgetPauseBanner — geometry/copy 1:1 from the mock's showBudgetPause strip
+   (446-448): danger tint bg + confirm-edge border, soft danger text. */
+.banner {
+  background: var(--bg-danger-tint);
+  border: 1px solid var(--edge-confirm);
+  border-radius: var(--radius-panel);
+  padding: 4px 12px;
+  font-size: var(--fs-meta);
+  color: var(--danger-soft);
+}
+
+.dim {
+  color: var(--muted);
+}
+
+.action {
+  margin-left: 8px;
+  background: transparent;
+  border: 1px solid var(--edge-confirm);
+  border-radius: var(--radius-panel);
+  padding: 1px 8px;
+  font-size: var(--fs-meta);
+  color: var(--danger-soft);
+  cursor: pointer;
+}
+
+/* F50.UI: an airborne (or already-confirmed) release must LOOK spent — a live-looking
+   button invites the second click that would write a second audit record. */
+.action:disabled {
+  color: var(--muted);
+  border-color: var(--line);
+  cursor: default;
+}

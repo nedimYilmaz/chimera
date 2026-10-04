@@ -1,0 +1,159 @@
+/* FILEBROWSER-T7 — near-full-window overlay (ImageChip's lightbox precedent,
+   scaled up to a card): fixed scrim on <body>, click-scrim/Esc closes. */
+.scrim {
+  position: fixed;
+  inset: 0;
+  background: var(--scrim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+
+.card {
+  width: 94vw;
+  height: 90vh;
+  max-width: 1400px;
+  background: var(--card);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 10px 16px 8px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.name {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.path {
+  color: var(--muted);
+  font-size: var(--fs-meta);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.close {
+  background: none;
+  border: none;
+  color: var(--faint);
+  font: inherit;
+  font-family: var(--font-mono);
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+.close:hover {
+  color: var(--danger);
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px 16px 16px;
+}
+
+.banner {
+  color: var(--warn);
+  background: var(--bg-warn-tint);
+  border: 1px solid var(--edge-permission);
+  border-radius: var(--radius-panel);
+  padding: 6px 10px;
+  font-size: var(--fs-meta);
+  margin-bottom: 8px;
+}
+
+.placeholder {
+  color: var(--muted);
+  padding: 24px 4px;
+}
+
+.imageWrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.codeArea {
+  height: 100%;
+}
+
+/* Shiki ships its own inline per-token colors from the theme; only the
+   container chrome (bg/border/font) comes from our tokens, matching
+   MessageBody's .codeWrap/.code0 fenced-code look. */
+.shiki {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-panel);
+  overflow: auto;
+  background: var(--code-bg);
+}
+
+.shiki pre {
+  margin: 0;
+  padding: 10px 14px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-small);
+  line-height: var(--lh);
+  background: transparent !important;
+}
+
+/* FILE-PATH-LINKS — the path:line target line, both in shiki's decorated
+   output (:global — shiki is handed this literal class name, so it can't go
+   through CSS-modules hashing) and in the no-shiki PlainCodeLines fallback. */
+:global(.path-target-line) {
+  display: inline-block;
+  width: 100%;
+  background: var(--select-hl);
+  border-radius: 2px;
+}
+
+.plainLines {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-panel);
+  background: var(--code-bg);
+  padding: 10px 14px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-small);
+  line-height: var(--lh);
+  white-space: pre;
+  overflow: auto;
+}
+
+/* MD-FILE-VIEWER: a rendered markdown document. Roomier than the code area — this is prose being
+   read, not a listing being scanned — and scrolls on its own so the card's header stays put. */
+.mdArea {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 14px 18px 20px;
+  line-height: 1.55;
+}
+.rawToggle {
+  flex: none;
+  margin-right: 8px;
+  padding: 2px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.rawToggle:hover:not(:disabled) { color: var(--fg); border-color: var(--field-active); }
+.rawToggle:disabled { opacity: 0.45; cursor: default; }

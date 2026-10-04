@@ -1,0 +1,117 @@
+/* AccountsCard — geometry/copy 1:1 from the mock's showAccounts block
+   (lines 327-348): column widths 120/90/160/110/90, 12.5px rows, federation
+   block behind a soft divider. Tokens only. */
+.cols {
+  padding: 8px 16px 2px;
+  display: flex;
+  color: var(--faint);
+  font-size: var(--fs-tiny);
+  letter-spacing: 0.05em;
+}
+
+.rows {
+  padding: 0 16px 8px;
+  font-size: var(--fs-small);
+}
+
+.row {
+  display: flex;
+  padding: 2px 0;
+}
+
+.colAccount { width: 120px; }
+.colProvider { width: 90px; }
+.colHealth { width: 160px; }
+.colSpend { width: 110px; text-align: right; }
+.colFailover { width: 90px; text-align: right; }
+
+.muted { color: var(--muted); }
+.faint { color: var(--faint); }
+.ghost { color: var(--ghost); }
+.ok { color: var(--success); }
+.warn { color: var(--warn); }
+.danger { color: var(--danger); }
+
+.empty {
+  color: var(--faint);
+  padding: 4px 0;
+}
+
+.codexNote {
+  color: var(--ghost);
+  font-size: var(--fs-tiny);
+  padding-top: 2px;
+}
+
+/* ACCOUNT-QUOTA-METERS Layer 2 — each account's existing 5-col .row plus an optional quota
+   block underneath (absent entirely for an account with no window data yet). */
+.rowGroup {
+  padding-bottom: 2px;
+}
+
+.quotaBlock {
+  padding: 2px 0 4px 14px;
+}
+
+.quotaLegend {
+  color: var(--ghost);
+  font-size: var(--fs-tiny);
+  padding-bottom: 1px;
+}
+
+.quotaRow {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: var(--fs-small);
+}
+
+.quotaLabel {
+  color: var(--faint);
+  width: 56px;
+  flex-shrink: 0;
+}
+
+.federation {
+  padding: 8px 16px 10px;
+  border-top: 1px solid var(--line-soft);
+  font-size: var(--fs-meta);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.fedRow {
+  display: flex;
+  gap: 14px;
+}
+
+.fedLabel {
+  color: var(--faint);
+  width: 84px;
+  flex-shrink: 0;
+}
+
+.fedLocal {
+  color: var(--accent);
+}
+
+.table { container-type: inline-size; container-name: accounts-table; min-width: 0; }
+.cols, .row { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, .9fr) minmax(0, 1.5fr) minmax(0, 1.1fr) minmax(0, .7fr); gap: 8px; align-items: baseline; }
+.colAccount, .colProvider, .colHealth, .colSpend, .colFailover { width: auto; min-width: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.rowGroup { padding-block: 8px; border-bottom: 1px solid var(--line-soft); }
+.quotaRow { display: grid; grid-template-columns: minmax(0, 1fr) 84px auto; align-items: center; gap: 4px 8px; }
+.quotaRow > span:last-child { grid-column: 1 / -1; }
+.quotaLabel { width: auto; flex: 0 1 110px; overflow-wrap: anywhere; }
+.quotaMeter { display: inline-block; width: 84px; height: 5px; flex: 0 0 84px; background: var(--meter-track); overflow: hidden; border-radius: 3px; }
+.quotaMeter > span { display: block; height: 100%; background: currentColor; }
+.fedRow { flex-wrap: wrap; overflow-wrap: anywhere; min-width: 0; gap: 4px 14px; }
+.fedRow > span { min-width: 0; }
+@container accounts-table (max-width: 520px) {
+  .cols { display: none; }
+  .row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px 12px; }
+  .row > div { text-align: left; }
+  .row > div::before { content: attr(data-label); display: block; color: var(--faint); font-size: var(--fs-tiny); }
+  .colAccount { grid-column: 1 / -1; }
+  .quotaBlock { padding-left: 0; }
+}

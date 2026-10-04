@@ -1,0 +1,9 @@
+.viewport {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.viewport[data-scrolling="true"] { text-overflow: clip; }
+.track { white-space: nowrap; }

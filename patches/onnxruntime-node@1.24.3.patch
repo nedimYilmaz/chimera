@@ -1,0 +1,11 @@
+diff --git a/script/install-utils.js b/script/install-utils.js
+--- a/script/install-utils.js
++++ b/script/install-utils.js
+@@ -143,3 +143,4 @@ async function resolvePackage(type, index, packageName, version) {
+-        // Create a temporary directory
+-        const tempDir = path.join(os.tmpdir(), `onnxruntime-node-pkgs_${Date.now()}`);
+-        fs.mkdirSync(tempDir, { recursive: true });
++        // Extraction must never reuse a predictable, attacker-populated directory.
++        // Mitigates GHSA-vwc7-r8mq-g2x9 at this install-time consumer boundary.
++        const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'onnxruntime-node-pkgs_'));
++        fs.chmodSync(tempDir, 0o700);

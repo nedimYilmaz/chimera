@@ -1,0 +1,10 @@
+<!doctype html>
+<!-- W5 browser-gate host page (served by vite dev at /test/gate-blank.html).
+     The unattended gate navigates HERE first, installs window.__CHIMERA_MOCK__
+     via evaluate_script, then document.open()/write()s the app's own
+     transformed index.html into this SAME window — window properties survive
+     document.open(), so the bridge's module-load seam check sees the mock.
+     Never imported by the app; test scaffolding only. -->
+<meta charset="utf-8">
+<title>chimera gate host</title>
+<body>gate host — install the seam, then boot the app via document.write</body>

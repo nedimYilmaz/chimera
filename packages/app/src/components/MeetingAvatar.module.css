@@ -1,0 +1,14 @@
+.avatar { --avatar-hue:240; position:relative; width:76px; height:76px; flex-shrink:0; border-radius:50%; background:hsl(var(--avatar-hue) 32% 19%); color:hsl(var(--avatar-hue) 64% 78%); border:2px solid currentColor; margin:6px 0 12px; }
+.avatar svg { display:block; width:100%; height:100%; fill:currentColor; overflow:hidden; border-radius:50%; opacity:.85; }
+.avatar .eye { fill:var(--bg); }
+.initials { position:absolute; bottom:-6px; left:-4px; padding:2px 5px; border-radius:var(--radius-panel); background:var(--raised); color:var(--fg); font-size:var(--fs-tiny); border:1px solid var(--line); }
+.wave { position:absolute; right:-8px; bottom:0; display:flex; align-items:center; justify-content:center; gap:3px; width:32px; height:26px; border-radius:12px; background:var(--raised); border:1px solid var(--line); }
+.wave i { width:3px; height:4px; border-radius:2px; background:var(--muted); }
+.avatar[data-avatar-speaking=true] { color:var(--success); animation:halo 1.2s ease-in-out infinite; }
+.avatar[data-avatar-speaking=true] .wave i { background:var(--success); height:14px; animation:voice .65s ease-in-out infinite alternate; }
+.avatar[data-avatar-speaking=true] .wave i:nth-child(2) { animation-delay:-.3s; }
+.avatar[data-avatar-speaking=true] .wave i:nth-child(3) { animation-delay:-.5s; }
+.avatar[data-avatar-speaking=true] .wave i:nth-child(4) { animation-delay:-.1s; }
+@keyframes voice { to { transform:scaleY(.25); } }
+@keyframes halo { 50% { box-shadow:0 0 0 5px var(--bg-allow-tint); } }
+@media (prefers-reduced-motion:reduce) { .avatar,.avatar .wave i { animation:none !important; } }

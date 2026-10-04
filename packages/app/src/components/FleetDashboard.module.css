@@ -1,0 +1,30 @@
+/* R2 UI REWORK: two-pane layout (.main + .summary) so a wide window's right
+   side is never blank whitespace. --border/--surface-raised/--warning were
+   never-defined custom properties (invalid at computed-value time -> the
+   group borders/head fill/pressure warning color silently didn't render) --
+   fixed to the real tokens.css names (--line/--raised/--warn). */
+.root{display:flex;min-width:0;height:100%;background:var(--bg)}
+.main{flex:1;display:flex;flex-direction:column;min-width:0}
+.toolbar,.pressure,.groupHead,.row,.rowAttention,.bulk,.columnHeader{display:flex;align-items:center;gap:10px}
+.toolbar{padding:8px 12px;border-bottom:1px solid var(--line)}
+.toolbar button,.bulk button,.name{font:inherit;color:inherit;background:none;border:1px solid var(--line);cursor:pointer}
+.toolbar button,.bulk button{padding:3px 7px}
+.active{color:var(--accent)!important;border-color:var(--accent)!important}
+.spacer{flex:1}
+.subtitle{padding:2px 12px 6px;color:var(--muted);font-size:var(--fs-meta)}
+.pressure{padding:6px 12px;color:var(--warn);border-bottom:1px solid var(--line)}
+.columnHeader{display:grid;grid-template-columns:24px minmax(120px,1fr) 100px 100px 80px 80px;padding:2px 12px;color:var(--faint);font-size:var(--fs-tiny)}
+.legend{padding:0 12px 6px;color:var(--faint);font-size:var(--fs-tiny)}
+.body{overflow:auto;padding:8px;flex:1}
+.group{margin-bottom:10px;border:1px solid var(--line)}
+.groupHead{padding:6px 8px;background:var(--raised)}
+.groupHead strong{flex:1}
+.row,.rowAttention{display:grid;grid-template-columns:24px minmax(120px,1fr) 100px 100px 80px 80px;padding:5px 8px;border-top:1px solid var(--line)}
+.rowAttention{background:color-mix(in srgb,var(--warn) 9%,transparent)}
+.name{text-align:left;border:0}
+.doneToggle{display:block;width:100%;text-align:left;padding:4px 8px;color:var(--muted);background:none;border:0;border-top:1px solid var(--line);cursor:pointer;font:inherit}
+.bulk{position:sticky;bottom:0;padding:8px 12px;background:var(--raised);border-top:1px solid var(--accent)}
+.summary{width:300px;flex-shrink:0;border-left:1px solid var(--line);overflow:auto;padding:10px 12px;display:flex;flex-direction:column;gap:12px}
+.summaryHeading{color:var(--muted);font-size:var(--fs-tiny);text-transform:uppercase}
+.summarySection{display:flex;flex-direction:column;gap:4px}
+.summaryRow{display:flex;justify-content:space-between;gap:10px;font-size:var(--fs-small)}

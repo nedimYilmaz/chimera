@@ -1,0 +1,566 @@
+/* QueuesScreen — geometry 1:1 from the mock's s_queues block (643-731).
+   .row/.leftCol match ProjectsScreen's .row/.master exactly (mock 720-722):
+   edge-to-edge, no max-width/centering, fixed 430px master column — Projects
+   is the layout source of truth all master-detail screens share. */
+.screen {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  container-type: inline-size;
+}
+
+.row {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  padding: 6px 12px 0;
+  /* PANE-RESIZE: the gap is the divider now. */
+  /* overlay host: ScheduleFormCard/job-delete ConfirmCard scrims float over
+     BOTH columns (a 620px form would overflow the 430px left column alone) */
+  position: relative;
+}
+
+/* A screen can occupy a narrow nested pane even when the desktop viewport is
+   wide. Container sizing, not a viewport media query, keeps both halves usable. */
+
+
+/* W15 — stacks the queue master list above the (permanent) schedules panel,
+   both inside the mock's original 430px master column. leftCol (not master)
+   is the direct .row child; master/schedules just split leftCol's height and
+   stretch to fill its width. */
+.leftCol {
+  /* PANE-RESIZE: inherited from the row; 430px stays the shipped default. */
+  width: var(--pane-w, 430px);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+}
+
+.master {
+  flex: 1 1 55%;
+  min-height: 0;
+}
+
+.schedules {
+  flex: 1 1 45%;
+  min-height: 0;
+}
+
+.detail {
+  flex: 1;
+  min-width: 0;
+  position: relative; /* overlay host: PushTaskCard/ConfirmCard scrims stay inside */
+}
+
+@container (max-width: 630px) {
+  .row {
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .leftCol {
+    width: 100%;
+    flex: 0 0 350px;
+  }
+
+  .detail {
+    width: 100%;
+    flex: 0 0 350px;
+  }
+
+  /* Summary counts live outside the task table's scrolling region. */
+  .countsRow {
+    flex-wrap: wrap;
+  }
+
+  .countsRow > span {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  .colAgent,
+  .colTry {
+    display: none;
+  }
+
+  .row > [role="separator"] {
+    display: none;
+  }
+}
+
+.countMeta {
+  color: var(--faint);
+}
+
+.filler {
+  flex: 1;
+}
+
+/* ---- master list (columns: queue flex / pending 70 / active 70 / backlog 90) */
+.colHead {
+  padding: 0 14px 4px;
+  display: flex;
+  color: var(--faint);
+  font-size: var(--fs-tiny);
+  letter-spacing: 0.05em;
+}
+
+.colQueue {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.colPending {
+  width: 70px;
+  flex-shrink: 0;
+}
+
+.colActive {
+  width: 70px;
+  flex-shrink: 0;
+}
+
+.colBacklog {
+  width: 90px;
+  flex-shrink: 0;
+}
+
+.rowItem,
+.rowSelected {
+  display: flex;
+  align-items: center;
+  padding: 2px 14px 2px 12px;
+  border-left: 2px solid transparent;
+  cursor: pointer;
+}
+
+.rowSelected {
+  background: var(--sel-bg);
+  border-left-color: var(--accent);
+}
+
+.rowItem:hover {
+  background: var(--hover-bg);
+}
+
+.rowItem:focus-visible,
+.rowSelected:focus-visible {
+  outline: 2px solid var(--accent-bright);
+  outline-offset: -2px;
+}
+
+.softName {
+  color: var(--fg-soft);
+}
+
+.retryMeta {
+  color: var(--faint);
+  font-size: var(--fs-meta);
+}
+
+.mutedCell {
+  color: var(--muted);
+}
+
+.faintCell {
+  color: var(--faint);
+}
+
+/* backlog meter: 60px track, 5px tall (mock 655) — the wide 72px variant sits
+   in the detail header (mock 668) */
+.meterTrack,
+.meterTrackWide {
+  display: inline-block;
+  height: 5px;
+  background: var(--meter-track);
+  border-radius: 3px;
+  overflow: hidden;
+  vertical-align: middle;
+}
+
+.meterTrack {
+  width: 60px;
+}
+
+.meterTrackWide {
+  width: 72px;
+}
+
+.meterFillWarn,
+.meterFillOk {
+  display: block;
+  height: 100%;
+}
+
+.meterFillWarn {
+  background: var(--warn);
+}
+
+.meterFillOk {
+  background: var(--success);
+}
+
+/* ---- detail header (mock 663-670) ---- */
+.detailHead {
+  padding: 2px 18px 10px;
+  border-bottom: 1px solid var(--line-soft);
+  flex-shrink: 0;
+}
+
+.detailTitleRow {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.detailName {
+  font-weight: 700;
+  font-size: var(--fs-title);
+}
+
+.retryLimitMeta {
+  color: var(--faint);
+  font-size: var(--fs-meta);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.countsRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+  font-size: var(--fs-meta);
+}
+
+.backlogChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+
+/* ---- tasks table (mock 671-696): lead 20 / pos 56 (QUEUE-REORDER) / state 110 / task 90 /
+   role 80 / agent 90 / try 60 / step 110 (W18 F16 task workflows) / prompt flex ---- */
+.taskHead {
+  padding: 8px 18px 4px;
+  display: flex;
+  color: var(--faint);
+  font-size: var(--fs-tiny);
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
+}
+
+/* task list + inline TaskInspector scroll independently of detailHead/
+   taskHead (fixed above) and PanelFooter (fixed below) — same pattern as
+   MemoryScreen's/EventsScreen's .body. */
+.tasksBody {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.tasksBody::-webkit-scrollbar {
+  width: 3px;
+}
+
+.tasksBody::-webkit-scrollbar-track {
+  background: var(--scroll-rail);
+  border-radius: 2px;
+}
+
+.tasksBody::-webkit-scrollbar-thumb {
+  background: var(--scroll-thumb);
+  border-radius: 2px;
+}
+
+/* QUEUE-REORDER: the sort-mode toggle above the task list — newest-first (default) vs. drain
+   order (priority desc, then FIFO — the exact scheduler comparator). A visible explanation of
+   why priority alone can't express "run after X" sits right under it. */
+.sortToggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 18px 4px;
+  font-size: var(--fs-tiny);
+}
+
+.sortOption {
+  color: var(--faint);
+  cursor: pointer;
+}
+
+.sortOptionActive {
+  color: var(--accent);
+  cursor: default;
+}
+
+.orderingNote {
+  padding: 0 18px 4px;
+  color: var(--faint);
+  font-size: var(--fs-tiny);
+}
+
+/* QUEUE-REORDER: effective drain position + move up/down, shown for pending/blocked rows only.
+   Move buttons only render in "drain order" sort mode — moving a task while displaying
+   newest-first would visually do nothing where the operator is looking, even though the
+   underlying swap is real; drain order is where the effect is actually visible. */
+.colPos {
+  width: 56px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.posBadge {
+  color: var(--faint);
+  font-size: var(--fs-tiny);
+  min-width: 14px;
+}
+
+.moveButtons {
+  display: inline-flex;
+  gap: 0;
+}
+
+.moveButton {
+  border: 0;
+  background: none;
+  color: var(--ghost);
+  font: inherit;
+  line-height: 1;
+  padding: 0 2px;
+  cursor: pointer;
+}
+
+.moveButton:hover:not(:disabled) {
+  color: var(--accent);
+}
+
+.moveButton:disabled {
+  color: var(--faint);
+  cursor: default;
+  opacity: 0.4;
+}
+
+.colLead {
+  width: 20px;
+  flex-shrink: 0;
+}
+
+.pinButton {
+  border: 0;
+  background: none;
+  color: var(--ghost);
+  font: inherit;
+  line-height: 1;
+  padding: 0 2px;
+  cursor: pointer;
+}
+
+.pinButton:hover {
+  color: var(--accent);
+}
+
+.colState {
+  width: 110px;
+  flex-shrink: 0;
+}
+
+.colTask {
+  width: 90px;
+  flex-shrink: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis; /* real task ids are UUIDs — one row stays one line */
+}
+
+.colRole {
+  width: 80px;
+  flex-shrink: 0;
+}
+
+.colAgent {
+  width: 90px;
+  flex-shrink: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.colTry {
+  width: 60px;
+  flex-shrink: 0;
+}
+
+/* W18 (F16 task workflows): the step meter ("◐ 3/5 test") — empty for a
+   plain, ungated task. */
+.colStep {
+  width: 110px;
+  flex-shrink: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.colPrompt {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.taskRow,
+.taskRowSelected {
+  display: flex;
+  align-items: center;
+  padding: 2px 18px 2px 16px;
+  border-left: 2px solid transparent;
+  cursor: pointer;
+}
+
+.taskRowSelected {
+  background: var(--sel-bg);
+  border-left-color: var(--accent);
+}
+
+.taskRow:hover {
+  background: var(--hover-bg);
+}
+
+.taskRow:focus-visible,
+.taskRowSelected:focus-visible {
+  outline: 2px solid var(--accent-bright);
+  outline-offset: -2px;
+}
+
+/* ---- tones + empty states ---- */
+.toneWarn { color: var(--warn); }
+.toneMuted { color: var(--muted); }
+.toneAccent { color: var(--accent); }
+.toneSuccess { color: var(--success); }
+.toneDanger { color: var(--danger); }
+.toneInfo { color: var(--info); }
+.toneHuman { color: var(--human); }
+
+.emptyHint {
+  color: var(--faint);
+  font-size: var(--fs-meta);
+  padding: 8px 18px;
+}
+
+.emptyPane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.emptyGlyph {
+  color: var(--ghost);
+  font-size: var(--fs-brand);
+}
+
+/* ---- W15 schedules panel (columns: lead 20 / job flex≥110 / schedule 105 /
+   next run 72 / last result 90 — sums to 287 of the ~402px usable rail) ----
+   SCHEDULE-NAME-INVISIBLE: the job NAME column was `flex: 1; min-width: 0` behind three
+   FIXED columns totalling 150+90+170 = 410px, plus the 20px lead. The panel lives in
+   .leftCol, which is 430px wide with 14px of padding either side — about 402px usable. The
+   fixed columns alone already exceeded that, so the flexible name column resolved to ZERO
+   width at every window size: schedules with perfectly good names (`overnight-janitor`,
+   `evetle-worktree-janitor`, `infra10230-pr-and-jira`) were listed by cron expression only,
+   and the "job" header label was squeezed out with them. Nothing was wrong with the data —
+   the name is required by JobSpecSchema and the detail pane showed it all along.
+   The name is the identity an operator scans for, so it now has a hard floor and the three
+   trailing columns are the ones allowed to shrink. */
+.jobColHead {
+  padding: 0 14px 4px;
+  display: flex;
+  color: var(--faint);
+  font-size: var(--fs-tiny);
+  letter-spacing: 0.05em;
+}
+
+/* F02: the suspend/resume banner — sits above .jobColHead, so it reads before the column
+   labels rather than competing with the row grid below it. */
+/* F02.UI: a COMPLETED sleep is explanatory, not a fault — it used to wear var(--warn), so the
+   schedules panel carried a permanent amber line for 6h after every overnight suspend. Muted,
+   the same tone .emptyHint uses for "here is context you did not ask for". */
+.clockJumpNote {
+  padding: 6px 14px;
+  color: var(--faint);
+  font-size: var(--fs-tiny);
+}
+
+/* A clock that stepped BACKWARD is a genuine anomaly (an NTP step, a VM rollback) — schedules
+   re-armed, but the operator should look. That one keeps the warn tone. */
+.clockJumpNoteWarn {
+  padding: 6px 14px;
+  color: var(--warn);
+  font-size: var(--fs-tiny);
+}
+
+.colJob {
+  flex: 1 1 auto;
+  /* a hard floor, NOT 0: this column collapsing is the whole bug above. The trailing columns
+     are sized so this floor is met WITHOUT any shrinking at the rail's real width — shrink is
+     the safety net for a narrower window, not the normal case. */
+  min-width: 110px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.colSchedule {
+  width: 105px;
+  flex-shrink: 1;
+  min-width: 70px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.colNextRun {
+  width: 72px;
+  flex-shrink: 1;
+  min-width: 56px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.colLastResult {
+  width: 90px;
+  flex-shrink: 1;
+  min-width: 64px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+/* W16 (F15/D11): the action-chip row sits alongside the nav hint on the
+   footer's one line, wrapping onto its own line on a narrow panel. */
+.footerRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-bottom: 6px;
+}

@@ -1,0 +1,4 @@
+/* PerfHud — the ghost stats span in the Footer's right cluster (mock 881). */
+.hud {
+  color: var(--ghost);
+}

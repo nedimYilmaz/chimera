@@ -1,0 +1,102 @@
+import { afterEach, expect, it, vi } from "vitest";
+
+afterEach(() => {
+  vi.doUnmock("../src/voice/audioCapture");
+  vi.doUnmock("../src/voice/registry");
+  vi.unstubAllGlobals();
+  vi.resetModules();
+  vi.useRealTimers();
+});
+
+function setupRpc() {
+  const rpc = vi.fn(async (method: string, params: { agentId?: string }) => method === "voice.session.start"
+    ? { sessionId: "voice-1", agentId: params.agentId, state: "listening", startedAt: 0 } : { stopped: true });
+  vi.stubGlobal("window", { __CHIMERA_MOCK__: { rpc } });
+  return rpc;
+}
+
+it("deduplicates pending microphone starts and closes a capture that arrives after cancellation", async () => {
+  const rpc = setupRpc();
+  let ready!: () => void;
+  const start = vi.fn(() => new Promise<void>(resolve => { ready = resolve; }));
+  const stop = vi.fn(async () => new Blob());
+  vi.doMock("../src/voice/audioCapture", () => ({ createAudioCapture: () => ({ start, stop }) }));
+  const voice = await import("../src/voice/session");
+  const pending = voice.startPushToTalk("first-agent");
+  expect(voice.isPushToTalkBusy()).toBe(true);
+  await voice.startPushToTalk("second-agent");
+  expect(start).toHaveBeenCalledTimes(1);
+  voice.cancelPushToTalk();
+  ready();
+  await pending;
+  expect(stop).toHaveBeenCalledTimes(1);
+  expect(rpc).not.toHaveBeenCalled();
+  expect(voice.isPushToTalkBusy()).toBe(false);
+});
+
+it("closes a session whose start RPC completes after the owned gesture was cancelled", async () => {
+  let finishStart!: (record: { sessionId: string; agentId: string; state: string; startedAt: number }) => void;
+  const rpc = vi.fn((method: string, params: { agentId?: string; sessionId?: string }) => {
+    if (method === "voice.session.start") {
+      return new Promise(resolve => { finishStart = resolve; });
+    }
+    return Promise.resolve({ stopped: params.sessionId });
+  });
+  vi.stubGlobal("window", { __CHIMERA_MOCK__: { rpc } });
+  const stop = vi.fn(async () => new Blob());
+  vi.doMock("../src/voice/audioCapture", () => ({
+    createAudioCapture: () => ({ start: () => Promise.resolve(), stop }),
+  }));
+  const voice = await import("../src/voice/session");
+
+  const pending = voice.startPushToTalk("first-agent");
+  await vi.waitFor(() => expect(rpc).toHaveBeenCalledWith("voice.session.start", { agentId: "first-agent" }));
+  voice.cancelPushToTalk();
+  finishStart({ sessionId: "late-session", agentId: "first-agent", state: "listening", startedAt: 0 });
+  await pending;
+
+  expect(stop).toHaveBeenCalledTimes(1);
+  expect(rpc).toHaveBeenCalledWith("voice.session.stop", { sessionId: "late-session" });
+  expect(voice.isPushToTalkBusy()).toBe(false);
+  const { voiceLocal } = await import("../src/voice/store");
+  expect(voiceLocal.getState().status).toBe("idle");
+});
+
+it("never sends a late transcript after cancellation or target change", async () => {
+  setupRpc();
+  let finish!: (text: string) => void;
+  const transcribe = vi.fn(() => new Promise<string>(resolve => { finish = resolve; }));
+  vi.doMock("../src/voice/registry", () => ({ getDefaultSttEngine: () => ({ meta: { id: "test", healthy: true }, transcribe }) }));
+  const voice = await import("../src/voice/session");
+  await voice.startPushToTalk("first-agent");
+  const send = vi.fn();
+  const pending = voice.stopPushToTalkAndSend(send);
+  await vi.waitFor(() => expect(transcribe).toHaveBeenCalled());
+  voice.cancelPushToTalk();
+  finish("a task that no longer belongs to the selected agent");
+  await pending;
+  expect(send).not.toHaveBeenCalled();
+  expect(voice.isPushToTalkBusy()).toBe(false);
+});
+
+it("releases microphone tracks when the recorder cannot initialize", async () => {
+  const stop = vi.fn();
+  vi.stubGlobal("navigator", { mediaDevices: { getUserMedia: async () => ({ getTracks: () => [{ stop }] }) } });
+  vi.stubGlobal("MediaRecorder", class { constructor() { throw new Error("unsupported recorder"); } });
+  const { createAudioCapture } = await import("../src/voice/audioCapture");
+  await expect(createAudioCapture().start()).rejects.toThrow("unsupported recorder");
+  expect(stop).toHaveBeenCalledTimes(1);
+});
+
+it("releases the microphone immediately and rejects if a recorder never emits stop", async () => {
+  vi.useFakeTimers();
+  const stop = vi.fn();
+  vi.stubGlobal("navigator", { mediaDevices: { getUserMedia: async () => ({ getTracks: () => [{ stop }] }) } });
+  vi.stubGlobal("MediaRecorder", class { state = "recording"; start() {} stop() {} });
+  const { createAudioCapture } = await import("../src/voice/audioCapture");
+  const capture = createAudioCapture(); await capture.start();
+  const pending = capture.stop();
+  const assertion = expect(pending).rejects.toThrow("did not stop");
+  expect(stop).toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(5000); await assertion;
+});

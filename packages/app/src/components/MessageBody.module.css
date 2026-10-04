@@ -1,0 +1,839 @@
+/* F12 (W12) rich message renderer — token-only (CI hex guard). Values map 1:1
+   to the mock's ?showRichMsg=1 markup. */
+
+.para {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+/* MD-HEADINGS — a heading has to out-rank body text at a GLANCE in a dense,
+   monospace-ish transcript, and size alone doesn't do that at these small
+   sizes: h1/h2 get a rule under them, every level gets weight + brighter ink.
+   Levels stay visibly ordered without h1 becoming a billboard. */
+.heading {
+  font-weight: 650;
+  color: var(--fg);
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.h1 { font-size: 1.3em; }
+.h2 { font-size: 1.15em; }
+.h3 { font-size: 1.05em; }
+.h4, .h5, .h6 { font-size: 1em; }
+.h5, .h6 { color: var(--muted); }
+.h1, .h2 {
+  padding-bottom: 3px;
+  border-bottom: 1px solid var(--accent-gutter);
+}
+/* A heading owns the gap to what FOLLOWS it (tight) and to what PRECEDES it
+   (loose) — that asymmetry is what visually binds it to its own section
+   instead of letting it float between two. `:first-child` drops the leading
+   gap so a message that opens with a heading doesn't start with dead space. */
+.heading { margin-top: 16px; margin-bottom: 6px; }
+.heading:first-child { margin-top: 0; }
+
+.para + .para,
+.para + .list,
+.para + .tableWrap,
+.para + .codeWrap,
+.para + .chart,
+.para + .seriesChart,
+.para + .mermaidWrap,
+.list + .para,
+.tableWrap + .para,
+.codeWrap + .para,
+.chart + .para,
+.seriesChart + .para,
+.mermaidWrap + .para {
+  margin-top: 8px;
+}
+
+/* inline chips (mock: `q-quartz` / `queue_push` accent code pills, line 239) */
+.code {
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 0 5px;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: var(--fs-meta);
+}
+.link {
+  color: var(--accent);
+}
+
+/* CLICKABLE-LINKS: an http(s) link span opens in the OS browser on click —
+   pointer cursor + underline-on-hover affordance, no live <a> involved. */
+.linkOpenable {
+  cursor: pointer;
+}
+.linkOpenable:hover {
+  text-decoration: underline;
+}
+
+/* F22 (W24) — @mention chip: state dot + name, pill-styled per the mock's
+   showQuoting chip (border --field-active, bg --sel-bg). Dimmed (opacity,
+   matching the app's one other "disabled-but-present" precedent —
+   Composer.module.css's .input:disabled) for a finished agent; still
+   clickable either way ("keeps working"). */
+.mention {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--field-active);
+  background: var(--sel-bg);
+  border-radius: var(--radius-chip);
+  padding: 0 7px;
+  color: var(--hover-name);
+  cursor: pointer;
+}
+.mentionDim {
+  opacity: 0.55;
+}
+.mentionDot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* MEM-5 — a `[[wiki-link]]` chip in a note body. Bracket-free label, a subtle
+   accent underline that reads as "internal link" (distinct from the @mention
+   pill and the plain --accent external .link). Ghost/missing targets dim; a
+   missing [[id]] (evicted note) is not clickable so it draws default cursor. */
+.wikiLink,
+.wikiGhost,
+.wikiMissing,
+.wikiPlain {
+  color: var(--accent);
+  border-bottom: 1px dashed var(--field-active);
+  cursor: pointer;
+}
+.wikiPlain {
+  cursor: default;
+}
+.wikiGhost {
+  opacity: 0.6;
+  font-style: italic;
+}
+.wikiMissing {
+  opacity: 0.45;
+  cursor: default;
+  text-decoration: line-through;
+  border-bottom-color: transparent;
+}
+
+/* ---- tables (mock lines 222-233) ---- */
+.tableWrap {
+  margin: 6px 0 2px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-panel);
+  overflow-x: auto; /* h-scroll inside the message width (F12) */
+  max-width: 100%;
+  font-size: var(--fs-small);
+}
+.table {
+  border-collapse: collapse;
+  width: 100%;
+  white-space: nowrap;
+}
+.table th {
+  background: var(--card);
+  color: var(--faint);
+  font-size: var(--fs-tiny);
+  font-weight: 400;
+  letter-spacing: 0.05em;
+  text-align: left;
+  padding: 3px 12px;
+}
+.thRight {
+  text-align: right !important;
+}
+.table td {
+  color: var(--fg-soft);
+  padding: 2px 12px;
+  border-top: 1px solid var(--host-remote-sep);
+}
+.tdKey {
+  color: var(--accent); /* first column = the key column (mock's accent) */
+}
+.tdRight {
+  text-align: right;
+}
+
+/* ---- fenced code (token --code-bg, the mock's tool-detail block fill) ---- */
+.codeWrap {
+  margin: 6px 0 2px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-panel);
+  overflow: hidden;
+  background: var(--code-bg);
+}
+.codeLang {
+  color: var(--faint);
+  font-size: var(--fs-tiny);
+  letter-spacing: 0.05em;
+  padding: 3px 12px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.code0 {
+  margin: 0;
+  padding: 8px 12px;
+  color: var(--fg-soft);
+  font-family: var(--font-mono);
+  font-size: var(--fs-small);
+  white-space: pre;
+  overflow-x: auto;
+}
+
+/* F17 (W19): ```diff fence lines — a unified-diff's +/- lines colored like
+   ToolDetailCard's own diffPlus/diffMinus (the artifact preview reuses this
+   SAME F12 code block, just with lang:"diff" line coloring). */
+.diffAdd {
+  color: var(--success);
+}
+.diffDel {
+  color: var(--danger);
+}
+
+/* ---- lists ---- */
+.list {
+  margin: 6px 0 2px;
+  padding-left: 18px;
+  list-style: disc;
+}
+.list li {
+  margin: 1px 0;
+}
+
+/* ---- charts (mock lines 235-238) ---- */
+.chart {
+  margin: 4px 0 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-width: 420px;
+  font-size: var(--fs-meta);
+}
+.chartRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.chartLabel {
+  width: 90px;
+  flex-shrink: 0;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chartTrack {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+}
+.chartBar {
+  height: 8px;
+  border-radius: 2px;
+  min-width: 2px;
+}
+.chartValue {
+  flex-shrink: 0;
+  min-width: 40px;
+  text-align: right;
+  color: var(--faint);
+}
+.chartUnit {
+  color: var(--ghost);
+}
+
+/* ---- v7 (W14) multi-series chart — in-house SVG, legend + axis labels ---- */
+.seriesChart {
+  margin: 6px 0 2px;
+  max-width: 100%;
+  font-size: var(--fs-meta);
+}
+.chartTitle {
+  color: var(--muted);
+  font-size: var(--fs-tiny);
+  letter-spacing: 0.03em;
+  margin-bottom: 2px;
+}
+.seriesChartSvg {
+  width: 100%;
+  max-width: 480px;
+  height: auto;
+  display: block;
+  overflow: visible;
+}
+.chartAxisLine {
+  stroke: var(--line-soft);
+  stroke-width: 1;
+}
+.chartAxisLabel {
+  fill: var(--faint);
+  font-size: 8px;
+  font-family: var(--font-mono);
+}
+.chartLine {
+  fill: none;
+  stroke-width: 1.5;
+}
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 4px;
+  font-size: var(--fs-tiny);
+  color: var(--muted);
+}
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.legendSwatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+/* ---- v7 (W14) mermaid — flowchart-LR node/arrow SVG diagram ---- */
+.mermaidWrap {
+  margin: 6px 0 2px;
+  max-width: 100%;
+  overflow-x: auto;
+}
+.mermaidSvg {
+  display: block;
+}
+.mermaidNode {
+  fill: var(--raised);
+  stroke: var(--line);
+  stroke-width: 1;
+}
+.mermaidNodeLabel {
+  fill: var(--fg-soft);
+  font-size: 10px;
+  font-family: var(--font-mono);
+}
+.mermaidEdge {
+  fill: none;
+  stroke: var(--select-hl);
+  stroke-width: 1.25;
+}
+.mermaidArrowHead {
+  fill: var(--select-hl);
+}
+.mermaidEdgeLabel {
+  fill: var(--faint);
+  font-size: 8px;
+  font-family: var(--font-mono);
+}
+
+/* ---- v7 (W14) streaming placeholder for an open chart/mermaid fence — dim
+   text, NOT raw JSON (differs from the table/code raw-lines streaming rule) */
+.streamingPlaceholder {
+  color: var(--ghost);
+  font-style: italic;
+  font-size: var(--fs-meta);
+}
+
+/* ---- raw streaming tail + per-message hint row (mock line 240) ---- */
+.raw {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.rawFull {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: var(--fs-small);
+  color: var(--fg-soft);
+}
+.hint {
+  margin-top: 4px;
+  font-size: var(--fs-tiny);
+  color: var(--ghost);
+}
+
+/* ---- F21 (W23) output components — token-only, ~580px width cap, >14 rows
+   scroll internally (.scroll). Shared tone classes: ok/done/add=--success,
+   warn/flag/modify=--warn, fail/delete=--danger. ---- */
+.component {
+  margin: 6px 0 2px;
+  max-width: 580px;
+  font-size: var(--fs-meta);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.scroll {
+  max-height: 280px;
+  overflow-y: auto;
+}
+.mono {
+  font-family: var(--font-mono);
+}
+.dim {
+  color: var(--faint);
+}
+.faint {
+  color: var(--faint);
+}
+.toneOk {
+  color: var(--success);
+}
+.toneWarn {
+  color: var(--warn);
+}
+.toneFail {
+  color: var(--danger);
+}
+
+/* status / diffstat / timeline / test-report failures share one row shape */
+.statusRow {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+/* checklist */
+.checklistHeader {
+  color: var(--faint);
+  font-size: var(--fs-tiny);
+  letter-spacing: 0.05em;
+}
+.checklistDone {
+  color: var(--faint);
+  text-decoration: line-through;
+}
+
+/* kv — a two-column key/value grid (mock's kv pairs) */
+.kv {
+  margin: 6px 0 2px;
+  max-width: 580px;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px 12px;
+  font-size: var(--fs-meta);
+}
+.kvKey {
+  color: var(--accent);
+}
+.kvValue {
+  color: var(--fg-soft);
+}
+
+/* diffstat */
+.diffstatPath {
+  color: var(--fg-soft);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.diffstatFooter {
+  margin-top: 2px;
+  padding-top: 3px;
+  border-top: 1px solid var(--line-soft);
+  color: var(--faint);
+}
+
+/* timeline */
+.timelineTime {
+  color: var(--faint);
+  font-family: var(--font-mono);
+  flex-shrink: 0;
+}
+
+/* tree */
+.treeRow {
+  white-space: nowrap;
+}
+
+/* links — artifact deep-link rows render as buttons when resolvable */
+.linkRow {
+  display: block;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  text-align: left;
+  font: inherit;
+  cursor: default;
+}
+button.linkRow {
+  cursor: pointer;
+}
+button.linkRow:hover .link {
+  text-decoration: underline;
+}
+
+/* progress */
+.progressRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.progressTrack {
+  flex: 1;
+  min-width: 60px;
+  max-width: 200px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--raised);
+  overflow: hidden;
+}
+.progressBar {
+  display: block;
+  height: 100%;
+  background: var(--select-hl);
+}
+.progressPct {
+  flex-shrink: 0;
+  min-width: 32px;
+  color: var(--faint);
+}
+
+/* callout — a tone-colored left-border box (CheckpointsCard precedent) */
+.callout {
+  margin: 6px 0 2px;
+  max-width: 580px;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: var(--radius-panel);
+  background: var(--card);
+  border-left: 2px solid var(--line);
+  font-size: var(--fs-meta);
+  color: var(--fg-soft);
+}
+.calloutGlyph {
+  flex-shrink: 0;
+}
+.calloutInfo {
+  border-left-color: var(--accent);
+}
+.calloutInfo .calloutGlyph {
+  color: var(--accent);
+}
+.calloutSuccess {
+  border-left-color: var(--success);
+}
+.calloutSuccess .calloutGlyph {
+  color: var(--success);
+}
+.calloutWarn {
+  border-left-color: var(--warn);
+}
+.calloutWarn .calloutGlyph {
+  color: var(--warn);
+}
+.calloutError {
+  border-left-color: var(--danger);
+}
+.calloutError .calloutGlyph {
+  color: var(--danger);
+}
+
+/* metric — number cards */
+.metricGrid {
+  margin: 6px 0 2px;
+  max-width: 580px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.metricCard {
+  min-width: 90px;
+  padding: 5px 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-panel);
+  background: var(--card);
+}
+.metricLabel {
+  color: var(--faint);
+  font-size: var(--fs-tiny);
+  letter-spacing: 0.05em;
+}
+.metricValue {
+  color: var(--fg-soft);
+  font-size: var(--fs-body);
+}
+
+/* test-report — ratio bar + failing list */
+.testReportSummary {
+  display: flex;
+  gap: 8px;
+}
+.testReportBar {
+  display: flex;
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--raised);
+  max-width: 260px;
+}
+.testReportPass {
+  background: var(--success);
+}
+.testReportFail {
+  background: var(--danger);
+}
+.testReportSkip {
+  background: var(--faint);
+}
+.testReportFailures {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 2px;
+}
+
+/* compare — reuses .table/.tdKey; adds a pick badge + highlighted column */
+.compareWrap {
+  margin: 6px 0 2px;
+  max-width: 580px;
+  overflow-x: auto;
+}
+.pickBadge {
+  color: var(--success);
+  font-size: var(--fs-tiny);
+}
+.comparePickCell {
+  color: var(--success);
+}
+.compareReason {
+  margin-top: 4px;
+  color: var(--faint);
+  font-size: var(--fs-tiny);
+}
+
+/* F22 (W24) — quote-reply excerpt block: left-rule (mirrors the transcript's
+   own message-gutter treatment) + an optional clickable header (chip + kind +
+   ts) when the blockquote's last line parsed as a turn-ref. */
+.quoteWrap {
+  margin: 6px 0 2px;
+  max-width: 520px;
+  border-left: 2px solid var(--user-gutter);
+  background: var(--code-bg);
+  border-radius: 0 var(--radius-panel) var(--radius-panel) 0;
+  padding: 5px 12px;
+}
+.quoteHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-tiny);
+  margin-bottom: 2px;
+  cursor: default;
+}
+/* UI-QUOTE-COLLAPSE — the header doubles as a backlink to the source agent
+   when the mention resolves; unresolved mentions keep the default cursor. */
+.quoteHeaderLink {
+  cursor: pointer;
+}
+.quoteChevron {
+  color: var(--faint);
+}
+.quoteText {
+  color: var(--fg-soft);
+  font-size: var(--fs-meta);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+/* UI-QUOTE-COLLAPSE — "show quoted"/"show less" toggle under a collapsed
+   long excerpt. */
+.quoteToggle {
+  margin-top: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--select-hl);
+  font-size: var(--fs-tiny);
+  cursor: pointer;
+}
+
+/* ---- EXCALIDRAW-DIAGRAMS — an agent-drawn ```excalidraw scene rendered as an
+   inline read-only canvas + an expand-to-overlay affordance. Dark, token-only,
+   bounded to the transcript width; the heavy @excalidraw/excalidraw chunk is
+   lazy-loaded (see ExcalidrawBlock.tsx). ---- */
+.excalidrawWrap {
+  margin: 6px 0 2px;
+  max-width: 100%;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-panel);
+  overflow: hidden;
+  background: var(--code-bg);
+}
+.excalidrawBar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-bottom: 1px solid var(--line-soft);
+  font-size: var(--fs-tiny);
+  color: var(--faint);
+}
+.excalidrawGlyph {
+  color: var(--select-hl);
+}
+.excalidrawLabel {
+  letter-spacing: 0.03em;
+}
+.excalidrawButton {
+  margin-left: auto;
+  padding: 1px 8px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-panel);
+  background: none;
+  color: var(--select-hl);
+  font-size: var(--fs-tiny);
+  cursor: pointer;
+}
+.excalidrawButton:hover {
+  border-color: var(--select-hl);
+}
+/* the oversized-scene opt-in button (nothing heavy mounts until clicked) */
+.excalidrawRenderButton {
+  display: block;
+  width: 100%;
+  padding: 18px 12px;
+  border: none;
+  background: none;
+  color: var(--select-hl);
+  font-size: var(--fs-small);
+  cursor: pointer;
+}
+.excalidrawRenderButton:hover {
+  background: var(--raised);
+}
+/* inline preview height — bounded so a diagram never dominates the transcript */
+.excalidrawCanvas {
+  height: 320px;
+  width: 100%;
+  position: relative;
+}
+/* expanded overlay canvas fills the dialog body */
+.excalidrawCanvasLarge {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  position: relative;
+}
+.excalidrawOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+.excalidrawOverlayBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--line-soft);
+  font-size: var(--fs-meta);
+  color: var(--fg-soft);
+}
+/* TRUE full screen: when the overlay is the Fullscreen API element it must fill
+   the whole DISPLAY, not just the app window. The browser sizes the :fullscreen
+   element to the screen; we pin it to the full viewport so the flex canvas below
+   the bar uses every pixel. Kept in separate rules (not a comma list) so the
+   WebKit-prefixed pseudo can't invalidate the standard one on older parsers. The
+   .excalidrawOverlayMaximized fallback (no Fullscreen API) covers the window. */
+.excalidrawOverlay:fullscreen {
+  width: 100vw;
+  height: 100vh;
+}
+.excalidrawOverlay:-webkit-full-screen {
+  width: 100vw;
+  height: 100vh;
+}
+.excalidrawOverlayMaximized {
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+}
+/* the "invalid excalidraw scene" note under a degraded code block */
+.excalidrawInvalid {
+  padding: 3px 12px;
+  border-top: 1px solid var(--line-soft);
+  font-size: var(--fs-tiny);
+  color: var(--warn);
+}
+
+/* INSIGHT-BLOCK: an aside about the work, not the work. Before this it rendered as two rows of
+   box-drawing dashes around ordinary paragraphs, so it read as more of the same answer — reported
+   as "it gets mixed into the context and can't be understood". Everything here is in service of
+   ONE job: making the boundary obvious at a glance without shouting.
+
+   Lighter than the surrounding surface rather than darker: a darker inset reads as code/quoted
+   material, which this is not. */
+.insight {
+  display: block;
+  margin: 14px 0;
+  padding: 9px 12px 10px;
+  border: 1px solid var(--line-strong);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  background: var(--raised);
+}
+.insightTitle {
+  margin-bottom: 4px;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.insightBody {
+  /* Italic marks it as commentary. Applied to the BODY only — italic on inline code or a file
+     path is harder to read and would fight the monospace metrics. */
+  font-style: italic;
+  /* Set BELOW the body text: an aside that reads at the same size as the answer competes with it,
+     which is the opposite of what an aside is for. */
+  font-size: var(--fs-meta);
+  color: var(--fg-soft);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.insightBody :global(code) { font-style: normal; }
+
+/* TRANSCRIPT-HIGHLIGHT: a search match. <mark>'s user-agent style is black-on-yellow, which is
+   unreadable in this theme and louder than the surrounding text deserves — this reads as a
+   highlight without becoming the brightest thing on screen. */
+.searchHit {
+  background: color-mix(in srgb, var(--warn) 34%, transparent);
+  color: var(--fg);
+  border-radius: 2px;
+  /* The mark must not shift the text it wraps: any padding here would reflow the paragraph as you
+     type, which looks like the transcript jittering. */
+  padding: 0;
+}
+
+/* TRANSCRIPT-FIND: the ONE match the cursor is on. Solid rather than the 34% wash the others get —
+   with a dozen matches on screen, "which one did Enter just take me to?" has to be answerable
+   without hunting. Still no padding, for the same no-reflow reason as above. */
+.searchHit[data-transcript-hit-current] {
+  background: var(--warn);
+  color: var(--bg);
+}
+
+/* CODE-CHIP-PATHS: a code chip whose text resolved to a real file. It keeps the code styling — it
+   IS still code — and only gains the affordance: a pointer, and the accent underline a resolved
+   path link already uses. Anything louder would make every path in a message shout. */
+.codePathOpenable {
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+  text-decoration-color: var(--accent);
+}
+.codePathOpenable:hover { color: var(--accent-bright); }

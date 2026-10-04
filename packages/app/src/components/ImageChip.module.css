@@ -1,0 +1,77 @@
+/* W4 ImageChip — geometry from the mock's "▣ flicker-capture.png" chip
+   (line 180): raised bg, --line border, radius 4, muted text. */
+.wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  font-size: var(--fs-meta);
+}
+
+/* Thumbnail frame: a tight bordered box around the inline image preview (was a
+   "▣ name" text chip). line-height:0 so the box hugs the image with no baseline
+   gap; overflow:hidden clips the image to the rounded corners. */
+.chip {
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-chip);
+  padding: 1px;
+  line-height: 0;
+  overflow: hidden;
+  cursor: zoom-in;
+}
+
+.chip:hover {
+  border-color: var(--line-strong);
+}
+
+/* The inline thumbnail itself: small, aspect-preserved, capped so a tall/wide
+   paste stays a tidy chip. object-fit:cover fills the box edge-to-edge. */
+.thumb {
+  display: block;
+  height: 44px;
+  max-width: 160px;
+  object-fit: cover;
+  border-radius: calc(var(--radius-chip) - 1px);
+}
+
+.hint {
+  color: var(--ghost);
+}
+
+.remove {
+  background: none;
+  border: none;
+  color: var(--faint);
+  font: inherit;
+  font-family: var(--font-mono);
+  cursor: pointer;
+  padding: 0 2px;
+}
+
+.remove:hover {
+  color: var(--danger);
+}
+
+/* In-app lightbox: a scrim-backed FIXED overlay centered on the viewport, click
+   anywhere to dismiss. Must be `fixed` (not `absolute`) — an absolute overlay
+   resolves to the tiny `.wrap` chip box, so the "full size" image stayed chip-
+   sized. Fixed lets it fill the window and show the image genuinely large,
+   right in place (no external OS viewer). */
+.lightbox {
+  position: fixed;
+  inset: 0;
+  background: var(--scrim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  cursor: zoom-out;
+}
+
+.img {
+  max-width: 90vw;
+  max-height: 90vh;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}

@@ -1,0 +1,127 @@
+/* AgentShadowPane — geometry/colors 1:1 from the mock's rv_shadow block. */
+.pane {
+  flex: 1;
+  min-height: 0;
+}
+
+.header {
+  padding: 2px 18px 10px;
+  border-bottom: 1px solid var(--line-soft);
+  flex-shrink: 0;
+}
+
+.headerTop {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.name {
+  font-weight: 700;
+  font-size: var(--fs-title);
+}
+
+.sub {
+  color: var(--faint);
+  font-size: var(--fs-meta);
+}
+
+.spacer { flex: 1; }
+.spacerV { flex: 1; }
+
+.state { font-size: var(--fs-meta); }
+
+.chipRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+  font-size: var(--fs-meta);
+  color: var(--muted);
+  flex-wrap: wrap;
+}
+
+.chip {
+  background: var(--raised);
+  border-radius: var(--radius-chip);
+  padding: 0 8px;
+  white-space: nowrap;
+}
+
+.body {
+  padding: 12px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: var(--fs-body);
+}
+
+/* SHADOW-WORKFLOW-VISIBILITY: a workflow shadow's inspector fills the pane and owns its own
+   internal scrolling (roster + drill-down), so the body grows instead of being pushed up by
+   the trailing spacer (which the pane omits in this mode). */
+.bodyFill {
+  flex: 1;
+  min-height: 0;
+}
+
+.sectionLabel {
+  color: var(--faint);
+  font-size: var(--fs-tiny);
+  letter-spacing: 0.05em;
+}
+
+/* R2 (item 3, attached-workflow view): distinct from a chimera-native workflow-bound task's
+   WorkflowFlowBar — one badge row, not a full step timeline (there's no discrete step list for
+   an inline SDK workflow). workflowGlyph mirrors AgentList.module.css's own class exactly. */
+.workflowBadge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: var(--raised);
+  border-radius: var(--radius-chip);
+}
+
+.workflowGlyph { color: var(--accent); }
+
+.workflowName {
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.task {
+  margin-top: 2px;
+  color: var(--fg);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.summary {
+  margin-top: 2px;
+  color: var(--fg-soft);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.error {
+  margin-top: 2px;
+  color: var(--danger);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.note {
+  color: var(--faint);
+  font-size: var(--fs-meta);
+  border-top: 1px solid var(--line-soft);
+  padding-top: 8px;
+}
+
+.info { color: var(--info); }
+.faint { color: var(--faint); }
+
+.toneSuccess { color: var(--success); }
+.toneInfo { color: var(--info); }
+.toneWarn { color: var(--warn); }
+.toneDanger { color: var(--danger); }
+.toneMuted { color: var(--muted); }

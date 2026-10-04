@@ -1,0 +1,521 @@
+/* ProjectsScreen — geometry 1:1 from the mock's s_projects block (493-563). */
+.row {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  padding: 6px 12px 0;
+  /* PANE-RESIZE: the gap is the divider now. */
+}
+
+.master {
+  /* PANE-RESIZE: inherited from the row; 430px stays the shipped default. */
+  width: var(--pane-w, 430px);
+  flex-shrink: 0;
+}
+
+.detail {
+  flex: 1;
+  min-width: 0;
+  position: relative; /* overlay host: ImportCard/ConfirmCard scrims stay inside */
+}
+
+.countMeta {
+  color: var(--faint);
+}
+
+.filler {
+  flex: 1;
+}
+
+/* ---- master list (mock 497-508) ---- */
+.colHead {
+  padding: 0 14px 4px;
+  display: flex;
+  color: var(--faint);
+  font-size: var(--fs-tiny);
+  letter-spacing: 0.05em;
+}
+
+.colProject {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.colTeams {
+  width: 70px;
+  flex-shrink: 0;
+}
+
+.colSessions {
+  width: 86px;
+  flex-shrink: 0;
+}
+
+.colStatus {
+  width: 70px;
+  flex-shrink: 0;
+}
+
+.rowItem,
+.rowSelected {
+  display: flex;
+  align-items: center;
+  padding: 2px 14px 2px 12px;
+  border-left: 2px solid transparent;
+  cursor: pointer;
+}
+
+.rowSelected {
+  background: var(--sel-bg);
+  border-left-color: var(--accent);
+}
+
+.rowItem:hover {
+  background: var(--hover-bg);
+}
+
+.softName {
+  color: var(--fg-soft);
+}
+
+.pathMeta {
+  color: var(--faint);
+  font-size: var(--fs-meta);
+  overflow-wrap: anywhere;
+}
+
+.mutedCell {
+  color: var(--muted);
+}
+
+.faintCell {
+  color: var(--faint);
+}
+
+.idMeta {
+  color: var(--faint);
+  font-size: var(--fs-meta);
+}
+
+/* ---- detail header (mock 514-524) ---- */
+.detailHead {
+  padding: 2px 18px 10px;
+  border-bottom: 1px solid var(--line-soft);
+  flex-shrink: 0;
+}
+
+.detailTitleRow {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.detailName {
+  font-weight: 700;
+  font-size: var(--fs-title);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.liveMeta {
+  color: var(--success);
+  font-size: var(--fs-meta);
+}
+
+.idleMeta {
+  color: var(--faint);
+  font-size: var(--fs-meta);
+}
+
+/* PROJECT-DELETE-UI: the detail header's delete affordance — a small
+   danger-tinted chip next to the live/idle status, mirroring the settings
+   toggle chips' shape. */
+.deleteChip,
+.archiveChip,
+.unarchiveChip {
+  cursor: pointer;
+  border-radius: var(--radius-chip);
+  padding: 0 8px;
+  background: var(--raised);
+  font-size: var(--fs-meta);
+}
+
+.deleteChip { color: var(--danger); }
+.archiveChip { color: var(--warn); }
+.unarchiveChip { color: var(--success); }
+
+/* the delete confirm card's "also delete files" warning + inline conflict
+   error — same block rhythm as ConfirmCard's own .note, tinted danger. */
+.deleteFilesWarning {
+  color: var(--danger);
+  font-size: var(--fs-meta);
+  margin-top: 6px;
+}
+
+.deleteErrorNote {
+  color: var(--danger);
+  font-size: var(--fs-meta);
+  margin-top: 6px;
+  border-top: 1px solid var(--line-soft);
+  padding-top: 6px;
+}
+
+/* PROJTEAM-T7: the "load project & global skills" switch (mock has no
+   precedent — placed right under the title row, next to the live/idle status). */
+.settingsRow {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-top: 6px;
+  font-size: var(--fs-meta);
+  flex-wrap: wrap;
+}
+
+.settingsToggleOn,
+.settingsToggleOff {
+  cursor: pointer;
+  border-radius: var(--radius-chip);
+  padding: 0 8px;
+  background: var(--raised);
+}
+
+.settingsToggleOn {
+  color: var(--success);
+}
+
+.settingsToggleOff {
+  color: var(--faint);
+}
+
+.settingsHint {
+  color: var(--faint);
+  font-size: var(--fs-tiny);
+}
+
+/* F26: the worktree-setup-hook row's inline command editor — same shape as
+   .checkpointAction's chip styling so it reads as part of the same settings family. */
+.hookInput {
+  border: 1px solid var(--field-active);
+  background: var(--input-bg);
+  border-radius: var(--radius-chip);
+  padding: 0 8px;
+  color: inherit;
+  font: inherit;
+  font-size: var(--fs-meta);
+  min-width: 280px;
+}
+
+.hookCommand {
+  color: var(--faint);
+  cursor: pointer;
+}
+
+/* F26.UI: the timeout editor is the same control as .hookInput, only narrower — applied
+   alongside it rather than as a second style so the settings family stays one look. */
+.hookTimeoutInput {
+  min-width: 64px;
+}
+
+/* F26.UI: validation reason for the hook editors — .settingsHint's size in the danger tone
+   both rows already use for errors (.deleteErrorNote). */
+.hookError {
+  color: var(--danger);
+  font-size: var(--fs-tiny);
+}
+
+.hookCommand:hover {
+  color: var(--fg);
+}
+
+.chipRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+  font-size: var(--fs-meta);
+  color: var(--muted);
+  flex-wrap: wrap;
+}
+
+.chip,
+.chipSelected {
+  background: var(--raised);
+  border-radius: var(--radius-chip);
+  padding: 0 8px;
+  cursor: pointer;
+}
+
+/* r's run target — a quiet accent ring, not a new visual vocabulary */
+.chipSelected {
+  outline: 1px solid var(--field-active);
+}
+
+/* "+ assign team ▾" (mock 520: dashed border, faint) + its menu */
+.assignWrap {
+  position: relative;
+}
+
+.assignChip {
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-chip);
+  padding: 0 8px;
+  color: var(--faint);
+  cursor: pointer;
+}
+
+.assignChip:hover {
+  color: var(--muted);
+}
+
+.assignMenu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  min-width: 160px;
+  background: var(--card);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-chip);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+
+.assignItem {
+  padding: 2px 10px;
+  color: var(--fg-soft);
+  cursor: pointer;
+}
+
+.assignItem:hover {
+  background: var(--sel-bg);
+}
+
+.assignEmpty {
+  padding: 2px 10px;
+  color: var(--faint);
+}
+
+/* ---- sessions table (mock 525-536) ---- */
+.sessHead {
+  padding: 8px 18px 4px;
+  display: flex;
+  color: var(--faint);
+  font-size: var(--fs-tiny);
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
+}
+
+/* session rows scroll independently of detailHead/sessHead (fixed above) and
+   PanelFooter (fixed below) — same pattern as QueuesScreen's .tasksBody /
+   MemoryScreen's/EventsScreen's .body. */
+.sessBody {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.sessBody::-webkit-scrollbar {
+  width: 3px;
+}
+
+.sessBody::-webkit-scrollbar-track {
+  background: var(--scroll-rail);
+  border-radius: 2px;
+}
+
+.sessBody::-webkit-scrollbar-thumb {
+  background: var(--scroll-thumb);
+  border-radius: 2px;
+}
+
+.colState {
+  width: 110px;
+  flex-shrink: 0;
+}
+
+.colSession {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.colTeamRole {
+  width: 110px;
+  flex-shrink: 0;
+  padding-right: 8px;
+  box-sizing: border-box;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.colBranch {
+  width: 90px;
+  flex-shrink: 0;
+}
+
+.colActivity {
+  flex: 1.2;
+  min-width: 0;
+  color: var(--faint);
+  font-size: var(--fs-meta);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sessRow,
+.sessRowSelected {
+  display: flex;
+  align-items: center;
+  padding: 2px 18px;
+  border-left: 2px solid transparent;
+  cursor: pointer;
+}
+
+.sessRowSelected {
+  background: var(--sel-bg);
+  border-left-color: var(--accent);
+  padding-left: 16px;
+}
+
+.sessRow:hover {
+  background: var(--hover-bg);
+}
+
+/* ---- P3-T4: project-scoped checkpoints section (below sessions, above the
+   footer) — a compact read-only history, independent of agent selection.
+   flex-shrink:0 with its own bounded/scrollable body so it never eats the
+   sessions table's space. Rendered only when the project path is a git repo
+   (D16/F20 "non-git stays dark" — the whole section is absent otherwise). */
+.checkpointsSection {
+  flex-shrink: 0;
+  border-top: 1px solid var(--line-soft);
+}
+
+.checkpointsHead {
+  padding: 6px 18px 2px;
+  display: flex;
+  align-items: center;
+  font-size: var(--fs-tiny);
+  letter-spacing: 0.05em;
+}
+
+.checkpointAction {
+  margin-left: 8px;
+  border: 1px solid var(--line);
+  background: var(--input-bg);
+  border-radius: var(--radius-chip);
+  padding: 0 8px;
+  color: var(--accent);
+  font: inherit;
+  font-size: var(--fs-meta);
+  letter-spacing: normal;
+  cursor: pointer;
+}
+
+.checkpointAction:hover {
+  border-color: var(--field-active);
+}
+
+.checkpointsBody {
+  max-height: 110px;
+  overflow-y: auto;
+}
+
+.checkpointRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 18px;
+  font-size: var(--fs-meta);
+}
+
+.checkpointMark {
+  color: var(--warn);
+}
+
+/* ---- FILEBROWSER-T8: project-scoped file browser (below checkpoints, above
+   the footer) — same flex-shrink:0/bounded-body contract as .checkpointsSection
+   so the sessions body stays the sole flex:1 grower. .filesBody is itself a
+   flex column (not just overflow-y:auto) so FileTree's own flex:1 wrap has a
+   definite max height to fill — its internal .body then owns the actual
+   row scroll, same as .checkpointsBody bounds plain rows. */
+.filesSection {
+  flex-shrink: 0;
+  border-top: 1px solid var(--line-soft);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.filesHead {
+  padding: 6px 18px 2px;
+  display: flex;
+  align-items: center;
+  font-size: var(--fs-tiny);
+  letter-spacing: 0.05em;
+}
+
+.filesBody {
+  display: flex;
+  flex-direction: column;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+/* ---- tones + empty states ---- */
+.toneSuccess { color: var(--success); }
+.toneInfo { color: var(--info); }
+.toneWarn { color: var(--warn); }
+.toneDanger { color: var(--danger); }
+.toneMuted { color: var(--muted); }
+.toneAccent { color: var(--accent); }
+
+.emptyHint {
+  color: var(--faint);
+  font-size: var(--fs-meta);
+  padding: 8px 18px;
+}
+
+.emptyPane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.emptyGlyph {
+  color: var(--ghost);
+  font-size: var(--fs-brand);
+}
+
+/* PROJECT-CONDUCTOR-ACCOUNT: the conductor account picker — .hookInput's field look
+   applied to a <select> so the pin row reads as part of the same settings family. */
+.accountSelect {
+  border: 1px solid var(--field-active);
+  background: var(--input-bg);
+  border-radius: var(--radius-chip);
+  padding: 0 6px;
+  color: inherit;
+  font: inherit;
+  font-size: var(--fs-meta);
+}
+
+/* The "stop & start to apply" nudge: a pin the operator just saved that the LIVE
+   conductor does not have yet — warn tone, since nothing is broken, it is pending. */
+.conductorPinWarn {
+  color: var(--warn);
+  font-size: var(--fs-tiny);
+}

@@ -1,0 +1,115 @@
+/* W20 (F18 · coverage B22) — notify-rules card, geometry from the mock's
+   showNotifRules block (lines 1134-1158): column head 6/16, body 6/16 at
+   12.5px, row padding 2px 0, selected row --sel-bg + 2px accent left bar
+   pulled -10px (mock's -10px inset). Token-only colors. */
+
+.colHead {
+  padding: 6px 16px 2px;
+  display: flex;
+  gap: 8px;
+  color: var(--faint);
+  font-size: var(--fs-tiny);
+  letter-spacing: 0.05em;
+}
+
+.body {
+  padding: 0 16px 8px;
+  font-size: var(--fs-small);
+}
+
+.row,
+.rowSelected {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 10px 2px 8px;
+  cursor: pointer;
+}
+
+.rowSelected {
+  background: var(--sel-bg);
+  border-left: 2px solid var(--accent);
+  margin: 0 -10px;
+}
+
+.colRule {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.colChannel {
+  width: 150px;
+  flex-shrink: 0;
+}
+
+.colThrottle {
+  width: 70px;
+  flex-shrink: 0;
+}
+
+.dotOn {
+  color: var(--success);
+}
+
+.dotOff {
+  color: var(--faint);
+}
+
+.filterHint {
+  color: var(--faint);
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.emptyHint {
+  color: var(--faint);
+  padding: 4px 0;
+}
+
+.footer {
+  padding: 8px 16px 12px;
+  border-top: 1px solid var(--line-soft);
+  font-size: var(--fs-tiny);
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.chip,
+.chipDanger {
+  border: 1px solid var(--line);
+  background: var(--input-bg);
+  border-radius: 4px;
+  padding: 0 6px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.chipDanger {
+  border-color: var(--bg-danger-tint);
+  background: var(--bg-danger-tint);
+  color: var(--danger);
+}
+
+.chipKey {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.chipKeyDanger {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.footSpacer {
+  flex: 1;
+}
+
+.footNote {
+  color: var(--ghost);
+}

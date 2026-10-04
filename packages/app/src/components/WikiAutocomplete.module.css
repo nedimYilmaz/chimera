@@ -1,0 +1,49 @@
+/* MEM-5 `[[` title-autocomplete popup — a small floating list. The host wraps
+   the field in a position:relative container; the popup pins to its lower-left. */
+.popup,
+.popupAbove {
+  position: absolute;
+  left: 0;
+  z-index: 20;
+  min-width: 200px;
+  max-width: 320px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-pop, 0 4px 16px rgba(0, 0, 0, 0.4));
+  overflow: hidden;
+  font-size: var(--fs-meta);
+}
+
+/* below the field (single-line inputs) vs above it (a tall textarea whose
+   scrolling container would clip a downward popup). */
+.popup {
+  top: 100%;
+  margin-top: 2px;
+}
+.popupAbove {
+  bottom: 100%;
+  margin-bottom: 2px;
+}
+
+.option,
+.optionActive {
+  padding: 3px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.option:hover {
+  background: var(--hover-bg);
+}
+
+.optionActive {
+  background: var(--sel-bg);
+  color: var(--hover-name);
+}
+
+.optBracket {
+  color: var(--faint);
+}

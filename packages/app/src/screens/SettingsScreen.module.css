@@ -1,0 +1,577 @@
+/* SettingsScreen — geometry 1:1 from the mock's s_settings block (909-980):
+   left 300px section rail + right flex detail pane, each a titled --panel box.
+   Token-only colors. */
+.row {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  padding: 6px 12px 0;
+  /* PANE-RESIZE: the gap is the divider now. */
+}
+
+.labelMeta {
+  color: var(--faint);
+}
+
+/* ---- left rail (mock 911-925) ---- */
+.railPane {
+  /* PANE-RESIZE: inherited from the row; 300px stays the shipped default. */
+  width: var(--pane-w, 300px);
+  flex-shrink: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding-top: 6px;
+}
+
+.rail {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.railRow,
+.railRowActive {
+  display: flex;
+  align-items: center;
+  padding: 2px 14px 2px 12px;
+  border-left: 2px solid transparent;
+  color: var(--fg-soft);
+  cursor: pointer;
+}
+
+.railRow:hover {
+  background: var(--hover-bg);
+}
+
+.railRowActive {
+  background: var(--sel-bg);
+  border-left-color: var(--accent);
+  color: var(--fg);
+}
+
+.railLabel {
+  flex: 1;
+}
+
+.railHint {
+  color: var(--muted);
+  font-size: var(--fs-meta);
+}
+
+.railFoot {
+  padding: 6px 14px 0;
+  border-top: 1px solid var(--line-soft);
+  color: var(--faint);
+  font-size: var(--fs-meta);
+  flex-shrink: 0;
+}
+
+/* ---- right detail (mock 926-979) ---- */
+.detailPane {
+  flex: 1;
+  min-width: 0;
+  position: relative; /* overlay host: HostToolsCard scrim stays inside */
+  display: flex;
+  flex-direction: column;
+  padding-top: 6px;
+}
+
+.detail {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 4px 0;
+}
+
+.detail::-webkit-scrollbar {
+  width: 3px;
+}
+
+.detail::-webkit-scrollbar-track {
+  background: var(--scroll-rail);
+  border-radius: 2px;
+}
+
+.detail::-webkit-scrollbar-thumb {
+  background: var(--scroll-thumb);
+  border-radius: 2px;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 14px;
+}
+
+/* ---- F23-2B: provider catalog cards (D5/D6) ---- */
+.catalogList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chipRow {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.chipOn,
+.chipOff {
+  font-size: var(--fs-tiny);
+  border-radius: var(--radius-chip, 4px);
+  padding: 1px 8px;
+  border: 1px solid var(--line-soft);
+}
+
+.chipOn {
+  color: var(--accent);
+  border-color: var(--field-active);
+}
+
+.chipOff {
+  color: var(--faint);
+}
+
+.tosNote {
+  color: var(--muted);
+  font-size: var(--fs-meta);
+  background: var(--input-bg);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-panel);
+  padding: 6px 10px;
+}
+
+.accountChipRow {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.accountChip {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-size: var(--fs-meta);
+  color: var(--fg-soft);
+  background: var(--sel-bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-chip, 4px);
+  padding: 1px 4px 1px 8px;
+}
+
+/* ---- providers table (mock 953-958) ---- */
+.tableHead {
+  padding: 0 0 4px;
+  display: flex;
+  color: var(--faint);
+  font-size: var(--fs-tiny);
+  letter-spacing: 0.05em;
+}
+
+.tableBody {
+  display: flex;
+  flex-direction: column;
+}
+
+.tableRow,
+.tableRowSel {
+  display: flex;
+  padding: 2px 0 2px 6px;
+  margin: 0 -6px;
+  font-size: var(--fs-small);
+  border-left: 2px solid transparent;
+  cursor: pointer;
+}
+
+.tableRowSel {
+  background: var(--sel-bg);
+  border-left-color: var(--accent);
+}
+
+.tableRow:hover {
+  background: var(--hover-bg);
+}
+
+.colAccount { width: 110px; flex-shrink: 0; }
+.colProvider { width: 150px; flex-shrink: 0; }
+.colKey { width: 110px; flex-shrink: 0; }
+.colFailover { width: 90px; flex-shrink: 0; }
+.colSpend { flex: 1; min-width: 0; }
+
+.muted { color: var(--muted); }
+.faint { color: var(--faint); }
+.value { color: var(--fg); }
+.ok { color: var(--success); }
+.warn { color: var(--warn); }
+.danger { color: var(--danger); }
+
+.emptyHint {
+  color: var(--faint);
+  font-size: var(--fs-meta);
+  padding: 6px 0;
+}
+
+/* MCPSTORE-LIFECYCLE-UI: a disabled mcp store row stays legible but visually recedes —
+   credentials/spec are intact, it's just inert, not gone (that's uninstall). */
+.disabledRow {
+  opacity: 0.55;
+}
+
+/* ---- row actions + confirm ---- */
+.rowActions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.confirmRow {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font-size: var(--fs-meta);
+  background: var(--bg-danger-tint);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-panel);
+  padding: 6px 10px;
+}
+
+.ghostBtn,
+.primaryBtn,
+.dangerBtn,
+.linkBtn {
+  font: inherit;
+  font-size: var(--fs-meta);
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 2px 10px;
+}
+
+.ghostBtn {
+  background: var(--sel-bg);
+  border: 1px solid var(--line);
+  color: var(--fg-soft);
+}
+
+.ghostBtn:hover {
+  border-color: var(--field-active);
+}
+
+.primaryBtn {
+  background: var(--sel-bg);
+  border: 1px solid var(--field-active);
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.primaryBtn:disabled {
+  color: var(--faint);
+  cursor: default;
+  border-color: var(--line);
+}
+
+.dangerBtn {
+  background: var(--bg-danger-tint);
+  border: 1px solid var(--danger);
+  color: var(--danger);
+}
+
+.linkBtn {
+  background: none;
+  border: none;
+  color: var(--ghost);
+  padding: 0 4px;
+}
+
+.linkBtn:hover {
+  color: var(--accent);
+}
+
+/* ---- add-provider form (mock 959-975) ---- */
+.addForm {
+  background: var(--input-bg);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-panel);
+  padding: 8px 14px;
+}
+
+.addHead {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.addTitle {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.spacer { flex: 1; }
+
+.formGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 8px;
+  font-size: var(--fs-meta);
+}
+
+.formRow {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.formLabel {
+  width: 74px;
+  color: var(--muted);
+}
+
+.formLabelKey {
+  width: 74px;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.input,
+.inputKey,
+.select {
+  flex: 1;
+  min-width: 0;
+  background: var(--input-bg);
+  border: 1px solid var(--field-idle);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font: inherit;
+  font-size: var(--fs-meta);
+  color: var(--fg-soft);
+  outline: none;
+}
+
+.inputKey {
+  border-color: var(--field-active);
+}
+
+.input:focus,
+.inputKey:focus,
+.select:focus {
+  border-color: var(--field-active);
+}
+
+.addActions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line-soft);
+  font-size: var(--fs-meta);
+  flex-wrap: wrap;
+}
+
+.formError {
+  color: var(--danger);
+  font-size: var(--fs-meta);
+  margin-top: 6px;
+}
+
+/* ---- network cards (mock 930-949) ---- */
+.card {
+  background: var(--bg);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-panel);
+  padding: 8px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cardHead {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.cardTitle {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.metaRow {
+  display: flex;
+  gap: 18px;
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}
+
+.authRow {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font-size: var(--fs-meta);
+  flex-wrap: wrap;
+}
+
+.authLabel {
+  width: 74px;
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
+.authUrl {
+  color: var(--muted);
+  word-break: break-all;
+}
+
+.installHint {
+  color: var(--muted);
+  font-size: var(--fs-meta);
+}
+
+.installCmdRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.installCmd {
+  font-family: var(--font-mono, monospace);
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-chip, 4px);
+  padding: 2px 8px;
+  font-size: var(--fs-meta);
+}
+
+/* ---- W10 pairing seam ---- */
+.seam {
+  background: var(--bg);
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-panel);
+  padding: 8px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.seamNote {
+  color: var(--faint);
+  font-size: var(--fs-meta);
+}
+
+/* ---- tools + general ---- */
+.toolsBody {
+  color: var(--muted);
+  font-size: var(--fs-meta);
+}
+
+.kvRow {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font-size: var(--fs-meta);
+  flex-wrap: wrap;
+}
+
+.kvLabel {
+  width: 74px;
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
+.errorLine {
+  color: var(--danger);
+  font-size: var(--fs-meta);
+}
+
+/* ---- MCP store: expanded per-server tool list (MCP-STORE-TOOLS-UI) ---- */
+.mcpToolsPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 0 8px 20px;
+  font-size: var(--fs-meta);
+}
+
+.mcpToolRow {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.mcpToolName {
+  width: 160px;
+  flex-shrink: 0;
+  color: var(--fg-soft);
+}
+
+.mcpToolDesc {
+  flex: 1;
+  min-width: 0;
+}
+
+/* HUMAN-TURN-COLOR: the preset row. The button IS the colour, so the selected state is drawn as a
+   ring OUTSIDE it (outline + offset) rather than as a border or fill, which would either be
+   invisible on one preset or alter the colour it is advertising. */
+.swatchRow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.swatch {
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  padding: 0;
+  cursor: pointer;
+}
+.swatch[data-swatch-selected] {
+  outline: 2px solid var(--fg);
+  outline-offset: 2px;
+}
+
+/* MCPSTORE-LAYOUT: the mcp store's own columns. It used to borrow the accounts table's
+   colAccount/colProvider/colFailover, which are sized for an account row and shaped for
+   STDIO (name/command/args) — an http server has no command, so its url landed in the
+   command column and "args" rendered a bare em-dash. `endpoint` holds either transport's
+   detail and truncates instead of wrapping, so a long url can never push a row's chips
+   out of alignment. */
+.colMcpName {
+  width: 190px;
+  flex-shrink: 0;
+  /* A long name (`sequential-thinking` with its source chip) used to wrap to a second line and
+     drag the whole row's chips down with it — the misalignment reads as a layout bug. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.colMcpKind { width: 74px; flex-shrink: 0; }
+.colMcpEndpoint { flex: 1; min-width: 0; }
+
+.endpoint {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Transport and source read as metadata, never as actions — deliberately quieter than
+   .ghostBtn beside them, since the row's only real action is "import". */
+.transportChip,
+.sourceChip {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--raised);
+  border: 1px solid var(--line-soft);
+  color: var(--faint);
+  font-size: var(--fs-meta);
+  line-height: 17px;
+}

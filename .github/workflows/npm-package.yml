@@ -1,0 +1,84 @@
+name: Build and verify npm artifact
+
+on:
+  workflow_dispatch:
+    inputs:
+      package_name:
+        description: npm package name (confirm scope ownership before publication)
+        required: true
+        default: '@nedimyilmaz/chimera'
+      version:
+        description: Release version
+        required: true
+        default: '0.1.0'
+      windows_publisher_thumbprint:
+        description: Public SHA1 thumbprint of the Windows signing certificate
+        required: false
+  # release.yml builds and smoke-tests the exact tarball it later publishes.
+  workflow_call:
+    inputs:
+      package_name: { type: string, required: true }
+      version: { type: string, required: true }
+      windows_publisher_thumbprint: { type: string, required: false, default: '' }
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - run: npm install --global pnpm@11.11.0
+      - run: pnpm install --frozen-lockfile
+      - run: node scripts/audit-secrets.mjs
+      - run: node --test scripts/npm-install.test.mjs
+      - name: Build JavaScript distribution
+        env:
+          RELEASE_NAME: ${{ inputs.package_name }}
+          RELEASE_VERSION: ${{ inputs.version }}
+          WINDOWS_THUMBPRINT: ${{ inputs.windows_publisher_thumbprint }}
+        run: npm run build:npm -- --name "$RELEASE_NAME" --version "$RELEASE_VERSION" ${WINDOWS_THUMBPRINT:+--windows-publisher-thumbprint "$WINDOWS_THUMBPRINT"}
+      - name: Lock public runtime dependencies and pack
+        working-directory: dist/npm
+        run: |
+          npm install --package-lock-only --ignore-scripts --registry=https://registry.npmjs.org
+          npm shrinkwrap
+          npm audit --omit=dev --audit-level=high --registry=https://registry.npmjs.org
+          npm pack --ignore-scripts
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: chimera-npm-candidate
+          path: dist/npm/*.tgz
+          if-no-files-found: error
+
+  smoke:
+    needs: package
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: chimera-npm-candidate
+          path: artifact
+      - name: Test the same tarball outside the checkout
+        shell: bash
+        run: |
+          node --test scripts/npm-install.test.mjs
+          npm run test:npm -- "$PWD"/artifact/*.tgz

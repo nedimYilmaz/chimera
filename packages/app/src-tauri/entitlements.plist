@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	MACOS-SIGN-NOTARIZE: this app ships WITHOUT com.apple.security.app-sandbox, so these are
+	plain hardened-runtime entitlements, not App Sandbox grants — Developer ID distribution
+	(outside the Mac App Store) does not require sandboxing, and this app can't be sandboxed
+	without breaking real functionality: it spawns arbitrary child processes via a PTY
+	(packages/app/src-tauri/src/pty.rs, an interactive shell for the user), shells out to
+	`git`/`open` (commands.rs), and talks to the chimerad daemon over a Unix domain socket
+	(daemon.rs) at a user-chosen CHIMERA_HOME path — none of which fit the sandbox's fixed
+	container/entitlement model cleanly.
+
+	Kept, justified:
+	- com.apple.security.device.audio-input: push-to-talk voice input (packages/app/src/voice/
+	  audioCapture.ts) records via getUserMedia in the WKWebView. Actual access is gated by
+	  Info.plist's NSMicrophoneUsageDescription + the user's TCC consent regardless of this
+	  entitlement; keeping it documents the real capability and costs nothing extra to ship.
+
+	Deliberately NOT added (each would silently widen the attack surface as an app-store-style
+	permissive default, and none are required by anything in this codebase):
+	- com.apple.security.cs.allow-jit / allow-unsigned-executable-memory: no JIT / self-modifying
+	  code in this process. Tauri's WKWebView content (incl. any JS JIT) runs out-of-process in
+	  Apple's own signed com.apple.WebKit.WebContent, which isn't covered by our entitlements.
+	- com.apple.security.cs.disable-library-validation: this app loads no third-party/unsigned
+	  dylibs or plugins at runtime.
+	- com.apple.security.cs.allow-dyld-environment-variables: not needed; nothing here depends on
+	  DYLD_* injection.
+	- com.apple.security.app-sandbox and its device/file-access companions: see above — would
+	  break child-process spawning (PTY shell, git, open) and the daemon socket connection.
+	-->
+	<key>com.apple.security.device.audio-input</key>
+	<true/>
+</dict>
+</plist>

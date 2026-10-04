@@ -1,0 +1,54 @@
+/* PinnedBar — geometry/copy 1:1 from the mock's showPinned strip (50-54):
+   full-width under the top bar, 2px accent left edge. */
+.bar {
+  flex-shrink: 0;
+  margin: 0 12px 6px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--accent);
+  border-radius: var(--radius-panel);
+  padding: 3px 12px;
+  font-size: var(--fs-meta);
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.label {
+  color: var(--accent);
+}
+
+.item {
+  display: inline-flex;
+  gap: 8px; /* inline-flex drops whitespace text nodes — gap carries the mock's spacing */
+  align-items: baseline;
+  cursor: pointer;
+}
+
+.primary {
+  color: var(--fg-soft);
+}
+
+.state {
+  color: var(--accent);
+}
+
+.detail {
+  color: var(--muted);
+}
+
+.unpin {
+  color: var(--ghost);
+  margin-left: 6px;
+  cursor: pointer;
+}
+
+.unpin:hover {
+  color: var(--danger);
+}
+
+.spacer { flex: 1; }
+
+.hint {
+  color: var(--ghost);
+}

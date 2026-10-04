@@ -1,0 +1,157 @@
+/* Chimera Desktop (Tauri) — design tokens, 1:1 from "Chimera TUI — Redesign v2" mock.
+   Load first (index.css imports it). Components use ONLY these vars — no literal hex in components. */
+:root {
+  /* surfaces */
+  --bg: #14161a;            /* app background */
+  --panel: #171a1f;         /* pane fill */
+  --raised: #1d212a;        /* chips, inputs-inside, code blocks */
+  /* AGENT-TURN-BLOCK: the agent's own turns sit on this — a lift off the pane that is real but
+     SMALLER than --raised, so an agent turn separates from the background without competing with
+     your own turn (which uses --raised and a brighter rule). */
+  --assistant-surface: #191d24;
+  --input-bg: #14161a;      /* field background inside cards */
+  --sel-bg: #222836;        /* selected row fill */
+  --hover-bg: #1b1f27;      /* pointer-over row fill */
+  --line: #262b34;          /* panel borders */
+  --line-soft: #20242c;     /* inner dividers */
+  --line-strong: #2e3342;   /* input/card borders */
+  --field-active: #3a4155;  /* active field border */
+
+  /* text */
+  --fg: #d7dbe2;
+  --fg-soft: #a9b0bc;       /* secondary body (done rows, form values) */
+  --muted: #828b9a;         /* labels, meta */
+  --faint: #7d8797;         /* hints, column headers */
+  --ghost: #606a79;         /* barely-there hints */
+
+  /* accent + semantics (one lavender accent; g/y/r reserved for state) */
+  --accent: #9aa3f2;
+  --accent-bright: #d3d8ff; /* comet head */
+  --accent-gutter: #2c3040; /* assistant message gutter bar */
+  --user-gutter: #3d4661;
+  /* HUMAN-TURN-COLOR: the operator-selectable palette for your OWN transcript turns, and the
+     live choice. state/appearance.ts stores only a preset id and sets --user-turn to one of the
+     vars below on <html> — so every colour in the app still lives in this file, and a stored
+     preference can never smuggle an arbitrary value into a CSS property. */
+  --user-turn-green: #6ec49a;
+  --user-turn-teal: #5fb8c9;
+  --user-turn-amber: #d6b06a;
+  --user-turn-pink: #d78ad0;
+  --user-turn-blue: #6a8fd8;
+  --user-turn: var(--user-turn-green);
+  --success: #79c58c;
+  --warn: #d6b06a;
+  --danger: #e2766f;
+  --danger-soft: #e2b0ac;
+  --info: #6a8fd8;          /* done state, delivered-from */
+  --human: #d78ad0;         /* questions, conductor family */
+  /* team badge palette (ui-state teamIcon TEAM_COLORS — one stable hue per team,
+     muted to sit quietly in the agents pane as a small glyph, not a state cue) */
+  --team-blue: #6a8fd8;
+  --team-green: #79c58c;
+  --team-amber: #d6b06a;
+  --team-purple: #9aa3f2;
+  --team-cyan: #5fb8c9;
+  --team-magenta: #d78ad0;
+  --team-red: #e2766f;
+  --team-teal: #5cc2a6;
+
+  --select-hl: #39406b;     /* drag-selection highlight bg */
+  --select-hl-fg: #e6e9ff;
+  --spark: #4c5878;         /* sparkline ink */
+
+  /* state-tinted card edges */
+  --edge-permission: #4a4432;
+  --edge-question: #4a3a48;
+  --edge-confirm: #4a3030;
+  --bg-warn-tint: #2a2417;
+  --bg-danger-tint: #261c1c;
+  --bg-allow-tint: #1a2620;
+  --edge-allow: #2e4634;
+
+  --card: #1a1d24;          /* overlay card fill (every mock decision/form card) */
+
+  /* meters & rails — mock hexes that had no named token (review finding 10) */
+  --meter-track: #22262e;   /* ctx-meter / backlog-meter empty track (mock line 139/522) */
+  --meter-empty: #2c313c;   /* top-bar spend meter's empty ░ glyphs (mock line 42) */
+  --hover-name: #c3cbf5;    /* AgentList hover row's name tint (mock line 74, frosty-lynx hover) */
+  --scroll-rail: #20242c;   /* transcript scrollbar rail (mock line 127) */
+  --scroll-thumb: #3d4453;  /* transcript scrollbar thumb (mock line 127) */
+
+  /* W8 — mock hex that had no named token (same rule as the meters block above) */
+  --host-remote-sep: #191d24; /* host-tools card: separator above the first ⇅ peer row (mock line 423) */
+
+  /* W6 — mock hexes that had no named token (same rule as the meters block above) */
+  --result-body: #c6ccd6;    /* result card body text (mock line 356, showResult) */
+
+  /* W4/W5 — mock hexes that had no named token (same rule as the meters block above) */
+  --field-idle: #22262e;     /* card-form idle input border (mock line 292 spawn; W5 s_teams 626-632, s_queues 706-708, s_memory 788-790) */
+  --code-bg: #101216;        /* tool-detail input/result block bg (mock line 152) */
+  --detail-row-sel: #1d2129; /* tool-detail selected call row fill (mock line 151) */
+
+  /* account identity palette (hash-slotted; main is always --success) */
+  --acct-1: #c9a2e8; --acct-2: #d6b06a; --acct-3: #6a8fd8;
+  --acct-4: #d78ad0; --acct-5: #8fd0d0; --acct-6: #b9c0fa;
+
+  /* type */
+  --font-mono: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+  --fs-body: 13px;
+  --fs-meta: 12px;        /* chips, footers, hints */
+  --fs-small: 12.5px;     /* dense tables (events) */
+  --fs-tiny: 11px;        /* column headers, badges */
+  --fs-title: 14px;       /* pane heading name */
+  --fs-brand: 26px;       /* welcome wordmark */
+  --lh: 1.5;
+
+  /* Shared cockpit rhythm: all screens use the same 4px grid. */
+  --space-unit: 4px;
+  --screen-gutter: 12px;
+  --section-gap: 12px;
+  --control-h: 28px;
+  --row-h: 28px;
+  --heading-h: 32px;
+  --content-pad: 16px;
+
+  /* space & shape */
+  --sp-1: 2px; --sp-2: 4px; --sp-3: 6px; --sp-4: 8px;
+  --sp-5: 10px; --sp-6: 12px; --sp-7: 14px; --sp-8: 16px; --sp-9: 18px;
+  /* FORM-GRID: the ONE label-column width every card form aligns to. Before this token, 17
+     component stylesheets each declared their own `.label` width and they disagreed — 90px in
+     eight of them, 110px in seven, 100px in four, 80px in two — so moving between two forms
+     visibly shifted the field column. A token cannot disagree with itself.
+     --form-chip-h is the matching rule for chip rows: a chip sizes to its LABEL, so one long
+     option ("full · no ask_human/ask_agent/ask_team, no questions") used to wrap to three lines
+     and drag the whole row's height with it. Chips carry the value; the prose lives in the hint
+     cell beside them. */
+  --form-label-w: 110px;
+  --form-chip-h: 22px;
+  --radius-panel: 6px;
+  --radius-card: 8px;
+  --radius-chip: 4px;
+  --radius-badge: 8px;
+  --shadow-card: 0 12px 40px rgba(0, 0, 0, 0.5);
+  --shadow-toast: 0 8px 24px rgba(0, 0, 0, 0.4);
+  --scrim: rgba(10, 12, 15, 0.45);
+
+  /* motion */
+  --comet-duration: 2.4s;
+  --pulse-duration: 1.2s;
+  --toast-life: 3s;
+
+  /* W3 StreamGlow: the ONE allowed composite-gradient token (PLAN §7-W3).
+     The comet's translucent rgba stops over the accent hue can't be expressed
+     with the flat color tokens above, so the whole gradient lives here once;
+     components reference var(--stream-comet-gradient) only. Stops 1:1 from
+     the mock's showStreamGlow bar (accent at 0 → 0.9 alpha → --accent-bright
+     head → transparent tail). */
+  --stream-comet-gradient: linear-gradient(
+    90deg,
+    rgba(154, 163, 242, 0) 0%,
+    rgba(154, 163, 242, 0.9) 45%,
+    var(--accent-bright) 60%,
+    rgba(154, 163, 242, 0) 100%
+  );
+}
+/* keyframes shared by streaming glow + pulsing dots */
+@keyframes comet { from { left: -160px; } to { left: 100%; } }
+@keyframes cometGlow { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }

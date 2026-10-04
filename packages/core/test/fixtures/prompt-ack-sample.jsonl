@@ -1,0 +1,41 @@
+{"ts":1000,"seq":1,"agentId":"agentIdle1","kind":"turn_complete","data":{},"engineId":"local"}
+{"ts":1200,"seq":2,"agentId":"agentIdle1","kind":"heartbeat","data":{},"engineId":"local"}
+{"ts":1500,"seq":3,"agentId":"agentIdle1","kind":"status","data":{"delivered":true,"from":"conductor","text":"go"},"engineId":"local"}
+{"ts":1900,"seq":4,"agentId":"agentIdle1","kind":"message_delta","data":{"text":"working"},"engineId":"local"}
+{"ts":1950,"seq":5,"agentId":"agentIdle1","kind":"turn_complete","data":{},"engineId":"local"}
+{"ts":2000,"seq":6,"agentId":"agentIdle2","kind":"result","data":{},"engineId":"local"}
+{"ts":2300,"seq":7,"agentId":"agentIdle2","kind":"status","data":{"delivered":false,"from":"conductor","text":"draft"},"engineId":"local"}
+{"ts":2500,"seq":8,"agentId":"agentIdle2","kind":"status","data":{"delivered":true,"from":"conductor","text":"go"},"engineId":"local"}
+{"ts":3000,"seq":9,"agentId":"agentMid","kind":"message_delta","data":{"text":"still typing"},"engineId":"local"}
+{"ts":3100,"seq":10,"agentId":"agentMid","kind":"cost_update","data":{"usd":0.002},"engineId":"local"}
+{"ts":3200,"seq":11,"agentId":"agentMid","kind":"status","data":{"delivered":true,"from":"conductor","text":"btw also do this"},"engineId":"local"}
+{"ts":4000,"seq":12,"agentId":"agentOrphan","kind":"turn_complete","data":{},"engineId":"local"}
+{"ts":4200,"seq":13,"agentId":"agentOrphan","kind":"heartbeat","data":{},"engineId":"local"}
+{"ts":4500,"seq":14,"agentId":"agentOrphan","kind":"status","data":{"delivered":true,"from":"conductor","text":"go"},"engineId":"local"}
+{"ts":5000,"seq":15,"agentId":"agentNoPrior","kind":"status","data":{"delivered":true,"from":"conductor","text":"first message ever"},"engineId":"local"}
+{"ts":5300,"seq":16,"agentId":"agentNoPrior","kind":"agent_started","data":{},"engineId":"local"}
+{"ts":5400,"seq":17,"agentId":"agentNoPrior","kind":"message_delta","data":{"text":"hi"},"engineId":"local"}
+{"ts":5450,"seq":18,"agentId":"agentNoPrior","kind":"turn_complete","data":{},"engineId":"local"}
+{"ts":6000,"seq":19,"agentId":"agentIdle1","kind":"status","data":{"delivered":true,"from":"conductor","text":"another one"},"engineId":"local"}
+{"ts":6400,"seq":20,"agentId":"agentIdle1","kind":"permission_request","data":{"tool":"bash"},"engineId":"local"}
+{"ts":6500,"seq":21,"agentId":"agentIdle1","kind":"tool_result","data":{"ok":true},"engineId":"local"}
+{"ts":6600,"seq":22,"agentId":"agentIdle1","kind":"turn_complete","data":{},"engineId":"local"}
+{"ts":7000,"seq":23,"agentId":"agentUnrelated","kind":"heartbeat","data":{},"engineId":"local"}
+{"ts":7100,"seq":24,"agentId":"agentUnrelated","kind":"cost_update","data":{"usd":0.05},"engineId":"local"}
+{"ts":8200,"seq":25,"agentId":"agentMid","kind":"tool_result","data":{"ok":true},"engineId":"local"}
+{"ts":8300,"seq":26,"agentId":"agentMid","kind":"turn_complete","data":{},"engineId":"local"}
+{"ts":9000,"seq":27,"agentId":"agentIdle2","kind":"agent_dialog","data":{"text":"question"},"engineId":"local"}
+{"ts":9500,"seq":28,"agentId":"agentIdle2","kind":"error","data":{"message":"oops"},"engineId":"local"}
+{"ts":9600,"seq":29,"agentId":"agentIdle2","kind":"status","data":{"delivered":true,"from":"conductor","text":"retry"},"engineId":"local"}
+{"ts":9750,"seq":30,"agentId":"agentIdle2","kind":"agent_task","data":{"text":"resume"},"engineId":"local"}
+{"ts":9800,"seq":31,"agentId":"agentIdle2","kind":"turn_complete","data":{},"engineId":"local"}
+{"ts":10000,"seq":32,"agentId":"agentIdle2","kind":"status","data":{"delivered":true,"from":"conductor","text":"one more"},"engineId":"local"}
+{"ts":11000,"seq":33,"agentId":"agentMid","kind":"agent_question","data":{"text":"which one?"},"engineId":"local"}
+{"ts":11100,"seq":34,"agentId":"agentMid","kind":"status","data":{"delivered":true,"from":"conductor","text":"pick a"},"engineId":"local"}
+{"ts":11300,"seq":35,"agentId":"agentMid","kind":"compaction","data":{},"engineId":"local"}
+{"ts":11400,"seq":36,"agentId":"agentMid","kind":"turn_complete","data":{},"engineId":"local"}
+{"ts":12000,"seq":37,"agentId":"agentIdle1","kind":"status","data":{"delivered":true,"from":"conductor","text":"final"},"engineId":"local"}
+{"ts":12300,"seq":38,"agentId":"agentIdle1","kind":"commands_changed","data":{},"engineId":"local"}
+{"ts":12400,"seq":39,"agentId":"agentIdle1","kind":"turn_complete","data":{},"engineId":"local"}
+{"ts":35000,"seq":40,"agentId":"agentIdle2","kind":"tool_call","data":{"name":"bash"},"engineId":"local"}
+{"ts":35100,"seq":41,"agentId":"agentIdle2","kind":"result","data":{},"engineId":"local"}

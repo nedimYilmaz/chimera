@@ -1,0 +1,117 @@
+/* WelcomeScreen — geometry/copy 1:1 from the mock's s_welcome block
+   (802-819); the composer band rides below so ❯ genuinely starts A2. */
+.wrap {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  padding: 6px 12px 0;
+}
+
+.column {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: relative; /* overlay cards/strips host (right-column contract) */
+}
+
+.panel {
+  flex: 1;
+  min-height: 0;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+}
+
+.brandBlock {
+  text-align: center;
+}
+
+.brand {
+  color: var(--accent);
+  font-weight: 700;
+  font-size: var(--fs-brand);
+  letter-spacing: 0.14em;
+}
+
+.tagline {
+  color: var(--faint);
+  font-size: var(--fs-meta);
+  margin-top: 4px;
+}
+
+.hints {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: var(--fs-body);
+  background: var(--input-bg);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-panel);
+  padding: 14px 22px;
+}
+
+.prompt {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.hintBody {
+  color: var(--fg-soft);
+}
+
+.hintDim {
+  color: var(--faint);
+}
+
+.key {
+  color: var(--fg);
+}
+
+.ghost {
+  color: var(--ghost);
+}
+
+.status {
+  color: var(--ghost);
+  font-size: var(--fs-meta);
+}
+
+/* ONBOARDING-PROVIDER: fresh-install "connect a provider" state, replacing the
+   usual keybinding hints for as long as accounts.length === 0. */
+.onboarding {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 420px;
+}
+
+.onboardingExplainer {
+  color: var(--fg-soft);
+  font-size: var(--fs-body);
+  text-align: center;
+}
+
+.ok { color: var(--success); }
+.warn { color: var(--warn); }
+.danger { color: var(--danger); }
+
+.band {
+  flex-shrink: 0;
+}
+
+.panel { overflow:auto; padding:var(--content-pad); }
+.center { width:100%; min-width:0; max-height:100%; }
+.onboarding { width:min(420px,100%); min-width:0; }

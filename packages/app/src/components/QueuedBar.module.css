@@ -1,0 +1,41 @@
+/* W4 QueuedBar — geometry 1:1 from the mock showQueued block (line 465-472):
+   panel bg, DASHED --line-strong border, radius 6, padding 4px 12px. */
+.bar {
+  flex-shrink: 0;
+  background: var(--panel);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-panel);
+  padding: 4px 12px;
+  font-size: var(--fs-meta);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.label {
+  color: var(--faint);
+}
+
+.chip {
+  background: var(--raised);
+  border: none;
+  border-radius: var(--radius-chip);
+  padding: 0 8px;
+  color: var(--fg-soft);
+  font: inherit;
+  font-family: var(--font-mono);
+  cursor: pointer;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.hint {
+  color: var(--ghost);
+  white-space: nowrap;
+}

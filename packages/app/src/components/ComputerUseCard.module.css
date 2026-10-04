@@ -1,0 +1,6 @@
+.card { display: grid; gap: calc(2 * var(--space-unit)); min-width: 0; padding: calc(3 * var(--space-unit)); border: 1px solid var(--line-strong); border-radius: 6px; }
+.heading, .actions, .permissions { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; min-width: 0; }
+.heading { justify-content: space-between; }
+.card p { margin: 0; overflow-wrap: anywhere; }
+.card [role="alert"] { color: var(--danger); }
+.actions > * { max-width: 100%; white-space: normal; }

@@ -1,0 +1,53 @@
+/* W4 SlashPopup — geometry 1:1 from the mock showSlash block (line 457-464):
+   card bg, --line-strong border, radius 6; selected row sel-bg + accent bar. */
+.popup {
+  flex-shrink: 0;
+  background: var(--card);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-panel);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.row {
+  display: flex;
+  align-items: baseline;
+  padding: 2px 12px;
+  color: var(--fg-soft);
+  font-size: var(--fs-small);
+  font-family: var(--font-mono);
+  border: none;
+  border-left: 2px solid transparent;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  line-height: var(--lh);
+}
+
+.rowSelected {
+  background: var(--sel-bg);
+  border-left: 2px solid var(--accent);
+  color: var(--fg);
+}
+
+.desc {
+  color: var(--faint);
+  margin-left: 10px;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.marker {
+  color: var(--ghost);
+  font-size: var(--fs-tiny);
+}
+
+.footer {
+  padding: 3px 12px 4px;
+  color: var(--ghost);
+  font-size: var(--fs-tiny);
+  border-top: 1px solid var(--line-soft);
+}

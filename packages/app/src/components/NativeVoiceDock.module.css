@@ -1,0 +1,5 @@
+.dock { display: flex; flex-wrap: wrap; gap: 8px; flex-shrink: 0; max-height: 180px; overflow-y: auto; }
+.dock:not(:empty) { padding: 8px 14px; border-bottom: 1px solid var(--line-soft); background: var(--panel); }
+.room { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 6px 8px; border: 1px solid var(--line-soft); border-radius: var(--radius-chip); font-size: var(--fs-meta); color: var(--muted); }
+.room button { font: inherit; color: var(--accent); background: var(--raised); border: 1px solid var(--line-soft); border-radius: var(--radius-chip); padding: 3px 7px; cursor: pointer; }
+.room button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

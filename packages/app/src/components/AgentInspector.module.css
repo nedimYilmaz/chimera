@@ -1,0 +1,88 @@
+/* Inline inspector card, geometry 1:1 from the mock (s_teams 601: margin 4px
+   18px 8px; padding 8px 12px; input-bg fill; line-soft border; radius 6). */
+.card {
+  margin: 4px 18px 8px;
+  padding: 8px 12px;
+  background: var(--input-bg);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-panel);
+  font-size: var(--fs-meta);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.row {
+  display: flex;
+  min-width: 0;
+}
+
+.rowLabel {
+  width: 100px;
+  flex-shrink: 0;
+  color: var(--faint);
+}
+
+.rowValue {
+  min-width: 0;
+  flex: 1;
+}
+
+.owner {
+  color: var(--accent);
+}
+
+.meta {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.prompt {
+  color: var(--fg-soft);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.hint {
+  color: var(--ghost);
+}
+
+/* HOOK-6: the "watching" subscription chips (sub.list) — a wrapping row of
+   topic·filter·once pills, each with a ✕ remove (sub.remove). Token-only colors. */
+.chipRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+}
+
+.watchChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  border: 1px solid var(--line);
+  background: var(--sel-bg);
+  border-radius: 4px;
+  padding: 0 2px 0 6px;
+  color: var(--accent);
+  font-size: var(--fs-tiny);
+}
+
+.chipMeta {
+  color: var(--muted);
+}
+
+.chipRemove {
+  font: inherit;
+  font-size: var(--fs-tiny);
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  color: var(--faint);
+  padding: 0 2px;
+}
+
+.chipRemove:hover {
+  color: var(--danger);
+}

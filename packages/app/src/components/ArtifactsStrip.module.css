@@ -1,0 +1,49 @@
+/* F17 (W19) artifacts strip — geometry 1:1 from the mock's showArtifacts
+   block: panel bg, --line border (SOLID, unlike QueuedBar's dashed
+   --line-strong), radius 6, padding 5px 12px. */
+.strip {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  padding: 5px 12px;
+  font-size: var(--fs-meta);
+}
+
+.label {
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.mark {
+  color: var(--muted);
+}
+
+.count {
+  color: var(--faint);
+}
+
+/* mock's "task ROW-SCROLL" — an oversized chip set scrolls horizontally
+   inside the strip rather than wrapping/growing the band's height. */
+.chips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  min-width: 0;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.hint {
+  color: var(--ghost);
+  font-size: var(--fs-tiny);
+  white-space: nowrap;
+  flex-shrink: 0;
+}

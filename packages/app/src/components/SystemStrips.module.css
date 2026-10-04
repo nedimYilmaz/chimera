@@ -1,0 +1,16 @@
+/* System strips host — pinned above the composer band inside the right
+   column (the OverlayOutlet's host pane is position:relative). */
+.strips {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 1; /* under the overlay cards' scrim (z 2) */
+  pointer-events: auto;
+}
+
+.strips:empty {
+  display: none;
+}

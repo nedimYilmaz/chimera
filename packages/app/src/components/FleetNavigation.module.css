@@ -1,0 +1,4 @@
+.nav { display:flex; flex-wrap:wrap; gap:6px; padding:5px 8px; border-bottom:1px solid var(--line); background:var(--raised); }
+.nav button { font:inherit; color:var(--muted); background:none; border:1px solid transparent; padding:3px 8px; cursor:pointer; }
+.nav button[aria-current=page] { color:var(--accent); border-color:var(--accent); }
+.nav button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }

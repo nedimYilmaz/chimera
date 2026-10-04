@@ -1,0 +1,10 @@
+export const agentId: string;
+export const agentRecords: Array<Record<string, unknown>>;
+export const teams: Array<Record<string, unknown>>;
+export const queues: Array<Record<string, unknown>>;
+export const queueDetails: Record<string, { spec: Record<string, unknown>; counts: Record<string, number>; tasks: Array<Record<string, unknown>> }>;
+export const teamDetail: { spec: Record<string, unknown>; running: number; agents: Array<Record<string, unknown>>; totalRuns: number };
+export const roles: Array<Record<string, unknown>>;
+export const voiceMessages: Array<Record<string, unknown>>;
+export function rejectSchedules(): void;
+export function rpcFixture(method: string, params?: Record<string, unknown>): unknown;

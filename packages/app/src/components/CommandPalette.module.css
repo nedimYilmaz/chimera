@@ -1,0 +1,76 @@
+/* CommandPalette — geometry/copy 1:1 from the mock's showPalette block
+   (314-325): "❯ query" header row, selected row = sel-bg + 2px accent bar. */
+.queryRow {
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--line-soft);
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.prompt {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.queryInput {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--fg);
+  font: inherit;
+  padding: 0;
+}
+
+.headHint {
+  color: var(--faint);
+  font-size: var(--fs-meta);
+}
+
+.list {
+  padding: 6px 0;
+  font-size: var(--fs-body);
+}
+.modes { display: flex; gap: 4px; padding: 6px 14px 0; }
+.mode, .modeActive { border: 1px solid var(--line-soft); border-radius: 10px; background: transparent; color: var(--faint); font: inherit; font-size: var(--fs-meta); padding: 1px 8px; cursor: pointer; }
+.modeActive { color: var(--accent); border-color: var(--accent); }
+
+.row {
+  padding: 2px 14px;
+  color: var(--fg-soft);
+  border-left: 2px solid transparent;
+  cursor: pointer;
+}
+.kind { color: var(--accent); font-size: var(--fs-meta); min-width: 62px; display: inline-block; }
+.pin { border: 0; background: transparent; color: var(--faint); cursor: pointer; padding: 0 6px 0 0; }
+.disabled { opacity: .5; cursor: not-allowed; }
+.detail { padding: 12px 14px; display: grid; gap: 10px; }
+.preview { color: var(--fg-soft); padding-bottom: 8px; border-bottom: 1px solid var(--line-soft); }
+.field { display: grid; grid-template-columns: 150px 1fr; gap: 8px; align-items: center; color: var(--fg-soft); }
+.field input, .field select { background: var(--bg); border: 1px solid var(--line-soft); color: var(--fg); font: inherit; padding: 5px 7px; }
+.runButton { justify-self: end; border: 1px solid var(--accent); background: transparent; color: var(--accent); font: inherit; padding: 4px 10px; cursor: pointer; }
+
+.rowSel {
+  padding: 2px 14px;
+  background: var(--sel-bg);
+  border-left: 2px solid var(--accent);
+  cursor: pointer;
+}
+
+.emptyRow {
+  padding: 2px 14px;
+  color: var(--faint);
+}
+
+.desc {
+  color: var(--faint);
+  font-size: var(--fs-meta);
+}
+
+.footer {
+  padding: 6px 14px 8px;
+  color: var(--faint);
+  font-size: var(--fs-meta);
+  border-top: 1px solid var(--line-soft);
+}

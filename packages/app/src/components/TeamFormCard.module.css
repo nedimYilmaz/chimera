@@ -1,0 +1,142 @@
+/* Create-team form, values 1:1 from the mock's showTeamForm block (s_teams
+   614-641): 620 card, 110px labels, input-bg fields, active border
+   --field-active vs idle --field-idle. */
+.fields {
+  padding: 10px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: var(--fs-meta);
+}
+
+.pair {
+  display: flex;
+  gap: 16px;
+}
+
+.pair > .field {
+  flex: 1;
+}
+
+.field {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+}
+
+.label,
+.labelActive {
+  width: 110px;
+  flex-shrink: 0;
+}
+
+.label {
+  color: var(--muted);
+}
+
+.labelActive {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.input,
+.inputActive {
+  flex: 1;
+  min-width: 0;
+  background: var(--input-bg);
+  border-radius: var(--radius-chip);
+  padding: 3px 8px;
+  font: inherit;
+  color: var(--fg-soft);
+  outline: none;
+}
+
+.input {
+  border: 1px solid var(--field-idle);
+}
+
+.inputActive {
+  border: 1px solid var(--field-active);
+  color: var(--fg);
+}
+
+.input::placeholder,
+.inputActive::placeholder {
+  color: var(--faint);
+}
+
+.input:disabled,
+.inputActive:disabled {
+  color: var(--faint);
+  cursor: not-allowed;
+}
+
+/* ROLES-BINDING-CORRECTNESS: the role field's <select> + "advanced" toggle
+   (mirrors SpawnCard's .inputBox/.modelModeBtn) — the select reuses .input/
+   .inputActive for its own border/background so it matches the plain-input
+   fields around it. */
+.roleSelectBox {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.roleSelectBox > select {
+  flex: 1;
+  min-width: 0;
+}
+
+.roleAdvancedBtn {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--faint);
+  font: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+
+.roleAdvancedBtn:disabled {
+  color: var(--faint);
+  cursor: not-allowed;
+}
+
+.error {
+  color: var(--danger);
+}
+
+.footer {
+  padding: 8px 16px 12px;
+  display: flex;
+  gap: 12px;
+  font-size: var(--fs-meta);
+  border-top: 1px solid var(--line-soft);
+}
+
+.submitChip {
+  border: 1px solid var(--field-active);
+  background: var(--sel-bg);
+  border-radius: var(--radius-chip);
+  padding: 2px 10px;
+  cursor: pointer;
+}
+
+.submitKey {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.submitVerb {
+  color: var(--fg-soft);
+}
+
+.cancelChip {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-chip);
+  padding: 2px 10px;
+  color: var(--muted);
+  cursor: pointer;
+}

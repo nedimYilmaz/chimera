@@ -1,0 +1,70 @@
+/* Geometry 1:1 from the mock's overlay blocks (scrim + card shell). */
+.scrim {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  background: var(--scrim);
+  display: flex;
+  justify-content: center;
+  border-radius: var(--radius-panel);
+  z-index: 2;
+  padding: var(--sp-4);
+  min-width: 0;
+  min-height: 0;
+}
+
+.alignCenter {
+  align-items: center;
+}
+
+.alignBottom {
+  align-items: flex-end;
+  padding-bottom: 20px;
+}
+
+.alignTop {
+  align-items: flex-start;
+  padding-top: clamp(8px, 6vh, 48px);
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  max-width: 100%;
+  max-height: 100%;
+  min-width: 0;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+.header {
+  padding: var(--sp-4) var(--content-pad);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.title {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.meta {
+  color: var(--muted);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.hint {
+  color: var(--faint);
+  font-size: var(--fs-meta);
+}
+
+.title, .meta, .hint { min-width: 0; overflow-wrap: anywhere; }

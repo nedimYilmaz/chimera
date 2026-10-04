@@ -1,0 +1,131 @@
+/* FileTree (FILEBROWSER-T6) — geometry/tokens 1:1 with ProjectsScreen.module.css's
+   session table (colHead/sessBody rhythm), the surface this panel will sit
+   inside once T8 wires it into DetailBody. */
+.wrap {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
+/* ---- ignored-files toggle (rendered as SearchBox's trailing child) ---- */
+.ignoredToggle,
+.ignoredToggleOn {
+  color: var(--faint);
+  font-size: var(--fs-meta);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.ignoredToggleOn {
+  color: var(--muted);
+}
+
+.ignoredToggle:hover,
+.ignoredToggleOn:hover {
+  color: var(--fg-soft);
+}
+
+/* ---- breadcrumb (current selection's directory) ---- */
+.breadcrumb {
+  padding: 4px 14px 6px;
+  color: var(--muted);
+  font-size: var(--fs-meta);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+}
+
+.crumbRoot {
+  color: var(--fg-soft);
+}
+
+.crumbSep {
+  color: var(--faint);
+}
+
+/* ---- tree rows — independent scroll, same scrollbar treatment as .sessBody ---- */
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.body::-webkit-scrollbar {
+  width: 3px;
+}
+
+.body::-webkit-scrollbar-track {
+  background: var(--scroll-rail);
+  border-radius: 2px;
+}
+
+.body::-webkit-scrollbar-thumb {
+  background: var(--scroll-thumb);
+  border-radius: 2px;
+}
+
+.rowItem,
+.rowSelected {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-top: 1px;
+  padding-bottom: 1px;
+  padding-right: 14px;
+  border-left: 2px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rowSelected {
+  background: var(--sel-bg);
+  border-left-color: var(--accent);
+}
+
+.rowItem:hover {
+  background: var(--hover-bg);
+}
+
+.chevron {
+  display: inline-block;
+  width: 12px;
+  flex-shrink: 0;
+  color: var(--faint);
+  text-align: center;
+}
+
+.fileGlyph {
+  color: var(--ghost);
+}
+
+.softName {
+  color: var(--fg-soft);
+}
+
+.gitMark {
+  margin-left: 4px;
+  font-size: var(--fs-tiny);
+}
+
+.noteRow {
+  padding: 2px 14px;
+  color: var(--faint);
+  font-size: var(--fs-meta);
+  font-style: italic;
+}
+
+.emptyHint {
+  color: var(--faint);
+  font-size: var(--fs-meta);
+  padding: 8px 18px;
+}
+
+/* ---- tones (same names/values as ProjectsScreen's toneClass) ---- */
+.toneSuccess { color: var(--success); }
+.toneWarn { color: var(--warn); }
+.toneDanger { color: var(--danger); }
+.toneFaint { color: var(--faint); }

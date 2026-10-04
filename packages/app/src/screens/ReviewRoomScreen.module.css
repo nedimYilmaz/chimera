@@ -1,0 +1,67 @@
+/* Colors come only from tokens.css (theme-agnostic). NOTE: this screen
+   previously referenced --text/--border/--surface-2, which are NOT defined in
+   the app's token set — borders fell back to currentColor and text to
+   inheritance. Fixed to the real tokens (--fg / --line / --sel-bg / --hover-bg
+   / --raised). */
+.room{height:100%;display:flex;flex-direction:column;background:var(--bg);color:var(--fg)}
+.header,.footer{display:flex;gap:16px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line)}
+.header button{margin-left:auto}
+.liveBadge{color:var(--success);font-weight:600}
+.footer{border-top:1px solid var(--line);border-bottom:0;color:var(--muted)}
+.grid{min-height:0;flex:1;display:grid;grid-template-columns:260px minmax(0,1fr) 260px}
+.files,.rail{overflow:auto;padding:10px;border-right:1px solid var(--line)}
+.rail{border-left:1px solid var(--line);border-right:0}
+
+/* Changed-files list — each entry stays on ONE line (GitHub-style). The path
+   truncates from the LEFT (direction:rtl positions the ellipsis at the start;
+   <bdi> keeps the path itself LTR) so the meaningful filename tail stays
+   visible; the full path is on the button title, and the nav scrolls
+   horizontally as a fallback. Never wraps to a second line. */
+.files{overflow-x:auto}
+.files button{display:flex;align-items:center;width:100%;gap:8px;padding:6px 7px;border:0;border-radius:var(--radius-chip);background:none;color:inherit;text-align:left;font:inherit}
+.files button:hover{background:var(--hover-bg)}
+.fileStatus{flex:0 0 auto;color:var(--muted);font-family:var(--font-mono)}
+.filePath{flex:1 1 auto;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;direction:rtl;text-align:left}
+.filePath bdi{unicode-bidi:isolate}
+.files small{flex:0 0 auto;margin-left:auto;white-space:nowrap;color:var(--muted)}
+.selected{background:var(--sel-bg)!important}
+
+.diff{overflow:auto;padding:12px}
+.hunk,.activeHunk{margin-bottom:14px;border:1px solid var(--line);border-radius:var(--radius-panel);overflow:hidden}
+.activeHunk{outline:1px solid var(--accent)}
+.hunkHeader{padding:4px 8px;color:var(--accent);background:var(--raised);font-family:var(--font-mono);font-size:var(--fs-small)}
+
+/* Dense unified diff — fixed narrow line-number gutters + code in aligned grid
+   columns, compact line-height, no per-row margin, full-row-width color coding,
+   subtle hover. The code column renders a HighlightedCode <pre> (shiki) or a
+   CodeBlock, both of which ship their own box chrome (border/padding/bg); we
+   strip that here so the rows read as tight, flush diff lines. */
+.context,.addition,.deletion,.meta{display:grid;grid-template-columns:44px 44px minmax(0,1fr);align-items:stretch;font-family:var(--font-mono);font-size:var(--fs-small);line-height:1.5}
+.context:hover,.meta:hover{background:var(--hover-bg)}
+.context>span,.addition>span,.deletion>span,.meta>span{padding:0 6px;text-align:right;color:var(--muted);user-select:none}
+.addition{background:color-mix(in srgb,var(--success) 12%,transparent)}
+.deletion{background:color-mix(in srgb,var(--danger) 12%,transparent)}
+.addition:hover{background:color-mix(in srgb,var(--success) 20%,transparent)}
+.deletion:hover{background:color-mix(in srgb,var(--danger) 20%,transparent)}
+.meta{color:var(--muted)}
+.diff .context>div,.diff .addition>div,.diff .deletion>div,.diff .meta>div{border:0!important;border-radius:0;background:transparent!important;overflow:visible}
+.diff .context pre,.diff .addition pre,.diff .deletion pre,.diff .meta pre{margin:0;padding:0 8px;border:0;border-radius:0;background:transparent!important;font-family:var(--font-mono);font-size:var(--fs-small);line-height:1.5;white-space:pre-wrap;word-break:break-word}
+
+.empty,.error{padding:24px}
+.error{color:var(--danger)}
+
+.findings{list-style:none;margin:0 0 10px;padding:0;display:flex;flex-direction:column;gap:6px}
+.findings li{border:1px solid var(--line);border-radius:var(--radius-chip);padding:6px 8px;font-size:var(--fs-small)}
+.findings li p{margin:4px 0}
+.findingResolved{opacity:.6}
+.findingPath{color:var(--muted);font-family:var(--font-mono);margin-left:6px}
+.muted{color:var(--muted)}
+.findingForm{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}
+.findingForm textarea{width:100%;resize:vertical;font:inherit;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:var(--radius-chip)}
+.findingFormRow{display:flex;gap:6px;align-items:center}
+.findingFormRow button{margin-left:auto}
+
+.room,.grid > * { min-width:0; }
+.header,.footer,.findingFormRow { flex-wrap:wrap; gap:var(--sp-4); overflow-wrap:anywhere; }
+@media(max-width:1000px) { .grid { grid-template-columns:200px minmax(0,1fr); } .rail { grid-column:1/-1; max-height:280px; border-top:1px solid var(--line); } }
+@media(max-width:600px) { .grid { display:flex; flex-direction:column; overflow:auto; } .files { max-height:180px; flex-shrink:0; } .diff { min-height:280px; flex-shrink:0; } .rail { max-height:none; flex-shrink:0; } }

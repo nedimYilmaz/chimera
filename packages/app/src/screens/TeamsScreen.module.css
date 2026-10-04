@@ -1,0 +1,467 @@
+/* TeamsScreen — geometry 1:1 from the mock's s_teams block (565-641). Matches
+   ProjectsScreen's .row/.master exactly (mock 637-638): edge-to-edge, no
+   max-width/centering, fixed 430px master — Projects is the layout source of
+   truth all master-detail screens share. */
+.screen {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  container-type: inline-size;
+}
+
+.row {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  padding: 6px 12px 0;
+  /* PANE-RESIZE: the gap is the divider now. */
+}
+
+/* Teams can be embedded beside another pane while the viewport remains wide,
+   so respond to available pane width instead of global window width. */
+
+
+.master {
+  /* PANE-RESIZE: inherited from the row; 430px stays the shipped default. */
+  width: var(--pane-w, 430px);
+  flex-shrink: 0;
+}
+
+.detail {
+  flex: 1;
+  min-width: 0;
+  position: relative; /* overlay host: TeamFormCard/ConfirmCard scrims stay inside */
+}
+
+@container (max-width: 630px) {
+  .row {
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .master {
+    width: 100%;
+    flex: 0 0 260px;
+  }
+
+  .detail {
+    width: 100%;
+    flex: 0 0 440px;
+  }
+
+  .row > [role="separator"] {
+    display: none;
+  }
+
+}
+
+.countMeta {
+  color: var(--faint);
+}
+
+.filler {
+  flex: 1;
+}
+
+/* ---- master list ---- */
+.colHead {
+  padding: 0 14px 4px;
+  display: flex;
+  color: var(--faint);
+  font-size: var(--fs-tiny);
+  letter-spacing: 0.05em;
+}
+
+.colTeam {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.colRoles {
+  width: 60px;
+  flex-shrink: 0;
+}
+
+.colRunning {
+  width: 76px;
+  flex-shrink: 0;
+}
+
+.colQueue {
+  width: 80px;
+  flex-shrink: 0;
+}
+
+.rowItem,
+.rowSelected {
+  display: flex;
+  align-items: center;
+  padding: 2px 14px 2px 12px;
+  border-left: 2px solid transparent;
+  cursor: pointer;
+}
+
+.rowSelected {
+  background: var(--sel-bg);
+  border-left-color: var(--accent);
+}
+
+.rowItem:hover {
+  background: var(--hover-bg);
+}
+
+.rowItem:focus-visible,
+.rowSelected:focus-visible {
+  outline: 2px solid var(--accent-bright);
+  outline-offset: -2px;
+}
+
+.softName {
+  color: var(--fg-soft);
+}
+
+.ownerMeta {
+  color: var(--faint);
+  font-size: var(--fs-meta);
+}
+
+.mutedCell {
+  color: var(--muted);
+}
+
+.faintCell {
+  color: var(--faint);
+}
+
+.idMeta {
+  color: var(--faint);
+  font-size: var(--fs-meta);
+}
+
+/* ---- detail header (mock 585-594) ---- */
+.detailHead {
+  padding: 2px 18px 10px;
+  border-bottom: 1px solid var(--line-soft);
+  flex-shrink: 0;
+}
+
+.detailTitleRow {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.detailName {
+  font-weight: 700;
+  font-size: var(--fs-title);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.runningMeta {
+  color: var(--success);
+  font-size: var(--fs-meta);
+}
+
+.chipRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+  font-size: var(--fs-meta);
+  color: var(--muted);
+  flex-wrap: wrap;
+}
+
+.chip {
+  background: var(--raised);
+  border-radius: var(--radius-chip);
+  padding: 0 8px;
+}
+
+/* ROLES-BINDING-CORRECTNESS: the role badges below show the binding's RESOLVED
+   effective config (library defaults + overrides merged); a chip for a field the
+   binding actually PINS gets this accent treatment instead of the plain .chip so
+   "inherited" and "pinned" stay visually distinct (mirrors RolesScreen's
+   .badgeOverride — same operator mental model, same treatment). */
+.chipPinned {
+  background: var(--raised);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-chip);
+  padding: 0 8px;
+  color: var(--accent);
+}
+
+.purpose {
+  color: var(--faint);
+  overflow-wrap: anywhere;
+}
+
+.rolesSection {
+  margin-top: 6px;
+}
+
+.roleBlock {
+  margin-top: 2px;
+}
+
+.roleHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  cursor: pointer;
+  flex-wrap: wrap;
+}
+
+.roleHeader:hover {
+  color: var(--fg);
+}
+
+.roleHeader:focus-visible {
+  outline: 2px solid var(--accent-bright);
+  outline-offset: -2px;
+}
+
+.roleToggle {
+  color: var(--faint);
+  width: 10px;
+  flex-shrink: 0;
+}
+
+.roleName {
+  font-weight: 600;
+  color: var(--fg-soft);
+}
+
+.roleBadges {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: var(--fs-meta);
+  color: var(--muted);
+}
+
+/* PROJTEAM-T7: provenance badges — discovered roles (from .claude/agents) read
+   as a quiet, dashed/read-only marker; chimera-added roles get a plain filled
+   chip (the roles a "+ add member" submit creates). */
+.discoveredBadge {
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-chip);
+  padding: 0 6px;
+  color: var(--faint);
+  font-size: var(--fs-tiny);
+}
+
+.chimeraBadge {
+  background: var(--raised);
+  border-radius: var(--radius-chip);
+  padding: 0 6px;
+  color: var(--muted);
+  font-size: var(--fs-tiny);
+}
+
+/* "+ add member" (project-native teams only) — mirrors ProjectsScreen's
+   "+ assign team ▾" affordance shape. */
+.addMemberRow {
+  margin-top: 4px;
+}
+
+.addMemberChip {
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-chip);
+  padding: 0 8px;
+  color: var(--faint);
+  cursor: pointer;
+  font-size: var(--fs-meta);
+}
+
+.addMemberChip:hover {
+  color: var(--muted);
+}
+
+.addMemberForm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: var(--fs-meta);
+}
+
+.addMemberInput {
+  background: var(--raised);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-chip);
+  padding: 2px 8px;
+  color: var(--fg-soft);
+  min-width: 140px;
+}
+
+.addMemberSubmit {
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.addMemberCancel {
+  color: var(--faint);
+  cursor: pointer;
+}
+
+.addMemberError {
+  color: var(--danger);
+}
+
+.rolePrompt {
+  margin: 2px 0 6px 18px;
+  padding: 8px 10px;
+  background: var(--raised);
+  border-radius: var(--radius-chip);
+  color: var(--fg-soft);
+  font-size: var(--fs-small);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+/* ---- agents table (mock 595-613) ---- */
+.agentHead {
+  padding: 8px 18px 4px;
+  display: flex;
+  color: var(--faint);
+  font-size: var(--fs-tiny);
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
+}
+
+/* agent rows scroll independently of detailHead/agentHead (fixed above) and
+   PanelFooter (fixed below) — same pattern as QueuesScreen's .tasksBody /
+   MemoryScreen's/EventsScreen's .body. */
+.agentsBody {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.agentsBody::-webkit-scrollbar {
+  width: 3px;
+}
+
+.agentsBody::-webkit-scrollbar-track {
+  background: var(--scroll-rail);
+  border-radius: 2px;
+}
+
+.agentsBody::-webkit-scrollbar-thumb {
+  background: var(--scroll-thumb);
+  border-radius: 2px;
+}
+
+.colState {
+  width: 110px;
+  flex-shrink: 0;
+}
+
+.colRole {
+  width: 90px;
+  flex-shrink: 0;
+}
+
+.colAgent {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.colAcct {
+  width: 70px;
+  flex-shrink: 0;
+}
+
+.colCost {
+  width: 60px;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.colActivity {
+  flex: 1.4;
+  min-width: 0;
+  padding-left: 20px;
+  color: var(--faint);
+  font-size: var(--fs-meta);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* W16 (F15/D11): the action-chip row sits alongside the nav hint on the
+   footer's one line, wrapping onto its own line on a narrow panel. */
+.footerRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-bottom: 6px;
+}
+
+.agentRow,
+.agentRowSelected {
+  display: flex;
+  align-items: center;
+  padding: 2px 18px;
+  border-left: 2px solid transparent;
+  cursor: pointer;
+}
+
+.agentRowSelected {
+  background: var(--sel-bg);
+  border-left-color: var(--accent);
+  padding-left: 16px;
+}
+
+.agentRow:hover {
+  background: var(--hover-bg);
+}
+
+.agentRow:focus-visible,
+.agentRowSelected:focus-visible {
+  outline: 2px solid var(--accent-bright);
+  outline-offset: -2px;
+}
+
+/* ---- tones + empty states ---- */
+.toneSuccess { color: var(--success); }
+.toneInfo { color: var(--info); }
+.toneWarn { color: var(--warn); }
+.toneDanger { color: var(--danger); }
+.toneMuted { color: var(--muted); }
+
+.emptyHint {
+  color: var(--faint);
+  font-size: var(--fs-meta);
+  padding: 8px 18px;
+}
+
+.emptyPane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.emptyGlyph {
+  color: var(--ghost);
+  font-size: var(--fs-brand);
+}
