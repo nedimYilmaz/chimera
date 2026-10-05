@@ -1,0 +1,162 @@
+{
+ "_note": "Trimmed copy of https://pypi.org/pypi/laya/json fetched 2026-10-05 (info.version 0.3.27); only the fields scripts/check-laya-release.ts reads, and only the versions the tests need. Real data, not an invented index.",
+ "info": {
+  "version": "0.3.27"
+ },
+ "releases": {
+  "0.3.3": [
+   {
+    "filename": "laya-0.3.3-py3-none-any.whl",
+    "packagetype": "bdist_wheel",
+    "yanked": false,
+    "url": "https://files.pythonhosted.org/packages/d4/56/677fbefdbe5a9f4fbed51feb8bb598c99003a0e6e0dcd59f54596d680676/laya-0.3.3-py3-none-any.whl",
+    "digests": {
+     "sha256": "0f0fed09d04e0b9e05a54643e77c6bebb9e881bf3c8e0a5c536b58c71d6659fb"
+    },
+    "upload_time_iso_8601": "2026-09-19T09:29:06.707099Z"
+   },
+   {
+    "filename": "laya-0.3.3.tar.gz",
+    "packagetype": "sdist",
+    "yanked": false,
+    "url": "https://files.pythonhosted.org/packages/14/6e/3d421fdf08b4cd00659a2e5e565f32653755c578afa174655eaeac82cc99/laya-0.3.3.tar.gz",
+    "digests": {
+     "sha256": "ac21e43204042768d1c449872099dc407a1bb4c8e9fd19cbc77c1f751ba25a93"
+    },
+    "upload_time_iso_8601": "2026-09-19T09:29:07.991193Z"
+   }
+  ],
+  "0.3.9": [
+   {
+    "filename": "laya-0.3.9-py3-none-any.whl",
+    "packagetype": "bdist_wheel",
+    "yanked": false,
+    "url": "https://files.pythonhosted.org/packages/d0/cc/75f6b030f26b78a0ac0165c455866ab897eee251f7edb115733d4675fcf6/laya-0.3.9-py3-none-any.whl",
+    "digests": {
+     "sha256": "8080d99792867096c970b1b24464e888f3c37d902f2c947be1f8baa3677c9717"
+    },
+    "upload_time_iso_8601": "2026-09-23T14:55:15.288508Z"
+   },
+   {
+    "filename": "laya-0.3.9.tar.gz",
+    "packagetype": "sdist",
+    "yanked": false,
+    "url": "https://files.pythonhosted.org/packages/4f/89/6eec1f50cbc421fa5b1733d166387eae6bc0dc222a8928ac875c271c8cf1/laya-0.3.9.tar.gz",
+    "digests": {
+     "sha256": "3d255a778a1c70e2ed1fb4129147ccbb7fa96f3d0a0c910b2f41ddacb49ea5f6"
+    },
+    "upload_time_iso_8601": "2026-09-23T14:55:16.694052Z"
+   }
+  ],
+  "0.3.10": [
+   {
+    "filename": "laya-0.3.10-py3-none-any.whl",
+    "packagetype": "bdist_wheel",
+    "yanked": false,
+    "url": "https://files.pythonhosted.org/packages/09/60/0d335a6acee46f5ac9bfb87ab9e5313d7561f84fa3f5482efb0e53543624/laya-0.3.10-py3-none-any.whl",
+    "digests": {
+     "sha256": "1b507dc119c48d3ba0950c13a6303035324c88bf47a73ac3b9c0b60a683596df"
+    },
+    "upload_time_iso_8601": "2026-09-23T16:15:46.560544Z"
+   },
+   {
+    "filename": "laya-0.3.10.tar.gz",
+    "packagetype": "sdist",
+    "yanked": false,
+    "url": "https://files.pythonhosted.org/packages/85/b3/9f738042617d3cdeb13aef8ebad00e04a716c8c9a3f2d6c60408dafd3890/laya-0.3.10.tar.gz",
+    "digests": {
+     "sha256": "2ff59a5bc8c2ca94cc47cafc81ac896e9d234411919db9a930d04606dab76997"
+    },
+    "upload_time_iso_8601": "2026-09-23T16:15:48.342361Z"
+   }
+  ],
+  "0.3.22": [
+   {
+    "filename": "laya-0.3.22-py3-none-any.whl",
+    "packagetype": "bdist_wheel",
+    "yanked": false,
+    "url": "https://files.pythonhosted.org/packages/e1/b0/81cae4af718581caf783457bc22b2ab6e3ecca22a9d3dd494d50c8c67654/laya-0.3.22-py3-none-any.whl",
+    "digests": {
+     "sha256": "408e716b946a0566a9d4090117d4df9647540b6435e2f3dfed0b2c6b1abeed8a"
+    },
+    "upload_time_iso_8601": "2026-09-29T17:48:25.621637Z"
+   },
+   {
+    "filename": "laya-0.3.22.tar.gz",
+    "packagetype": "sdist",
+    "yanked": false,
+    "url": "https://files.pythonhosted.org/packages/88/a7/d3cf23b51f8c7db94b7bbcacd0da16570f0edf70f02fc16e3fcec47fc844/laya-0.3.22.tar.gz",
+    "digests": {
+     "sha256": "2c26d1b8e70f5620f990c4ed0cda66f17730fd51965450f755f4707255fb20c4"
+    },
+    "upload_time_iso_8601": "2026-09-29T17:48:27.061308Z"
+   }
+  ],
+  "0.3.25": [
+   {
+    "filename": "laya-0.3.25-py3-none-any.whl",
+    "packagetype": "bdist_wheel",
+    "yanked": false,
+    "url": "https://files.pythonhosted.org/packages/cf/86/d057f7197c11bf7ca157801d77c75846e7e4a0c03405c4891ae63fc7d16a/laya-0.3.25-py3-none-any.whl",
+    "digests": {
+     "sha256": "561a2671797edf70bf463776dd99587da7032e0e9c92dd6a67f7e3085213cad6"
+    },
+    "upload_time_iso_8601": "2026-10-03T15:58:43.662298Z"
+   },
+   {
+    "filename": "laya-0.3.25.tar.gz",
+    "packagetype": "sdist",
+    "yanked": false,
+    "url": "https://files.pythonhosted.org/packages/0b/56/a3db365f0c605948dc70751755b6e96876af7f5dbd6077d5d1bc93004bd7/laya-0.3.25.tar.gz",
+    "digests": {
+     "sha256": "ecd9c1827d81876de779fe9f2b48e4bb76e6ee7a10d2b18e0db191b3722b7eb1"
+    },
+    "upload_time_iso_8601": "2026-10-03T15:58:45.132053Z"
+   }
+  ],
+  "0.3.26": [
+   {
+    "filename": "laya-0.3.26-py3-none-any.whl",
+    "packagetype": "bdist_wheel",
+    "yanked": false,
+    "url": "https://files.pythonhosted.org/packages/e5/a5/1b2d1411df6661eaf05c18aa9c30bb95904307f7e283f02fb762ddef97e9/laya-0.3.26-py3-none-any.whl",
+    "digests": {
+     "sha256": "edd049719af725712ae1ca0af2b2e8997287d49098ff47686945e26ab23c21f4"
+    },
+    "upload_time_iso_8601": "2026-10-03T17:51:48.591501Z"
+   },
+   {
+    "filename": "laya-0.3.26.tar.gz",
+    "packagetype": "sdist",
+    "yanked": false,
+    "url": "https://files.pythonhosted.org/packages/85/a1/bc4ac3a75a3e81014d9782c96dad008131f566aaa75366c3d93da2af109a/laya-0.3.26.tar.gz",
+    "digests": {
+     "sha256": "a6c56b0f7ab365e2e048c259bf1383805d39644e44922ec1bfb25da6c93d5a9b"
+    },
+    "upload_time_iso_8601": "2026-10-03T17:51:50.408678Z"
+   }
+  ],
+  "0.3.27": [
+   {
+    "filename": "laya-0.3.27-py3-none-any.whl",
+    "packagetype": "bdist_wheel",
+    "yanked": false,
+    "url": "https://files.pythonhosted.org/packages/fc/2d/fcc20780d4a757e13afed7f1e626712520591a425116e8bb4fbcbcafeae1/laya-0.3.27-py3-none-any.whl",
+    "digests": {
+     "sha256": "7d3c30b1afc8e8ea5ab0285b02de2a46ee71563ba1590e1278a4a637a988fbfe"
+    },
+    "upload_time_iso_8601": "2026-10-04T18:18:16.421678Z"
+   },
+   {
+    "filename": "laya-0.3.27.tar.gz",
+    "packagetype": "sdist",
+    "yanked": false,
+    "url": "https://files.pythonhosted.org/packages/6d/77/7b58479ccc1c4d105e94df7721559c355f2aa07acbd0e4aeafa2703dc98e/laya-0.3.27.tar.gz",
+    "digests": {
+     "sha256": "8a1ad028f2b02289fad0cb69a6058c7eb0cbf42506945726693e822b2f7f601b"
+    },
+    "upload_time_iso_8601": "2026-10-04T18:18:18.053766Z"
+   }
+  ]
+ }
+}

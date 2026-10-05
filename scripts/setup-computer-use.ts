@@ -1,4 +1,10 @@
-/** Register already-installed runtimes without restarting Chimera or modifying provider configs. */
+/**
+ * Register already-installed runtimes without restarting Chimera or modifying provider configs.
+ *
+ * Source-checkout / development path only. An installed Chimera ships these three as built-in
+ * integrations (packages/core/src/builtin-integrations.ts) and needs no setup; a name the built-in
+ * already owns is therefore left alone here instead of being treated as a conflict.
+ */
 import { parseArgs } from "node:util";
 import { access, mkdir, writeFile, rename, readFile } from "node:fs/promises";
 import { constants } from "node:fs";
@@ -32,8 +38,10 @@ else {
     try { await client.call("mcpstore.session", { server: "chimera-desktop", action: "status" }); }
     catch (error) { if (!String((error as Error).message).includes('mcp store server "chimera-desktop" is unavailable')) throw error; }
     const existing = await client.call("mcpstore.list", {}) as typeof entries;
+    const builtIns = new Set(existing.filter(e => e.type === "stdio" && e.builtIn).map(e => e.name));
     for (const entry of entries) {
       const prior = existing.find(e => e.name === entry.name);
+      if (builtIns.has(entry.name)) continue;
       if (prior && JSON.stringify(prior) !== JSON.stringify(entry)) {
         const canonical = (value: unknown) => JSON.stringify(value, (key, v) => v && typeof v === "object" && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => a.localeCompare(b))) : v);
         if (canonical(prior) !== canonical(entry)) throw new Error(`Existing ${entry.name} configuration differs; it was preserved.`);
@@ -48,6 +56,8 @@ else {
       if (prior === null) { const tmp = `${file}.${randomUUID()}`; await writeFile(tmp, config, { mode: 0o600, flag: "wx" }); await rename(tmp, file); }
     }
     for (const entry of entries) if (!existing.some(e => e.name === entry.name)) await client.call("mcpstore.add", entry);
-    console.log(`Registered ${entries.map(e => e.name).join(", ")}. Open Chimera → Settings → MCP → Chimera Computer Use.`);
+    const skipped = entries.filter(e => builtIns.has(e.name)).map(e => e.name);
+    if (skipped.length > 0) console.log(`Left ${skipped.join(", ")} alone: provided by Chimera's built-in integrations.`);
+    console.log(`Registered ${entries.filter(e => !builtIns.has(e.name)).map(e => e.name).join(", ") || "nothing new"}. Open Chimera → Settings → MCP → Chimera Computer Use.`);
   } finally { client.close(); }
 }

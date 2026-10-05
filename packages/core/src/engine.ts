@@ -23,7 +23,7 @@ import {
   FedCloudflareUpParamsSchema, type CloudflareProvisionStatus,
   SliRollupParamsSchema,
   CheckpointCwdParams, CheckpointCreateParams, CheckpointRevertParams,
-  McpStoreEntrySchema, McpStoreRemoveParams, McpStoreToolsParams, McpStoreCallParams, McpStoreSessionParams, McpStoreImportParams, McpStoreSetDirectParams,
+  McpStoreEntrySchema, BuiltInsInstallParamsSchema, McpStoreRemoveParams, McpStoreToolsParams, McpStoreCallParams, McpStoreSessionParams, McpStoreImportParams, McpStoreSetDirectParams,
   McpStoreSetAuthParams, McpStoreDetectAuthParams, McpStoreSetAuthKindParams, McpStoreSetEnabledParams, McpStoreSetTrustParams, McpStoreAuthStatusParams, resolveDefaultOAuthScopes,
   encodePairBlob, decodePairBlob, CLIENT_CAP_UI_COMPONENTS, CONDUCTOR_PLAYBOOK,
   estimateChimeraMcpToolSurface, TOOL_SURFACE_NOTE,
@@ -93,6 +93,8 @@ import { listDir, readAtWidenedRoot, readFile } from "./fsbrowse.js";
 import { scanClaudeAgents, foldRoleKey, type SettingSource } from "./claude-agents.js";
 import { PluginRegistry } from "./plugins.js";
 import { McpStoreRegistry, McpStoreConnectionManager } from "./mcpstore.js";
+import { builtInStatuses, findRuntimeRoot, loadBuiltInContext, reconcileBuiltIns, rollbackBuiltInMigration, type BuiltInContext } from "./builtin-integrations.js";
+import { installLaya } from "./laya-install.js";
 import { McpPackageInstaller } from "./mcp-packages.js";
 import { LoopbackMcpListener } from "./mcp-listener.js";
 import { McpStoreOAuthFlow, McpStoreOAuthNotConfiguredError } from "./providers/mcpstore-oauth.js";
@@ -689,6 +691,9 @@ export class Engine {
   readonly mcpStore: McpStoreRegistry;
   readonly mcpPackages: McpPackageInstaller;
   private mcpRemoving = new Set<string>();
+  // Null whenever this engine is not running from an installed Chimera runtime (dev, tests): the
+  // built-in integrations then simply do not exist and the legacy/user entries are untouched.
+  private builtInCtx: BuiltInContext | null = null;
   readonly mcpStoreConnections: McpStoreConnectionManager;
   // F49 LOOPBACK-MCP: public because a backend reaches it through ChimeraEngineHandle.mcpListener
   // and the daemon closes it on shutdown. Always constructed, even when disabled — a disabled
@@ -928,6 +933,9 @@ export class Engine {
     // whole scanner (a fake FsSeam pointed at fixture files); mcpStoreIdleMs/mcpStoreTimers
     // shrink+control the connection manager's idle-teardown clock for deterministic tests.
     mcpImportScanner?: McpImportScanner;
+    // BUILT-IN integrations test seam: the installed runtime root that carries integrations/manifest.json.
+    // undefined => detect from this module's own location; null => no managed runtime (dev checkouts).
+    runtimeRoot?: string | null;
     mcpStoreIdleMs?: number; mcpStoreSetTimer?: (fn: () => void, ms: number) => unknown; mcpStoreClearTimer?: (h: unknown) => void;
     // MCP-OAUTH slice 2 test seams (absent ⇒ real behavior): shrink+control the loopback
     // flow's ~10min dangling-listener timeout, same injectable-timer pattern as mcpStore*Timer.
@@ -1192,6 +1200,7 @@ export class Engine {
     this.plugins = new PluginRegistry(opts.home, { claudeDir: opts.claudeDir });
     this.mcpStore = new McpStoreRegistry(opts.home);
     this.mcpPackages = new McpPackageInstaller(this.mcpStore, opts.home);
+    this.registerBuiltIns(opts.home, opts.runtimeRoot);
     this.mcpStoreConnections = new McpStoreConnectionManager(this.mcpStore, this.keychain, {
       idleMs: opts.mcpStoreIdleMs, setTimer: opts.mcpStoreSetTimer, clearTimer: opts.mcpStoreClearTimer,
     });
@@ -2086,6 +2095,20 @@ export class Engine {
       this.federation.start();
     } else {
       this.federation = null;
+    }
+  }
+
+  // Registers/refreshes the Chimera-managed built-in integrations. Startup must survive any failure
+  // here (a corrupt manifest, a read-only home): the user's own MCP entries are never at stake, so
+  // it is logged and the built-ins are simply absent until the next start.
+  private registerBuiltIns(home: string, runtimeRoot: string | null | undefined): void {
+    try {
+      const root = runtimeRoot === undefined ? findRuntimeRoot() : runtimeRoot;
+      if (!root) return;
+      this.builtInCtx = loadBuiltInContext(root);
+      reconcileBuiltIns(this.mcpStore, { home, ctx: this.builtInCtx });
+    } catch (err) {
+      console.warn(`chimerad: built-in integrations unavailable: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
@@ -3642,6 +3665,32 @@ export class Engine {
         // ---------- MCP-STORE: registry (P1) + dynamic discovery (P2) ----------
         case "mcpstore.list":
           return this.mcpStore.list();
+        // Operator RPCs (UI only, like mcpstore.package.*): the built-ins are managed by Chimera, so no
+        // agent-facing tool can trigger a multi-hundred-MB download or read install state.
+        case "computerUse.builtins.status":
+          return { managed: this.builtInCtx !== null, integrations: this.builtInCtx ? builtInStatuses(this.mcpStore, this.builtInCtx, this.home) : [] };
+        case "computerUse.builtins.install": {
+          BuiltInsInstallParamsSchema.parse(params);
+          const ctx = this.builtInCtx;
+          if (!ctx) throw rpcError("protocol", "This Chimera build has no bundled integrations to install.");
+          if (ctx.manifest.integrations.laya.state !== "managed-download") throw rpcError("protocol", "Laya is not available on this platform.");
+          return installLaya({
+            home: this.home, ctx, store: this.mcpStore,
+            // The spec just changed from "absent" to a live Python entry; any cached connection is stale.
+            onReconciled: () => { void this.mcpStoreConnections.closeServer("laya"); },
+          });
+        }
+        // Undo the first-launch migration of a pre-existing (legacy) registration: restores the user's
+        // original entry from computer-use/reconcile-backup.json and records the choice so the next
+        // start does not migrate it again. Only entries that are still the built-in registration change.
+        case "computerUse.builtins.rollback": {
+          if (!this.builtInCtx) throw rpcError("protocol", "This Chimera build has no bundled integrations to roll back.");
+          let restored;
+          try { restored = rollbackBuiltInMigration(this.mcpStore, this.home); }
+          catch (err) { throw rpcError("protocol", err instanceof Error ? err.message : String(err)); }
+          for (const id of restored) void this.mcpStoreConnections.closeServer(id);
+          return { restored };
+        }
         // Operator RPC only. No package installer tool is exposed to model callers.
         case "mcpstore.package.inspect":
           return this.mcpPackages.inspect(params);
@@ -3650,6 +3699,9 @@ export class Engine {
         case "mcpstore.add": {
           const parsed = McpStoreEntrySchema.parse(params);
           if (parsed.type === "stdio" && parsed.managed) throw rpcError("protocol", "Managed package records can only be created by the package installer.");
+          // The built-in marker is the daemon's own provenance claim (it unlocks the "ships with Chimera"
+          // presentation and the removal guard); a caller-supplied one would be forgeable.
+          if (parsed.type === "stdio" && parsed.builtIn) throw rpcError("protocol", "Built-in integrations are registered by Chimera itself and cannot be added over RPC.");
           // MCP-OAUTH-DISCOVERABILITY: only a caller that supplied NO `auth` at all gets
           // auto-probed — an explicit auth choice (bearer or oauth) is never overridden.
           if (parsed.type === "http" && !parsed.auth) {
@@ -3660,6 +3712,8 @@ export class Engine {
         }
         case "mcpstore.remove": {
           const p = McpStoreRemoveParams.parse(params);
+          const target = this.mcpStore.get(p.name);
+          if (target?.type === "stdio" && target.builtIn) throw rpcError("protocol", `"${p.name}" ships with Chimera and cannot be uninstalled; disable it instead.`);
           this.mcpRemoving.add(p.name);
           try {
           const original = this.mcpStore.get(p.name);

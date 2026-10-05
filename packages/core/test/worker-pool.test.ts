@@ -12,6 +12,11 @@ import { createWorkerPool, pooledWorkerSource, poolSize } from "@chimera/core/wo
 // segment is read): one request 2237 ms, four concurrent 1912 ms where serial would be ~8948 ms,
 // against 6915 ms for the same four on the old single-threaded path.
 
+// The pool never opens more than cores-1 workers, so a test that needs N threads running at once
+// can only show it on a machine that can host them. CI runners have 2-4 cores; these tests skip
+// there rather than assert parallelism the hardware cannot give.
+const cannotHost = (warmMax: number, max: number, need: number): boolean => Math.max(poolSize(warmMax), poolSize(max)) < need;
+
 const pools: Array<{ stop: () => void }> = [];
 afterEach(() => { for (const p of pools.splice(0)) p.stop(); });
 
@@ -69,7 +74,7 @@ describe("the pool runs jobs at the same time, not one after another", () => {
 });
 
 describe("the pool GROWS under burst and gives the workers back", () => {
-  it("spawns beyond the warm floor rather than queueing, up to the ceiling", async () => {
+  it.skipIf(cannotHost(2, 6, 3))("spawns beyond the warm floor rather than queueing, up to the ceiling", async () => {
     // The operator's question: "4 is reasonable, but what if all 4 are busy — can a 5th open?"
     // Yes, and this is what proves it: 6 jobs against a warm floor of 2 must run more than 2 at
     // once, because the pool grew for them instead of making them wait.
@@ -88,10 +93,12 @@ describe("the pool GROWS under burst and gives the workers back", () => {
     expect(peak).toBeLessThanOrEqual(pool.max);   // and stopped where told
   });
 
-  it("retires the burst workers once they go quiet, back to the warm floor", async () => {
+  it.skipIf(cannotHost(1, 4, 2))("retires the burst workers once they go quiet, back to the warm floor", async () => {
     // Growth that never shrinks is a leak: a one-off burst would leave threads resident for the
     // life of the daemon, competing with the agents forever after.
-    const pool = track(createWorkerPool<{ ms: number; tag: number }, number>(SPIN, 1, { max: 4, idleMs: 30 }));
+    // The idle window must outlast the burst's own stragglers: on a slow runner the first worker to
+    // finish used to retire before the last job did, so the growth was gone before it was observed.
+    const pool = track(createWorkerPool<{ ms: number; tag: number }, number>(SPIN, 1, { max: 4, idleMs: 300 }));
     await Promise.all([1, 2, 3, 4].map((tag) => pool.run({ ms: 60, tag })));
     expect(pool.live()).toBeGreaterThan(pool.warm);
 
@@ -230,7 +237,7 @@ describe("queues by kind, priority by configuration", () => {
     expect(waited).toBeLessThan(100);
   });
 
-  it("still uses every worker when the reserving class is the ONLY work", async () => {
+  it.skipIf(cannotHost(3, 3, 3))("still uses every worker when the reserving class is the ONLY work", async () => {
     // A reservation must not become a permanently idle worker: with nothing to reserve FOR, the
     // headroom is real capacity and the guard has to release it... and when it does not, this is
     // the cost, stated rather than hidden — bulk runs at live-1.

@@ -4,3 +4,7 @@
 .card p { margin: 0; overflow-wrap: anywhere; }
 .card [role="alert"] { color: var(--danger); }
 .actions > * { max-width: 100%; white-space: normal; }
+.builtIns { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.builtIns li { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; min-width: 0; overflow-wrap: anywhere; }
+.builtIns small { flex-basis: 100%; color: var(--faint); }
+.badge { padding: 0 6px; border: 1px solid var(--line-strong); border-radius: 4px; font-size: 0.85em; }

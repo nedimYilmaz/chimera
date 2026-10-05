@@ -108,4 +108,13 @@ describe("scripts/setup-computer-use", () => {
     expect(calls.map(c => c.method)).toContain("mcpstore.list");
     expect(calls.some(c => c.method === "mcpstore.add")).toBe(false);
   });
+
+  it("leaves a name the built-in integrations own alone instead of treating it as a conflict, and still adds the rest", async () => {
+    const s = sandbox();
+    const calls = await fakeDaemon(s.home, [{ name: "laya", type: "stdio", command: "/Apps/Chimera/runtime/python/bin/python3", args: ["-m", "laya.mcp.server"], builtIn: { id: "laya", version: "0.3.27" } }]);
+    const result = await run(s.home, ["--laya-python", s.laya, "--playwright-cli", s.cli]);
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("Left laya alone");
+    expect(calls.filter(c => c.method === "mcpstore.add").map(c => (c.params as { name: string }).name)).toEqual(["chimera-browser"]);
+  });
 });

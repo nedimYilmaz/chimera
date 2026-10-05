@@ -266,10 +266,13 @@ describe("production cache with a real probe binary", () => {
     await expect(validateCodexModel("gpt-x", "high", false, env)).resolves.toBeDefined();
   });
 
-  it("reports a binary that cannot start (execFile throws synchronously for ENOEXEC)", async () => {
+  it("reports a binary that cannot start (ENOEXEC thrown synchronously on macOS, ENOENT elsewhere)", async () => {
     const { env } = fakeCodex();
     const missing = join(tmp(), "codex-gone");
-    writeFileSync(missing, "", { mode: 0o755 });   // executable at resolve time, but not a runnable program
+    // Executable at resolve time, but not a runnable program. An empty file only fails on macOS:
+    // glibc's execvp retries ENOEXEC through /bin/sh, so on Linux it runs and prints nothing. A
+    // shebang to a missing interpreter fails to start everywhere (ENOENT, no shell retry).
+    writeFileSync(missing, process.platform === "darwin" ? "" : "#!/nonexistent/chimera-probe-interpreter\n", { mode: 0o755 });
     await expect(validateCodexModel("gpt-x", "high", false, { ...env, CHIMERA_CODEX_CLI_PATH: missing })).rejects.toThrow(/unavailable: probe failed to start \(E[A-Z]+\)/);
   });
 });

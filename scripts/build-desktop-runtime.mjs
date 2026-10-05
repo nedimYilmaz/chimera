@@ -7,6 +7,8 @@ import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import ts from 'typescript';
+import { PLAYWRIGHT_MCP } from './integration-pins.mjs';
+import { stageIntegrations } from './integration-stage.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const target = join(root, 'packages/app/src-tauri/standalone/runtime');
@@ -26,7 +28,9 @@ async function download(url) {
   return Buffer.from(await response.arrayBuffer());
 }
 const packages = ['protocol', 'core', 'daemon', 'client', 'mcp', 'ui-state'];
-const imports = {}, dependencies = { dugite: '3.2.3' };
+// @playwright/mcp is the chimera-browser built-in; its whole 3-package closure is integrity-checked
+// against integration-pins.mjs in integration-stage.mjs (the rest of this tree resolves live, as before).
+const imports = {}, dependencies = { dugite: '3.2.3', '@playwright/mcp': PLAYWRIGHT_MCP.version };
 function rewriteImports(context) {
   const visit = node => {
     if (ts.isStringLiteral(node) && node.text.startsWith('@chimera/')) {
@@ -119,7 +123,11 @@ try {
   await cp(join(root, 'scripts/desktop-bootstrap.mjs'), join(out, 'bootstrap.mjs'));
   await cp(join(root, 'LICENSE'), join(out, 'LICENSE'));
   run(node, [join(out, 'bootstrap.mjs'), '--check']);
-  await writeFile(join(out, 'runtime.json'), JSON.stringify({ version, platform, arch: process.arch, nodeVersion, nodeSha256: expected, git: 'dugite@3.2.3' }, null, 2));
+  const { artifacts } = await stageIntegrations({
+    out, stage, platform, arch: process.arch, repoRoot: root, download, run,
+    nodeRel: platform === 'win32' ? 'node/node.exe' : 'node/bin/node',
+  });
+  await writeFile(join(out, 'runtime.json'), JSON.stringify({ version, platform, arch: process.arch, nodeVersion, nodeSha256: expected, git: 'dugite@3.2.3', integrations: artifacts }, null, 2));
   await mkdir(dirname(target), { recursive: true });
   await rm(target, { recursive: true, force: true });
   await cp(out, target, { recursive: true, verbatimSymlinks: true });

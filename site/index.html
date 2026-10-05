@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chimera — one desktop workspace for Claude and Codex agent teams</title>
+  <meta name="description" content="Open-source desktop workspace for Claude and Codex agent teams: queues, shared memory and every running task in view, each agent in its own git worktree.">
+  <link rel="canonical" href="https://nedimyilmaz.github.io/chimera/">
+  <meta name="theme-color" content="#f4f1ea">
+  <meta name="color-scheme" content="light">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Chimera">
+  <meta property="og:title" content="Chimera — your agents, one workspace">
+  <meta property="og:description" content="Open-source desktop workspace for Claude and Codex agent teams: queues, shared memory and every running task in view.">
+  <meta property="og:url" content="https://nedimyilmaz.github.io/chimera/">
+  <meta property="og:image" content="https://nedimyilmaz.github.io/chimera/assets/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="The Chimera desktop app showing agents and a conversation, rendered with fictional demo data.">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Chimera — your agents, one workspace">
+  <meta name="twitter:description" content="Open-source desktop workspace for Claude and Codex agent teams.">
+  <meta name="twitter:image" content="https://nedimyilmaz.github.io/chimera/assets/og-image.png">
+
+  <link rel="stylesheet" href="styles.css">
+  <script src="script.js" defer></script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Chimera",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS",
+    "description": "Open-source desktop workspace for Claude and Codex agent teams: queues, shared memory and every running task in view, each agent in its own git worktree.",
+    "url": "https://nedimyilmaz.github.io/chimera/",
+    "license": "https://github.com/nedimYilmaz/chimera/blob/main/LICENSE",
+    "isAccessibleForFree": true,
+    "featureList": "https://nedimyilmaz.github.io/chimera/features.html",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+  }
+  </script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+
+  <header class="top">
+    <div class="wrap top__row">
+      <a class="brand" href="#top" aria-label="Chimera, back to top">
+        <img src="favicon.svg" alt="" width="28" height="28">
+        <span>Chimera</span>
+      </a>
+      <nav class="top__nav" aria-label="Page sections">
+        <a href="#why">Why</a>
+        <a href="#how">How it works</a>
+        <a href="#queues">Queues</a>
+        <a href="#memory">Memory</a>
+        <a href="features.html">Features</a>
+        <a href="#install">Install</a>
+        <a href="#faq">FAQ</a>
+      </nav>
+      <a class="btn btn--ghost btn--sm" href="https://github.com/nedimYilmaz/chimera">GitHub<span aria-hidden="true"> ↗</span></a>
+    </div>
+  </header>
+
+  <main id="main">
+    <!-- Hero -->
+    <section class="hero" id="top" aria-labelledby="hero-title">
+      <div class="wrap">
+        <p class="status"><span class="dot" aria-hidden="true"></span>Early access · macOS first · MIT licensed</p>
+        <h1 id="hero-title">
+          <span class="h1__a">Your agents.</span>
+          <span class="h1__b">One workspace.</span>
+        </h1>
+        <div class="hero__row">
+          <p class="lede">Chimera is an open-source desktop workspace for Claude and Codex agent teams. Queues, shared memory and every running task in view — each agent working in its own git worktree.</p>
+          <div class="cta">
+            <a class="btn btn--primary" href="https://github.com/nedimYilmaz/chimera">Explore on GitHub<span aria-hidden="true"> ↗</span></a>
+            <a class="link" href="#install">Run it from source</a>
+          </div>
+        </div>
+      </div>
+      <div class="seam">
+        <div class="wrap">
+          <figure class="shot shot--hero">
+            <a href="assets/chimera-workspace.png" data-zoom>
+              <img width="1600" height="1000" src="assets/chimera-workspace.png" alt="Chimera desktop app: agent sidebar with Claude and Codex agents on the demo project Atlas website, and an agent conversation with tool calls (demo data)" fetchpriority="high">
+            </a>
+            <figcaption>Actual Chimera interface · demo data</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <!-- Why -->
+    <section class="sec sec--dark why" id="why" aria-labelledby="why-title">
+      <div class="wrap split">
+        <div class="split__head">
+          <p class="kicker">Why it exists</p>
+          <h2 id="why-title">One agent is easy. Five becomes a second job.</h2>
+        </div>
+        <ol class="pains">
+          <li>
+            <h3>Tabs, not a team.</h3>
+            <p>Every agent lives in its own terminal. Nothing tells you which one is waiting on you, which one is stuck, and which one finished an hour ago.</p>
+          </li>
+          <li>
+            <h3>Context dies with the session.</h3>
+            <p>A fresh session starts from zero, so you re-explain the repo, the decision, and the dead ends you already ruled out.</p>
+          </li>
+          <li>
+            <h3>One account, one ceiling.</h3>
+            <p>A single rate limit stalls the whole afternoon while another account you already pay for sits idle.</p>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- How it works -->
+    <section class="sec how" id="how" aria-labelledby="how-title">
+      <div class="wrap split">
+        <div class="split__head">
+          <p class="kicker">How it works</p>
+          <h2 id="how-title">From first launch to reviewed work.</h2>
+          <p class="sub">A supervising daemon runs the agents. The desktop app and any MCP client are two ways to drive the same thing.</p>
+        </div>
+        <ol class="steps">
+          <li>
+            <span class="steps__n" aria-hidden="true">01</span>
+            <div>
+              <h3>Connect a provider</h3>
+              <p>A fresh install starts with no accounts. The first screen walks you through connecting Claude, Codex, Kimi or any OpenAI-compatible endpoint.</p>
+            </div>
+          </li>
+          <li>
+            <span class="steps__n" aria-hidden="true">02</span>
+            <div>
+              <h3>Shape a team</h3>
+              <p>Define roles — an implementer, a reviewer, whatever the repo needs — and bind them to a queue with a concurrency cap.</p>
+            </div>
+          </li>
+          <li>
+            <span class="steps__n" aria-hidden="true">03</span>
+            <div>
+              <h3>Queue the work</h3>
+              <p>Push tasks with priorities and dependencies. Each agent picks one up in its own git worktree, so five of them never fight over one working tree.</p>
+            </div>
+          </li>
+          <li>
+            <span class="steps__n" aria-hidden="true">04</span>
+            <div>
+              <h3>Review what came back</h3>
+              <p>Gates decide whether a step passes: a shell command, an artifact check, a human approval or a critic loop. You review results instead of watching terminals.</p>
+            </div>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- Queues -->
+    <section class="sec sec--dark queues" id="queues" aria-labelledby="queues-title">
+      <div class="wrap">
+        <div class="head head--wide">
+          <p class="kicker">Queues and workflows</p>
+          <h2 id="queues-title">A queue that knows what blocks what.</h2>
+          <p class="sub">Tasks carry a priority and, when order matters, a <code>dependsOn</code> list. A dependent task waits until the work it needs is done — and fails with it if that work fails.</p>
+        </div>
+        <figure class="shot shot--dark">
+          <a href="assets/chimera-queue.png" data-zoom>
+            <img width="1600" height="1000" src="assets/chimera-queue.png" alt="Chimera team queue for the Atlas website demo: done, running, pending and blocked tasks, with the selected task's dependsOn inspector (demo data)" loading="lazy">
+          </a>
+          <figcaption>Actual Chimera interface · demo data</figcaption>
+        </figure>
+        <div class="lower">
+          <div>
+            <h3 class="mini">Task lifecycle</h3>
+            <ol class="flow" aria-label="Main task path: pending, running, done">
+              <li>pending</li>
+              <li>running</li>
+              <li>done</li>
+            </ol>
+            <dl class="states">
+              <div><dt>blocked</dt><dd>Waiting on a dependency. Cascades to failed if that dependency fails.</dd></div>
+              <div><dt>failed</dt><dd>The attempt ended in error. Retries are configurable per queue.</dd></div>
+            </dl>
+          </div>
+          <div>
+            <h3 class="mini">Gates a step can use</h3>
+            <ul class="ticks">
+              <li><strong>Shell command</strong> — pass or fail on an exit code.</li>
+              <li><strong>Artifact check</strong> — a report, diff or file the agent produced.</li>
+              <li><strong>Human approval</strong> — pause until someone says yes.</li>
+              <li><strong>Critic loop</strong> — an evaluator sends work back until it holds up.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Memory -->
+    <section class="sec memory" id="memory" aria-labelledby="memory-title">
+      <div class="wrap memory__grid">
+        <figure class="shot shot--light">
+          <a href="assets/chimera-memory.png" data-zoom>
+            <img width="1600" height="1000" src="assets/chimera-memory.png" alt="Chimera shared memory: notes by folder with pins and tags, and the selected note's links and backlinks (demo data)" loading="lazy">
+          </a>
+          <figcaption>Actual Chimera interface · demo data</figcaption>
+        </figure>
+        <div class="memory__copy">
+          <p class="kicker">Shared memory</p>
+          <h2 id="memory-title">Notes that outlive the session.</h2>
+          <p class="sub">One agent leaves a fact, a decision or a todo. Any other agent — or a session that starts tomorrow — finds it again instead of being told twice.</p>
+          <ul class="ticks">
+            <li>Hybrid search: lexical and semantic, ranked together.</li>
+            <li><code>[[wiki-links]]</code> build a backlink graph between notes.</li>
+            <li>Notes carry a kind, an author, a team and a project.</li>
+          </ul>
+          <p class="fine">Scoping is a ranking default, not an access boundary: any agent can widen a search.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Feature map and screenshot gallery: generated from site/features.json by scripts/build-features.mjs -->
+    <!-- features:grid:start (generated by scripts/build-features.mjs from site/features.json — do not edit) -->
+    <section class="sec sec--tint fmap" id="features" aria-labelledby="features-title">
+      <div class="wrap">
+        <div class="head head--wide">
+          <p class="kicker">The rest of the workshop</p>
+          <h2 id="features-title">Every area, and what it is for.</h2>
+          <p class="sub">The queue and memory screens above are two of 22 areas. Each one below opens a section of the feature guide: the problem, a concrete scenario and every sub-feature.</p>
+          <p class="cta"><a class="btn btn--primary" href="features.html">Open the feature guide</a></p>
+        </div>
+        <div class="fmap__grid">
+          <section class="fcard" aria-labelledby="fmap-run">
+            <h3 id="fmap-run"><a href="features.html#family-run">Run agents</a></h3>
+            <p>Start, steer, pay for and hand over the agents themselves.</p>
+            <ul>
+              <li><a href="features.html#agents"><strong>Agents</strong><span>Queue a note, steer now, pause, resume and compact a live session</span></a></li>
+              <li><a href="features.html#providers"><strong>Providers and failover</strong><span>Several accounts and providers, with failover when quota runs out</span></a></li>
+              <li><a href="features.html#permissions"><strong>Permissions and budgets</strong><span>Permission profiles, approvals and spend ceilings</span></a></li>
+              <li><a href="features.html#voice"><strong>Voice and meetings</strong> <span class="pill pill--warn">Preview</span><span>Talk to agents and run meeting rooms</span></a></li>
+            </ul>
+          </section>
+          <section class="fcard" aria-labelledby="fmap-organize">
+            <h3 id="fmap-organize"><a href="features.html#family-organize">Organize the work</a></h3>
+            <p>Projects, roles, teams, queues, workflows and schedules turn one-off prompts into a system.</p>
+            <ul>
+              <li><a href="features.html#projects"><strong>Projects and conductors</strong><span>Bind a repo to teams, a queue and an always-on conductor</span></a></li>
+              <li><a href="features.html#roles"><strong>Roles</strong><span>Reusable settings, with per-team overrides you can see</span></a></li>
+              <li><a href="features.html#teams"><strong>Teams</strong><span>Named groups of agents with a shared queue and concurrency</span></a></li>
+              <li><a href="features.html#queues"><strong>Queues</strong><span>Prioritized tasks with dependencies and retries</span></a></li>
+              <li><a href="features.html#workflows"><strong>Workflows</strong><span>Multi-step plans with gates, fan-out and loops</span></a></li>
+              <li><a href="features.html#schedules"><strong>Schedules</strong><span>Cron, interval and one-shot jobs that run unattended</span></a></li>
+            </ul>
+          </section>
+          <section class="fcard" aria-labelledby="fmap-remember">
+            <h3 id="fmap-remember"><a href="features.html#family-remember">Remember and review</a></h3>
+            <p>What the fleet learned, what it produced, and the human check before it lands.</p>
+            <ul>
+              <li><a href="features.html#memory"><strong>Memory</strong><span>Shared notes with ranked search, graphs and pins</span></a></li>
+              <li><a href="features.html#artifacts"><strong>Artifacts and checkpoints</strong><span>Keep what agents produce and snapshot a tree without touching HEAD</span></a></li>
+              <li><a href="features.html#review"><strong>Review and worktrees</strong><span>A human check with evidence before work lands, plus worktree leases</span></a></li>
+            </ul>
+          </section>
+          <section class="fcard" aria-labelledby="fmap-connect">
+            <h3 id="fmap-connect"><a href="features.html#family-connect">Connect and extend</a></h3>
+            <p>Tools, secrets, desktop control, skills, hooks and other machines, with controls over what each can reach.</p>
+            <ul>
+              <li><a href="features.html#mcp-store"><strong>MCP store</strong><span>MCP servers with trust levels, OAuth and discovery</span></a></li>
+              <li><a href="features.html#secrets"><strong>Secrets manager</strong><span>Named secrets with per-agent grants and an audit trail</span></a></li>
+              <li><a href="features.html#computer-use"><strong>Computer use</strong><span>Browser, desktop control and optional Laya assistance</span></a></li>
+              <li><a href="features.html#skills-plugins"><strong>Skills and plugins</strong><span>Install, enable and bind skills and plugins</span></a></li>
+              <li><a href="features.html#hooks"><strong>Hooks</strong><span>Rules on daemon events that notify, queue work or run a command</span></a></li>
+              <li><a href="features.html#federation"><strong>Federation</strong> <span class="pill pill--warn">Experimental</span><span>Connect Chimera instances across machines</span></a></li>
+            </ul>
+          </section>
+          <section class="fcard" aria-labelledby="fmap-see">
+            <h3 id="fmap-see"><a href="features.html#family-see">See and steer</a></h3>
+            <p>One place to notice what needs you, look back at what ran, and work next to the agents.</p>
+            <ul>
+              <li><a href="features.html#inbox"><strong>Inbox</strong><span>Questions, approvals and notifications that need you</span></a></li>
+              <li><a href="features.html#history"><strong>History and diagnostics</strong><span>Look back at what ran: events, replay and diagnostics</span></a></li>
+              <li><a href="features.html#workbench"><strong>Workbench</strong><span>File viewer, in-app terminal, design canvas and command palette</span></a></li>
+            </ul>
+          </section>
+        </div>
+      </div>
+    </section>
+    <!-- features:grid:end -->
+
+    <!-- features:gallery:start (generated by scripts/build-features.mjs from site/features.json — do not edit) -->
+    <section class="sec sec--dark gal" id="gallery" aria-labelledby="gallery-title">
+      <div class="wrap">
+        <div class="head head--wide">
+          <p class="kicker">In the app</p>
+          <h2 id="gallery-title">Seven more screens, as they really look.</h2>
+          <p class="sub">Captured from the actual Chimera interface with a fictional “Atlas website” project. Select a screenshot to enlarge it.</p>
+        </div>
+        <div class="gal__grid">
+          <article class="gal__item">
+            <figure class="shot shot--dark">
+              <a href="assets/chimera-teams.png" data-zoom><img src="assets/chimera-teams.png" width="1600" height="1000" alt="Teams: the 'atlas' team with its bound queue, members, role provenance badges, pinned vs inherited role settings and live workers." loading="lazy" decoding="async"></a>
+              <figcaption>Actual Chimera interface · demo data</figcaption>
+            </figure>
+            <h3>Teams</h3>
+            <p>Named groups of agents with a shared queue and concurrency. <a class="link link--dark" href="features.html#teams">Read about teams<span aria-hidden="true"> →</span></a></p>
+          </article>
+          <article class="gal__item">
+            <figure class="shot shot--dark">
+              <a href="assets/chimera-projects.png" data-zoom><img src="assets/chimera-projects.png" width="1600" height="1000" alt="Projects: a project bound to teams and a task queue, live sessions, checkpoints and the per-project setup/conductor-account settings." loading="lazy" decoding="async"></a>
+              <figcaption>Actual Chimera interface · demo data</figcaption>
+            </figure>
+            <h3>Projects and conductors</h3>
+            <p>Bind a repo to teams, a queue and an always-on conductor. <a class="link link--dark" href="features.html#projects">Read about projects and conductors<span aria-hidden="true"> →</span></a></p>
+          </article>
+          <article class="gal__item">
+            <figure class="shot shot--dark">
+              <a href="assets/chimera-roles.png" data-zoom><img src="assets/chimera-roles.png" width="1600" height="1000" alt="Roles: the role library beside team role bindings, with a binding's override editor showing which fields are pinned vs inherited." loading="lazy" decoding="async"></a>
+              <figcaption>Actual Chimera interface · demo data</figcaption>
+            </figure>
+            <h3>Roles</h3>
+            <p>Reusable settings, with per-team overrides you can see. <a class="link link--dark" href="features.html#roles">Read about roles<span aria-hidden="true"> →</span></a></p>
+          </article>
+          <article class="gal__item">
+            <figure class="shot shot--dark">
+              <a href="assets/chimera-schedules.png" data-zoom><img src="assets/chimera-schedules.png" width="1600" height="1000" alt="Queues → schedules: jobs with cron/interval cadence, next run and last result, plus the selected job's run history (scheduled, manual, catch-up; ok/failed/skipped)." loading="lazy" decoding="async"></a>
+              <figcaption>Actual Chimera interface · demo data</figcaption>
+            </figure>
+            <h3>Schedules</h3>
+            <p>Cron, interval and one-shot jobs that run unattended. <a class="link link--dark" href="features.html#schedules">Read about schedules<span aria-hidden="true"> →</span></a></p>
+          </article>
+          <article class="gal__item">
+            <figure class="shot shot--dark">
+              <a href="assets/chimera-mcp-store.png" data-zoom><img src="assets/chimera-mcp-store.png" width="1600" height="1000" alt="Settings → MCP store: built-in servers (no uninstall) beside external servers, each with a trust badge (full/untrusted) and an OAuth status chip (authorized, needs re-auth, bearer, never); hosts are reserved example domains." loading="lazy" decoding="async"></a>
+              <figcaption>Actual Chimera interface · demo data</figcaption>
+            </figure>
+            <h3>MCP store</h3>
+            <p>MCP servers with trust levels, OAuth and discovery. <a class="link link--dark" href="features.html#mcp-store">Read about mcp store<span aria-hidden="true"> →</span></a></p>
+          </article>
+          <article class="gal__item">
+            <figure class="shot shot--dark">
+              <a href="assets/chimera-secrets.png" data-zoom><img src="assets/chimera-secrets.png" width="1600" height="1000" alt="Settings → Secrets: named secrets with descriptions and per-agent grant modes; values are never shown, only names and masked state." loading="lazy" decoding="async"></a>
+              <figcaption>Actual Chimera interface · demo data</figcaption>
+            </figure>
+            <h3>Secrets manager</h3>
+            <p>Named secrets with per-agent grants and an audit trail. <a class="link link--dark" href="features.html#secrets">Read about secrets manager<span aria-hidden="true"> →</span></a></p>
+          </article>
+          <article class="gal__item">
+            <figure class="shot shot--dark">
+              <a href="assets/chimera-computer-use.png" data-zoom><img src="assets/chimera-computer-use.png" width="1600" height="1000" alt="Agent transcript with the Desktop control monitor (preview + recent actions + Stop button) over a synthetic target image clearly labelled DEMO — not a real desktop." loading="lazy" decoding="async"></a>
+              <figcaption>Actual Chimera monitor component · synthetic demo target</figcaption>
+            </figure>
+            <h3>Computer use</h3>
+            <p>Browser, desktop control and optional Laya assistance. <a class="link link--dark" href="features.html#computer-use">Read about computer use<span aria-hidden="true"> →</span></a></p>
+          </article>
+          <article class="gal__item gal__more">
+            <h3>22 areas in the guide</h3>
+            <p>Workflows, hooks, memory graphs, review, history and more, each with a scenario and its sub-features.</p>
+            <p class="cta"><a class="btn btn--light" href="features.html">Open the feature guide</a></p>
+          </article>
+        </div>
+      </div>
+    </section>
+    <!-- features:gallery:end -->
+
+    <!-- Availability -->
+    <section class="sec status-sec" id="status" aria-labelledby="status-title">
+      <div class="wrap split">
+        <div class="split__head">
+          <p class="kicker">Availability</p>
+          <h2 id="status-title">Early access, on a Mac first.</h2>
+          <p class="sub">Signed public downloads are not available yet. Today you run Chimera from source.</p>
+        </div>
+        <div class="status-body">
+          <div class="plat">
+            <dl>
+              <div><dt>macOS · Apple Silicon</dt><dd><span class="pill pill--ok">Tested</span>The only platform where the packaged desktop runtime has been run from a clean home folder.</dd></div>
+              <div><dt>macOS · Intel</dt><dd><span class="pill">Not tested</span>Not exercised natively yet.</dd></div>
+              <div><dt>Linux</dt><dd><span class="pill pill--warn">Source only</span>A source installer exists. No packaged build yet, and browser tools are unavailable on Linux arm64.</dd></div>
+              <div><dt>Windows</dt><dd><span class="pill pill--no">Unsupported</span>The installer stops before downloading anything.</dd></div>
+            </dl>
+            <p class="fine">Desktop control is macOS-only. The optional local decision model (Laya) needs macOS 14 or newer and downloads one pinned English model when you install it, so a fresh install is not fully offline. After that it runs offline, and multilingual requests fail rather than fetch an unreviewed model.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Install -->
+    <section class="sec sec--dark install" id="install" aria-labelledby="install-title">
+      <div class="wrap split">
+        <div class="split__head">
+          <p class="kicker">Install</p>
+          <h2 id="install-title">Run it from source today.</h2>
+          <p class="sub">Needs Git, Node.js 24+ and pnpm, plus Rust to build the desktop app. The installer fetches pnpm and Rust if they are missing.</p>
+        </div>
+        <div class="install__body">
+          <div class="code-wrap">
+            <pre class="code" data-copyable><code>git clone https://github.com/nedimYilmaz/chimera.git
+cd chimera
+./scripts/install.sh</code></pre>
+          </div>
+          <p class="fine fine--dark">Installs <code>chimerad</code> and <code>chimera</code> into <code>~/.local/bin</code>, builds the desktop app and sets up a login service. On macOS that is a launchd agent, the path that has been tested. On Linux it sets up an AppImage and a systemd user unit, which is less proven. Flags: <code>--no-app</code>, <code>--no-service</code>, and on macOS <code>--enable-wake</code>.</p>
+          <details class="later">
+            <summary>After v0.1.0 ships <span class="tag">not available yet</span></summary>
+            <p>Once the first release is published, these will install the desktop app and the CLI. Do not run them before then.</p>
+            <div class="code-wrap"><pre class="code" data-copyable><code>npx @nedimyilmaz/chimera install</code></pre></div>
+            <div class="code-wrap"><pre class="code" data-copyable><code>curl -fsSL https://raw.githubusercontent.com/nedimYilmaz/chimera/main/scripts/install-public.sh | bash</code></pre></div>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section class="sec faq" id="faq" aria-labelledby="faq-title">
+      <div class="wrap split">
+        <div class="split__head">
+          <p class="kicker">Questions</p>
+          <h2 id="faq-title">Before you try it.</h2>
+        </div>
+        <div class="faq__list">
+          <details>
+            <summary>Can I download it today?</summary>
+            <p>Not yet. Signed public downloads are not available yet; the first release (v0.1.0) is being prepared. Today you run it from source with <code>./scripts/install.sh</code>, on a Mac for the best-tested path.</p>
+          </details>
+          <details>
+            <summary>Does it run on Windows?</summary>
+            <p>No. The installer stops before downloading anything on Windows. Windows support waits for a code-signing certificate.</p>
+          </details>
+          <details>
+            <summary>Does it work offline?</summary>
+            <p>The daemon and the app run locally, but your agents call the providers you connect, so they need a network. One built-in extra is a download: the optional local decision model (Laya) fetches one pinned English model when you install it, so a fresh install is not fully offline. After that Laya runs offline.</p>
+          </details>
+          <details>
+            <summary>Which agents does it work with?</summary>
+            <p>Claude (through the Claude Agent SDK), Codex (SDK and app-server), Kimi (over the Agent Client Protocol) and any OpenAI-compatible chat endpoint. Claude and Codex have seen the most use; the Kimi backend and federation are younger, and voice is a preview.</p>
+          </details>
+          <details>
+            <summary>Is it safe to point at my repo?</summary>
+            <p>Each agent gets its own git worktree, so agents do not collide in one working tree. A worktree isolates changes, not processes or filesystem access: an agent with <code>full</code> access can modify anything your OS user can. Pick <code>readOnly</code>, <code>acceptEdits</code> or <code>full</code> per agent, keep <code>full</code> for trusted work, run Chimera as your regular user and keep the daemon on local IPC.</p>
+          </details>
+          <details>
+            <summary>Does it replace Claude Code or Codex?</summary>
+            <p>No. It supervises them. You can also drive Chimera from inside Claude Code, Codex or any stdio MCP client, so one agent can coordinate others.</p>
+          </details>
+          <details>
+            <summary>Where does my data go?</summary>
+            <p>Chimera is a local daemon with local storage in <code>~/.chimera</code>; there is no hosted service. Your prompts go to whichever provider you connect, under that provider's terms.</p>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <!-- Final CTA -->
+    <section class="sec sec--dark final" aria-labelledby="final-title">
+      <div class="wrap final__row">
+        <div class="final__copy">
+          <h2 id="final-title">Early access is open.</h2>
+          <p class="sub">Run it from source on a Mac, point it at a repo you can afford to experiment on, and tell us what breaks.</p>
+        </div>
+        <div class="cta">
+          <a class="btn btn--light" href="https://github.com/nedimYilmaz/chimera">Explore on GitHub<span aria-hidden="true"> ↗</span></a>
+          <a class="link link--dark" href="#install">Run it from source</a>
+          <a class="link link--dark" href="https://github.com/nedimYilmaz/chimera/issues">Share feedback</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <div class="wrap foot__grid">
+      <div class="foot__brand">
+        <a class="brand brand--dark" href="#top"><img src="favicon.svg" alt="" width="28" height="28"><span>Chimera</span></a>
+        <p>A desktop workspace for Claude and Codex agent teams.</p>
+      </div>
+      <nav aria-label="Project links">
+        <h2 class="foot__h">Project</h2>
+        <ul>
+          <li><a href="https://github.com/nedimYilmaz/chimera">GitHub repository</a></li>
+          <li><a href="https://github.com/nedimYilmaz/chimera/issues">Issues</a></li>
+          <li><a href="https://github.com/nedimYilmaz/chimera/security">Report a vulnerability</a></li>
+          <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/LICENSE">MIT license</a></li>
+        </ul>
+      </nav>
+      <nav aria-label="On this page">
+        <h2 class="foot__h">On this page</h2>
+        <ul>
+          <li><a href="#how">How it works</a></li>
+          <li><a href="#queues">Queues</a></li>
+          <li><a href="#memory">Memory</a></li>
+          <li><a href="features.html">Feature guide</a></li>
+          <li><a href="#install">Install</a></li>
+          <li><a href="#faq">FAQ</a></li>
+        </ul>
+      </nav>
+    </div>
+    <div class="wrap foot__note">
+      <p>Screenshots: actual Chimera interface · demo data. <a href="https://github.com/nedimYilmaz/chimera/blob/main/site/assets/provenance.md">How they were made</a>.</p>
+      <p>Early access software. Issues are welcome; changes from pull requests are applied in the maintainer's tree.</p>
+    </div>
+  </footer>
+
+  <dialog class="lightbox" aria-label="Screenshot preview">
+    <form method="dialog"><button class="lightbox__close" aria-label="Close preview">Close <span aria-hidden="true">✕</span></button></form>
+    <img alt="">
+    <p class="lightbox__cap"></p>
+  </dialog>
+</body>
+</html>

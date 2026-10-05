@@ -1,0 +1,1396 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chimera feature guide — agents, queues, memory, MCP store, secrets and more</title>
+  <meta name="description" content="Searchable guide to every area of the Chimera desktop workspace: agents, projects, roles, teams, queues, schedules, memory, MCP store, secrets manager, computer use and more.">
+  <link rel="canonical" href="https://nedimyilmaz.github.io/chimera/features.html">
+  <meta name="theme-color" content="#f4f1ea">
+  <meta name="color-scheme" content="light">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Chimera">
+  <meta property="og:title" content="Chimera feature guide — every area, with a real scenario">
+  <meta property="og:description" content="Searchable guide to every area of the Chimera desktop workspace: agents, projects, roles, teams, queues, schedules, memory, MCP store, secrets manager, computer use and more.">
+  <meta property="og:url" content="https://nedimyilmaz.github.io/chimera/features.html">
+  <meta property="og:image" content="https://nedimyilmaz.github.io/chimera/assets/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="The Chimera desktop app showing agents and a conversation, rendered with fictional demo data.">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Chimera feature guide — every area, with a real scenario">
+  <meta name="twitter:description" content="Searchable guide to every area of the Chimera desktop workspace: agents, projects, roles, teams, queues, schedules, memory, MCP store, secrets manager, computer use and more.">
+  <meta name="twitter:image" content="https://nedimyilmaz.github.io/chimera/assets/og-image.png">
+
+  <link rel="stylesheet" href="styles.css">
+  <script src="script.js" defer></script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebPage",
+        "name": "Chimera feature guide",
+        "url": "https://nedimyilmaz.github.io/chimera/features.html",
+        "description": "Searchable guide to every area of the Chimera desktop workspace: agents, projects, roles, teams, queues, schedules, memory, MCP store, secrets manager, computer use and more.",
+        "isPartOf": {
+          "@type": "WebSite",
+          "name": "Chimera",
+          "url": "https://nedimyilmaz.github.io/chimera/"
+        },
+        "about": {
+          "@type": "SoftwareApplication",
+          "name": "Chimera",
+          "url": "https://nedimyilmaz.github.io/chimera/"
+        }
+      },
+      {
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "Chimera",
+            "item": "https://nedimyilmaz.github.io/chimera/"
+          },
+          {
+            "@type": "ListItem",
+            "position": 2,
+            "name": "Feature guide",
+            "item": "https://nedimyilmaz.github.io/chimera/features.html"
+          }
+        ]
+      }
+    ]
+  }
+  </script>
+</head>
+<body class="guide-page">
+  <a class="skip" href="#main">Skip to content</a>
+
+  <header class="top">
+    <div class="wrap top__row">
+      <a class="brand" href="index.html" aria-label="Chimera, back to the home page">
+        <img src="favicon.svg" alt="" width="28" height="28">
+        <span>Chimera</span>
+      </a>
+      <nav class="top__nav" aria-label="Site sections">
+        <a href="index.html">Overview</a>
+        <a href="features.html" aria-current="page">Feature guide</a>
+        <a href="index.html#install">Install</a>
+        <a href="index.html#faq">FAQ</a>
+      </nav>
+      <a class="btn btn--ghost btn--sm" href="https://github.com/nedimYilmaz/chimera">GitHub<span aria-hidden="true"> ↗</span></a>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="ghero" id="top" aria-labelledby="guide-title">
+      <div class="wrap">
+        <p class="status"><span class="dot" aria-hidden="true"></span>Feature guide · early access · screenshots use demo data</p>
+        <h1 id="guide-title">What Chimera does, area by area.</h1>
+        <p class="lede">Every area starts with the problem it solves, says what changes, walks one concrete scenario and then lists its sub-features. Search or filter below, or jump from the contents list.</p>
+        <div id="guide-tools" class="gtools"></div>
+        <p class="fine">22 areas in 5 groups. Scenarios use a fictional “Atlas website” project. Where an area is a preview or experimental, or only works on some platforms, it says so.</p>
+      </div>
+    </section>
+
+    <div class="wrap guide">
+      <nav class="toc" aria-label="Feature areas">
+        <details class="toc__d" open>
+          <summary>Jump to an area</summary>
+          <div class="toc__list">
+          <div class="toc__fam" data-for-family="run">
+            <p><a href="#family-run">Run agents</a></p>
+            <ul>
+            <li data-for="agents"><a href="#agents">Agents</a></li>
+            <li data-for="providers"><a href="#providers">Providers and failover</a></li>
+            <li data-for="permissions"><a href="#permissions">Permissions and budgets</a></li>
+            <li data-for="voice"><a href="#voice">Voice and meetings</a></li>
+            </ul>
+          </div>
+          <div class="toc__fam" data-for-family="organize">
+            <p><a href="#family-organize">Organize the work</a></p>
+            <ul>
+            <li data-for="projects"><a href="#projects">Projects and conductors</a></li>
+            <li data-for="roles"><a href="#roles">Roles</a></li>
+            <li data-for="teams"><a href="#teams">Teams</a></li>
+            <li data-for="queues"><a href="#queues">Queues</a></li>
+            <li data-for="workflows"><a href="#workflows">Workflows</a></li>
+            <li data-for="schedules"><a href="#schedules">Schedules</a></li>
+            </ul>
+          </div>
+          <div class="toc__fam" data-for-family="remember">
+            <p><a href="#family-remember">Remember and review</a></p>
+            <ul>
+            <li data-for="memory"><a href="#memory">Memory</a></li>
+            <li data-for="artifacts"><a href="#artifacts">Artifacts and checkpoints</a></li>
+            <li data-for="review"><a href="#review">Review and worktrees</a></li>
+            </ul>
+          </div>
+          <div class="toc__fam" data-for-family="connect">
+            <p><a href="#family-connect">Connect and extend</a></p>
+            <ul>
+            <li data-for="mcp-store"><a href="#mcp-store">MCP store</a></li>
+            <li data-for="secrets"><a href="#secrets">Secrets manager</a></li>
+            <li data-for="computer-use"><a href="#computer-use">Computer use</a></li>
+            <li data-for="skills-plugins"><a href="#skills-plugins">Skills and plugins</a></li>
+            <li data-for="hooks"><a href="#hooks">Hooks</a></li>
+            <li data-for="federation"><a href="#federation">Federation</a></li>
+            </ul>
+          </div>
+          <div class="toc__fam" data-for-family="see">
+            <p><a href="#family-see">See and steer</a></p>
+            <ul>
+            <li data-for="inbox"><a href="#inbox">Inbox</a></li>
+            <li data-for="history"><a href="#history">History and diagnostics</a></li>
+            <li data-for="workbench"><a href="#workbench">Workbench</a></li>
+            </ul>
+          </div>
+          </div>
+        </details>
+      </nav>
+
+      <div class="guide__body">
+    <section class="fam" id="family-run" aria-labelledby="family-run-title" data-family="run">
+      <header class="fam__head">
+        <h2 id="family-run-title">Run agents</h2>
+        <p class="sub">Start, steer, pay for and hand over the agents themselves.</p>
+      </header>
+      <article class="cat" id="agents" aria-labelledby="agents-title" data-kw="spawn send message force interrupt pause hold resume release compaction compact reconfigure settings kill worktree history sub-agent shadow fleet">
+        <header class="cat__head">
+          <p class="kicker">Run agents</p>
+          <h3 id="agents-title">Agents you can steer mid-flight</h3>
+          <p class="cat__short">Queue a note, steer now, pause, resume and compact a live session</p>
+        </header>
+        <dl class="story">
+          <div><dt>The problem</dt><dd>A long agent run is a black box. You can wait, or you can kill it and lose the context it spent an hour building.</dd></div>
+          <div><dt>What changes</dt><dd>Every running agent stays addressable. You can queue a note for its next turn, ask it to change course now, pause it with its conversation kept, change how it behaves, and let it compact its own context, all without throwing the session away.</dd></div>
+          <div><dt>In practice</dt><dd>The Atlas conductor is mid-turn on a CSS refactor when you notice it is editing the wrong stylesheet. You send a forced message, which asks the backend to interrupt or steer the turn. Edits it already made stay on disk, so you review them. An hour later a quota window runs out, so you hold the agent and release it once the quota is back: the aborted turn is re-queued and runs again on the same conversation.</dd></div>
+        </dl>
+        <figure class="shot shot--light">
+          <a href="assets/chimera-workspace.png" data-zoom><img src="assets/chimera-workspace.png" width="1600" height="1000" alt="Chimera desktop app: agent sidebar with Claude and Codex agents on the demo project Atlas website, and an agent conversation with tool calls (demo data)" loading="lazy" decoding="async"></a>
+          <figcaption>Actual Chimera interface · demo data</figcaption>
+        </figure>
+        <div class="groups">
+          <section class="grp" aria-labelledby="agents-g1">
+            <h4 id="agents-g1">Start and talk</h4>
+            <dl class="items">
+              <div><dt>Claude or Codex, side by side</dt><dd>Spawn agents on either backend from the same cockpit; Kimi and generic OpenAI-compatible backends are also supported.</dd></div>
+              <div><dt>Next-turn or forced messages</dt><dd>A normal message waits for the next turn boundary. A forced one asks the backend to interrupt or steer the active turn; what the turn already did is not rolled back. Each send reports whether a turn started, is mid-turn, is pending or the agent is held.</dd></div>
+              <div><dt>Slash commands pass through</dt><dd>A message marked as a provider slash command, like /compact, arrives verbatim so the backend reads it as a command instead of as text.</dd></div>
+              <div><dt>Stall detection</dt><dd>If a message is delivered but no turn ever opens, the daemon raises a prompt-stalled event you can subscribe to.</dd></div>
+            </dl>
+          </section>
+          <section class="grp" aria-labelledby="agents-g2">
+            <h4 id="agents-g2">Pause, resume, interrupt</h4>
+            <dl class="items">
+              <div><dt>Interrupt</dt><dd>Abort only the in-flight turn. The process stays up and addressable and can take new input.</dd></div>
+              <div><dt>Hold and release</dt><dd>Park an agent: its turn is aborted and re-queued, it does not wake on mail, and release resumes it with full context. Side effects the aborted turn already caused are not undone, and the docs say so.</dd></div>
+              <div><dt>Quota pauses stay put</dt><dd>A session-limit or crash-backoff pause is not released early by accident; you opt in when you know the quota is back.</dd></div>
+              <div><dt>Kill when you mean it</dt><dd>A real stop that ends the process, kept separate from interrupt and hold.</dd></div>
+            </dl>
+          </section>
+          <section class="grp" aria-labelledby="agents-g3">
+            <h4 id="agents-g3">Change a live agent</h4>
+            <dl class="items">
+              <div><dt>Reconfigure in one respawn</dt><dd>Change model, effort, account, turn limits, budget ceiling, compaction threshold, instructions or autonomy; the conversation survives and the next turn behaves the new way.</dd></div>
+              <div><dt>Live changes, no respawn</dt><dd>Permission profile and display label apply without interrupting a running turn.</dd></div>
+              <div><dt>Compaction on request</dt><dd>Ask an agent to compact its context. Claude receives /compact, Codex gets its native compact request, and completion arrives later as an event, because acceptance is not completion.</dd></div>
+              <div><dt>Hand off across providers</dt><dd>When a quota window is spent, move an agent's context to a fresh agent on another provider or account through a portable package of brief, anchors and recent turns.</dd></div>
+              <div><dt>Rebind to another directory</dt><dd>Move an agent to a new working directory with the same provider, account and model.</dd></div>
+              <div><dt>Provider remote control</dt><dd>Turn provider-native remote control on for a live session where the CLI and account support it.</dd></div>
+            </dl>
+          </section>
+          <section class="grp" aria-labelledby="agents-g4">
+            <h4 id="agents-g4">See the fleet</h4>
+            <dl class="items">
+              <div><dt>Fleet dashboard and lanes</dt><dd>Agents grouped by team or project, with live status lanes and pinned tasks or agents that keep their live fields in view.</dd></div>
+              <div><dt>Native sub-agent rows</dt><dd>A provider's own sub-agents appear as read-only shadow rows with their task, summary and metrics.</dd></div>
+              <div><dt>Spawn cost preview</dt><dd>Estimate the token cost of the Chimera tool grant a spawn would get before you spawn it. It is an estimate, never a policy.</dd></div>
+            </dl>
+          </section>
+        </div>
+        <details class="adv">
+          <summary>Smaller capabilities in this area <span class="adv__n">(3)</span></summary>
+          <ul>
+            <li><strong>Batch send and resume</strong> Message or resume several agents in one call.</li>
+            <li><strong>Agents can rename themselves</strong> An agent can set its own display name.</li>
+            <li><strong>Find and tail</strong> Look up agents and read their recent activity.</li>
+          </ul>
+        </details>
+        <details class="src">
+          <summary>Where this lives in the source</summary>
+          <ul>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/app/src/screens/AgentsScreen.tsx"><code>packages/app/src/screens/AgentsScreen.tsx</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/protocol/src/mcp-tools.ts"><code>packages/protocol/src/mcp-tools.ts</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/core/src/backends/claude.ts"><code>packages/core/src/backends/claude.ts</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/core/src/backends/codex.ts"><code>packages/core/src/backends/codex.ts</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/README.md"><code>README.md</code></a></li>
+          </ul>
+        </details>
+      </article>
+
+      <article class="cat" id="providers" aria-labelledby="providers-title" data-kw="provider account failover quota subscription keychain oauth api key claude codex kimi cooldown model catalog login custom model ollama lmstudio vllm openai-compatible override">
+        <header class="cat__head">
+          <p class="kicker">Run agents</p>
+          <h3 id="providers-title">Providers, accounts and failover</h3>
+          <p class="cat__short">Several accounts and providers, with failover when quota runs out</p>
+        </header>
+        <dl class="story">
+          <div><dt>The problem</dt><dd>One subscription has one quota. When it runs dry mid-task, everything waiting on it stops, and juggling logins by hand does not scale past a couple of agents.</dd></div>
+          <div><dt>What changes</dt><dd>Register several accounts across providers and let Chimera route around an exhausted one, so a quota limit becomes a delay instead of a stall.</dd></div>
+          <div><dt>In practice</dt><dd>Three Atlas workers share a Claude subscription that hits its session limit. The scheduler cools that account down and moves new work to your second account. When the quota resets you clear the cooldown in one action instead of editing config.</dd></div>
+        </dl>
+        <div class="groups">
+          <section class="grp" aria-labelledby="providers-g1">
+            <h4 id="providers-g1">Accounts</h4>
+            <dl class="items">
+              <div><dt>Several ways to log in</dt><dd>Subscription login, a key in the OS keychain, an environment variable, an external command that prints a key, or OAuth.</dd></div>
+              <div><dt>Test before you trust</dt><dd>Add, remove, re-key and test an account from the UI or through the account tools.</dd></div>
+              <div><dt>Cooldown and uncool</dt><dd>A spent account is cooled down; clearing it releases the agents that were paused on that account's session limit.</dd></div>
+            </dl>
+          </section>
+          <section class="grp" aria-labelledby="providers-g2">
+            <h4 id="providers-g2">Failover</h4>
+            <dl class="items">
+              <div><dt>Across accounts</dt><dd>Work moves to another account of the same provider when one is exhausted.</dd></div>
+              <div><dt>Across providers, if you allow it</dt><dd>Failover can optionally cross providers; an agent can also be handed off to a fresh agent on another provider with its context.</dd></div>
+              <div><dt>Per-project conductor account</dt><dd>Pin the account, and optionally the model and permission profile, a project's conductor is born on.</dd></div>
+            </dl>
+          </section>
+          <section class="grp" aria-labelledby="providers-g3">
+            <h4 id="providers-g3">Catalog</h4>
+            <dl class="items">
+              <div><dt>Provider and model lists</dt><dd>Browse the providers and the models each exposes, then pick per role, per agent or per spawn.</dd></div>
+              <div><dt>Your own OpenAI-compatible server</dt><dd>Define a custom provider with a base URL and default model, for a local Ollama, LM Studio or vLLM server. A key is only asked for if you say the server needs one.</dd></div>
+              <div><dt>Base URL and default model overrides</dt><dd>Override a built-in provider's base URL or default model, and set a per-provider context-compaction threshold. Changes apply on the next daemon start.</dd></div>
+              <div><dt>Early-access note</dt><dd>Claude and Codex are the main paths. Kimi and the generic OpenAI-compatible backend are also available.</dd></div>
+            </dl>
+          </section>
+        </div>
+        <details class="adv">
+          <summary>Smaller capabilities in this area <span class="adv__n">(1)</span></summary>
+          <ul>
+            <li><strong>Clear a cooldown</strong> One action clears an account's cooldown and releases its session-limit pauses.</li>
+          </ul>
+        </details>
+        <details class="src">
+          <summary>Where this lives in the source</summary>
+          <ul>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/core/src/accounts.ts"><code>packages/core/src/accounts.ts</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/core/src/failover.ts"><code>packages/core/src/failover.ts</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/app/src/components/AccountsCard.tsx"><code>packages/app/src/components/AccountsCard.tsx</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/app/src/components/ProviderCatalogCard.tsx"><code>packages/app/src/components/ProviderCatalogCard.tsx</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/README.md"><code>README.md</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/protocol/src/index.ts"><code>packages/protocol/src/index.ts</code></a></li>
+          </ul>
+        </details>
+      </article>
+
+      <article class="cat" id="permissions" aria-labelledby="permissions-title" data-kw="permission approval profile readonly acceptedits full budget ceiling usage cost slo host tools policy allow ask deny write gate">
+        <header class="cat__head">
+          <p class="kicker">Run agents</p>
+          <h3 id="permissions-title">Permissions, approvals and budgets</h3>
+          <p class="cat__short">Permission profiles, approvals and spend ceilings</p>
+        </header>
+        <dl class="story">
+          <div><dt>The problem</dt><dd>Agents that can edit files and run commands need limits, and limits only work if they are visible, adjustable mid-run and tied to real spend.</dd></div>
+          <div><dt>What changes</dt><dd>Pick how much freedom an agent has, answer permission prompts from one place, and put a dollar ceiling on a whole tree of agents instead of watching a meter.</dd></div>
+          <div><dt>In practice</dt><dd>A research sub-agent on Atlas starts under the read-only profile. When it asks to run a command, the request lands in your inbox; you allow it once. Later the whole spawn tree crosses its budget ceiling, so the tree pauses and tells you instead of quietly continuing.</dd></div>
+        </dl>
+        <div class="groups">
+          <section class="grp" aria-labelledby="permissions-g1">
+            <h4 id="permissions-g1">Permission profiles</h4>
+            <dl class="items">
+              <div><dt>Read-only, accept edits, full</dt><dd>Three profiles per backend, overridable per project or per spawn, and changeable on a live agent without a respawn.</dd></div>
+              <div><dt>Approvals in one feed</dt><dd>Pending permission requests show up in the attention inbox and can be answered allow or deny from there.</dd></div>
+              <div><dt>Single-writer write gate</dt><dd>A worktree has one writer at a time. A dry run tells you whether writing certain paths would be refused and why; the mode is enforce, warn or off.</dd></div>
+            </dl>
+          </section>
+          <section class="grp" aria-labelledby="permissions-g2">
+            <h4 id="permissions-g2">Budgets and usage</h4>
+            <dl class="items">
+              <div><dt>Ceilings on a spawn tree</dt><dd>A budget covers a whole tree of agents. A breach pauses the tree. Budget warnings are an event you can subscribe to.</dd></div>
+              <div><dt>Per-agent ceilings</dt><dd>Set a maximum spend on one agent through reconfigure.</dd></div>
+              <div><dt>Usage and performance</dt><dd>Query usage, and read latency, tokens, cost, gate failures and error rates by team, provider or workflow.</dd></div>
+              <div><dt>Honest about estimates</dt><dd>Some budgets are estimated from token counts, not from a provider invoice.</dd></div>
+            </dl>
+          </section>
+          <section class="grp" aria-labelledby="permissions-g3">
+            <h4 id="permissions-g3">Host tools</h4>
+            <dl class="items">
+              <div><dt>Allow, ask or deny per CLI tool</dt><dd>Chimera scans the command-line tools on the host and keeps an allow, ask or deny policy per tool and profile, with a wildcard row.</dd></div>
+            </dl>
+          </section>
+        </div>
+        <details class="adv">
+          <summary>Smaller capabilities in this area <span class="adv__n">(2)</span></summary>
+          <ul>
+            <li><strong>Write-gate dry run</strong> Ask whether writing given paths would be refused, and which check refused it.</li>
+            <li><strong>Host tool scan cache</strong> The host CLI tool scan is cached for about fifteen minutes.</li>
+          </ul>
+        </details>
+        <details class="src">
+          <summary>Where this lives in the source</summary>
+          <ul>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/core/src/budget.ts"><code>packages/core/src/budget.ts</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/core/src/usage.ts"><code>packages/core/src/usage.ts</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/core/src/broker.ts"><code>packages/core/src/broker.ts</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/app/src/components/UsageCard.tsx"><code>packages/app/src/components/UsageCard.tsx</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/app/src/components/HostToolsCard.tsx"><code>packages/app/src/components/HostToolsCard.tsx</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/app/src/screens/InboxScreen.tsx"><code>packages/app/src/screens/InboxScreen.tsx</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/README.md"><code>README.md</code></a></li>
+          </ul>
+        </details>
+      </article>
+
+      <article class="cat" id="voice" aria-labelledby="voice-title" data-kw="voice meeting room microphone codex push to talk transcription consent audio preview">
+        <header class="cat__head">
+          <p class="kicker">Run agents <span class="pill pill--warn">Preview</span></p>
+          <h3 id="voice-title">Voice and meetings</h3>
+          <p class="cat__short">Talk to agents and run meeting rooms</p>
+        </header>
+        <dl class="story">
+          <div><dt>The problem</dt><dd>Some conversations with an agent are faster spoken than typed, and some decisions need several agents and you in the same room.</dd></div>
+          <div><dt>What changes</dt><dd>Talk to an agent on its existing authenticated session, or open a bounded meeting room with an approved roster. Consent is explicit and the coding work keeps running when audio ends.</dd></div>
+          <div><dt>In practice</dt><dd>Before a refactor, you open a meeting room for the Atlas conductor and two workers. You approve the roster, set a duration and utterance budget, and give desktop consent. When the call ends, the coding work carries on.</dd></div>
+        </dl>
+        <p class="limits"><strong>Limits.</strong> Voice is a preview. It needs the desktop app for microphone consent and is not part of the baseline workflow.</p>
+        <div class="groups">
+          <section class="grp" aria-labelledby="voice-g1">
+            <h4 id="voice-g1">Native voice</h4>
+            <dl class="items">
+              <div><dt>Per-agent opt-in</dt><dd>Native Codex voice runs on an agent's existing authenticated thread, only for agents you opt in, with microphone consent in the desktop UI.</dd></div>
+              <div><dt>Push to talk</dt><dd>A separate path transcribes your speech to text for agents that have no native voice.</dd></div>
+            </dl>
+          </section>
+          <section class="grp" aria-labelledby="voice-g2">
+            <h4 id="voice-g2">Meeting rooms</h4>
+            <dl class="items">
+              <div><dt>Approved roster</dt><dd>A room has a named roster; editing the roster renews consent.</dd></div>
+              <div><dt>Budgets</dt><dd>A duration and utterance budget bound each room.</dd></div>
+              <div><dt>Audio is separate from work</dt><dd>Ending audio does not stop agents' coding work. Create, list, update, end and delete rooms through the voice-room tools.</dd></div>
+            </dl>
+          </section>
+        </div>
+        <details class="src">
+          <summary>Where this lives in the source</summary>
+          <ul>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/app/src/components/MeetingRooms.tsx"><code>packages/app/src/components/MeetingRooms.tsx</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/app/src/components/NativeVoiceDock.tsx"><code>packages/app/src/components/NativeVoiceDock.tsx</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/app/src/components/PushToTalkControl.tsx"><code>packages/app/src/components/PushToTalkControl.tsx</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/protocol/src/mcp-tools.ts"><code>packages/protocol/src/mcp-tools.ts</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/README.md"><code>README.md</code></a></li>
+          </ul>
+        </details>
+      </article>
+    </section>
+
+    <section class="fam" id="family-organize" aria-labelledby="family-organize-title" data-family="organize">
+      <header class="fam__head">
+        <h2 id="family-organize-title">Organize the work</h2>
+        <p class="sub">Projects, roles, teams, queues, workflows and schedules turn one-off prompts into a system.</p>
+      </header>
+      <article class="cat" id="projects" aria-labelledby="projects-title" data-kw="project conductor import clone assign team archive routing dispatch checkpoint session setup account">
+        <header class="cat__head">
+          <p class="kicker">Organize the work</p>
+          <h3 id="projects-title">Projects and conductors</h3>
+          <p class="cat__short">Bind a repo to teams, a queue and an always-on conductor</p>
+        </header>
+        <dl class="story">
+          <div><dt>The problem</dt><dd>Real work lives in repositories. Without a project boundary, agents, queues and memory blur together and every new session starts cold.</dd></div>
+          <div><dt>What changes</dt><dd>A project binds a repository to its teams, queue and conductor. Work routed to the project lands on the right team, with the right permissions and account.</dd></div>
+          <div><dt>In practice</dt><dd>You import the Atlas website repository from a git URL, assign the web team, and start its conductor. A new task is dispatched to the project and lands on the bound queue instead of a random worker.</dd></div>
+        </dl>
+        <figure class="shot shot--light">
+          <a href="assets/chimera-projects.png" data-zoom><img src="assets/chimera-projects.png" width="1600" height="1000" alt="Projects: a project bound to teams and a task queue, live sessions, checkpoints and the per-project setup/conductor-account settings." loading="lazy" decoding="async"></a>
+          <figcaption>Actual Chimera interface · demo data</figcaption>
+        </figure>
+        <div class="groups">
+          <section class="grp" aria-labelledby="projects-g1">
+            <h4 id="projects-g1">Create and organize</h4>
+            <dl class="items">
+              <div><dt>Create or import</dt><dd>Register an existing directory, or clone a git URL (file URLs included).</dd></div>
+              <div><dt>Assign teams</dt><dd>Attach one or more teams to a project, and archive, restore or delete it later.</dd></div>
+              <div><dt>Per-project permissions</dt><dd>Override the default permission profile for one project's conductor.</dd></div>
+            </dl>
+          </section>
+          <section class="grp" aria-labelledby="projects-g2">
+            <h4 id="projects-g2">Conductors</h4>
+            <dl class="items">
+              <div><dt>Start and stop a conductor</dt><dd>Each project can run a conductor that coordinates its teams. It always starts with full autonomy and orchestration enabled.</dd></div>
+              <div><dt>Pin the conductor's account</dt><dd>Choose the account, model and profile the conductor is born on. Restart the conductor for a change to take effect.</dd></div>
+            </dl>
+          </section>
+          <section class="grp" aria-labelledby="projects-g3">
+            <h4 id="projects-g3">Routing</h4>
+            <dl class="items">
+              <div><dt>Dispatch by preference</dt><dd>A bound queue first, then a fitting role on the project's team, then the global pool, and a direct spawn only as a last resort. The reply says what actually happened.</dd></div>
+              <div><dt>Live sessions and checkpoints</dt><dd>The project screen shows live sessions, checkpoints and its setup settings in one place.</dd></div>
+            </dl>
+          </section>
+        </div>
+        <details class="src">
+          <summary>Where this lives in the source</summary>
+          <ul>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/core/src/projects.ts"><code>packages/core/src/projects.ts</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/app/src/screens/ProjectsScreen.tsx"><code>packages/app/src/screens/ProjectsScreen.tsx</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/protocol/src/mcp-tools.ts"><code>packages/protocol/src/mcp-tools.ts</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/README.md"><code>README.md</code></a></li>
+          </ul>
+        </details>
+      </article>
+
+      <article class="cat" id="roles" aria-labelledby="roles-title" data-kw="role library binding override pinned inherited instructions model effort permission skills plugins mcp allowlist template">
+        <header class="cat__head">
+          <p class="kicker">Organize the work</p>
+          <h3 id="roles-title">Roles with per-team overrides</h3>
+          <p class="cat__short">Reusable settings, with per-team overrides you can see</p>
+        </header>
+        <dl class="story">
+          <div><dt>The problem</dt><dd>Copying the same instructions, model and tool limits into every spawn drifts quickly, and one tweak for one team should not change every other team.</dd></div>
+          <div><dt>What changes</dt><dd>Define a role once in a library. Teams bind it, inherit its fields and pin only what differs. The editor shows which values are inherited and which are overridden.</dd></div>
+          <div><dt>In practice</dt><dd>A reviewer role in the library uses a careful model and read-only tools. The Atlas team binds it and pins a different working directory. Other teams keep inheriting the library value.</dd></div>
+        </dl>
+        <figure class="shot shot--light">
+          <a href="assets/chimera-roles.png" data-zoom><img src="assets/chimera-roles.png" width="1600" height="1000" alt="Roles: the role library beside team role bindings, with a binding's override editor showing which fields are pinned vs inherited." loading="lazy" decoding="async"></a>
+          <figcaption>Actual Chimera interface · demo data</figcaption>
+        </figure>
+        <div class="groups">
+          <section class="grp" aria-labelledby="roles-g1">
+            <h4 id="roles-g1">The role library</h4>
+            <dl class="items">
+              <div><dt>What a role holds</dt><dd>Model, effort, permission profile, instructions, plugins, skills, an MCP tool allowlist, account, turn limits, isolation and worker pool size.</dd></div>
+              <div><dt>Templates, not live agents</dt><dd>Editing a role changes future spawns, not agents already running from it. The form says how many are live.</dd></div>
+            </dl>
+          </section>
+          <section class="grp" aria-labelledby="roles-g2">
+            <h4 id="roles-g2">Binding overrides</h4>
+            <dl class="items">
+              <div><dt>Inherited versus pinned</dt><dd>For each field the editor shows the library value in grey as inherited, or the pinned override highlighted, with a toggle between them.</dd></div>
+              <div><dt>Editable any time</dt><dd>Overrides can be edited after a role is already bound, without a separate edit mode.</dd></div>
+              <div><dt>Provenance badges</dt><dd>Team members show where each role setting comes from.</dd></div>
+            </dl>
+          </section>
+        </div>
+        <details class="src">
+          <summary>Where this lives in the source</summary>
+          <ul>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/core/src/roles-store.ts"><code>packages/core/src/roles-store.ts</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/app/src/screens/RolesScreen.tsx"><code>packages/app/src/screens/RolesScreen.tsx</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/app/src/components/RoleFormCard.tsx"><code>packages/app/src/components/RoleFormCard.tsx</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/app/src/components/RoleBindingOverrideEditor.tsx"><code>packages/app/src/components/RoleBindingOverrideEditor.tsx</code></a></li>
+          </ul>
+        </details>
+      </article>
+
+      <article class="cat" id="teams" aria-labelledby="teams-title" data-kw="team members concurrency queue worker pool role binding live workers ask team my team cwd">
+        <header class="cat__head">
+          <p class="kicker">Organize the work</p>
+          <h3 id="teams-title">Teams that share a queue</h3>
+          <p class="cat__short">Named groups of agents with a shared queue and concurrency</p>
+        </header>
+        <dl class="story">
+          <div><dt>The problem</dt><dd>A handful of agents with no structure step on each other and nobody knows who is free.</dd></div>
+          <div><dt>What changes</dt><dd>A team is a named group of role-bound workers tied to a queue with a concurrency cap. Work is routed to a free worker of the right role.</dd></div>
+          <div><dt>In practice</dt><dd>The Atlas team has a developer and a reviewer role and a cap of two concurrent workers. Push five tasks and two start; the rest wait their turn, and the team view shows who is working on what.</dd></div>
+        </dl>
+        <figure class="shot shot--light">
+          <a href="assets/chimera-teams.png" data-zoom><img src="assets/chimera-teams.png" width="1600" height="1000" alt="Teams: the 'atlas' team with its bound queue, members, role provenance badges, pinned vs inherited role settings and live workers." loading="lazy" decoding="async"></a>
+          <figcaption>Actual Chimera interface · demo data</figcaption>
+        </figure>
+        <div class="groups">
+          <section class="grp" aria-labelledby="teams-g1">
+            <h4 id="teams-g1">Shape a team</h4>
+            <dl class="items">
+              <div><dt>Members and roles</dt><dd>Create a team with a role, a maximum concurrency, a working directory and an optional queue and purpose.</dd></div>
+              <div><dt>Live workers</dt><dd>The team view lists its workers and what they are doing.</dd></div>
+              <div><dt>Edit in place</dt><dd>The same form edits an existing team.</dd></div>
+            </dl>
+          </section>
+          <section class="grp" aria-labelledby="teams-g2">
+            <h4 id="teams-g2">Work with a team</h4>
+            <dl class="items">
+              <div><dt>Assign by team and role</dt><dd>Route a task to a free or idle worker of a role through the team's queue, or to one agent directly.</dd></div>
+              <div><dt>Team-aware messaging</dt><dd>An agent can see its own team and message the whole team.</dd></div>
+            </dl>
+          </section>
+        </div>
+        <details class="src">
+          <summary>Where this lives in the source</summary>
+          <ul>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/core/src/teams.ts"><code>packages/core/src/teams.ts</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/app/src/screens/TeamsScreen.tsx"><code>packages/app/src/screens/TeamsScreen.tsx</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/app/src/components/TeamFormCard.tsx"><code>packages/app/src/components/TeamFormCard.tsx</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/README.md"><code>README.md</code></a></li>
+          </ul>
+        </details>
+      </article>
+
+      <article class="cat" id="queues" aria-labelledby="queues-title" data-kw="queue task priority fifo dependency depends on retry pause resume cancel move edit requeue explain why not running remediation gate">
+        <header class="cat__head">
+          <p class="kicker">Organize the work</p>
+          <h3 id="queues-title">Queues with priorities and dependencies</h3>
+          <p class="cat__short">Prioritized tasks with dependencies and retries</p>
+        </header>
+        <dl class="story">
+          <div><dt>The problem</dt><dd>A pile of tasks in a chat window has no order, no memory of what depends on what, and no answer to why something is not running.</dd></div>
+          <div><dt>What changes</dt><dd>Queues order work by priority and arrival, hold tasks until their dependencies finish, retry failures, and tell you exactly why a task has not started.</dd></div>
+          <div><dt>In practice</dt><dd>On Atlas, a tests task depends on a refactor task. You add a late dependency instead of writing run this last in a prompt. The tests task stays blocked, and an explain call names the unmet dependency.</dd></div>
+        </dl>
+        <figure class="shot shot--light">
+          <a href="assets/chimera-queue.png" data-zoom><img src="assets/chimera-queue.png" width="1600" height="1000" alt="Chimera team queue for the Atlas website demo: done, running, pending and blocked tasks, with the selected task's dependsOn inspector (demo data)" loading="lazy" decoding="async"></a>
+          <figcaption>Actual Chimera interface · demo data</figcaption>
+        </figure>
+        <div class="groups">
+          <section class="grp" aria-labelledby="queues-g1">
+            <h4 id="queues-g1">Ordering</h4>
+            <dl class="items">
+              <div><dt>Priority then first-in</dt><dd>Priority breaks ties among ready tasks; arrival order does the rest.</dd></div>
+              <div><dt>Dependencies are constraints</dt><dd>A task will not run until what it depends on is done, and cascades to failed if a dependency fails. Self-dependencies and cycles are rejected.</dd></div>
+            </dl>
+          </section>
+          <section class="grp" aria-labelledby="queues-g2">
+            <h4 id="queues-g2">Control</h4>
+            <dl class="items">
+              <div><dt>Pause and resume</dt><dd>Stop dispatch from a queue without losing its tasks.</dd></div>
+              <div><dt>Edit, move, cancel, retry, requeue</dt><dd>Fix a pending task, move it between queues, cancel it, or retry a failed one.</dd></div>
+              <div><dt>Retries</dt><dd>Failed tasks retry under a bounded policy.</dd></div>
+            </dl>
+          </section>
+          <section class="grp" aria-labelledby="queues-g3">
+            <h4 id="queues-g3">Explain and recover</h4>
+            <dl class="items">
+              <div><dt>Why is this not running?</dt><dd>One call evaluates the scheduler's own ordered checks: team binding, queue paused, task state, dependencies, drain order, role, concurrency, workflow binding and spawn limits. It names the first one that blocked.</dd></div>
+              <div><dt>Remediation jumps backward</dt><dd>A step configured for remediation can request a bounded jump to an earlier step with a correction brief when the real root cause is upstream.</dd></div>
+              <div><dt>A default gate workflow</dt><dd>Queued tasks run through a gated workflow by default.</dd></div>
+            </dl>
+          </section>
+        </div>
+        <details class="adv">
+          <summary>Smaller capabilities in this area <span class="adv__n">(2)</span></summary>
+          <ul>
+            <li><strong>Assign versus dispatch</strong> Assign targets an agent or a team and role. Dispatch follows the project's routing preference.</li>
+            <li><strong>Cycle-safe dependencies</strong> Adding a dependency to a pending task rejects self-dependency and cycles.</li>
+          </ul>
+        </details>
+        <details class="src">
+          <summary>Where this lives in the source</summary>
+          <ul>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/core/src/queues.ts"><code>packages/core/src/queues.ts</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/app/src/screens/QueuesScreen.tsx"><code>packages/app/src/screens/QueuesScreen.tsx</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/protocol/src/mcp-tools.ts"><code>packages/protocol/src/mcp-tools.ts</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/README.md"><code>README.md</code></a></li>
+          </ul>
+        </details>
+      </article>
+
+      <article class="cat" id="workflows" aria-labelledby="workflows-title" data-kw="workflow dag gate fan-out join loop sub-workflow plan critic evaluator approval shell artifact check route condition step journal studio">
+        <header class="cat__head">
+          <p class="kicker">Organize the work</p>
+          <h3 id="workflows-title">Workflows with real gates</h3>
+          <p class="cat__short">Multi-step plans with gates, fan-out and loops</p>
+        </header>
+        <dl class="story">
+          <div><dt>The problem</dt><dd>Agents say they are done. Without an independent check, done only means stopped talking.</dd></div>
+          <div><dt>What changes</dt><dd>Describe the steps as a graph and gate each one on something that can fail: a command, an artifact, a human approval or a critic loop.</dd></div>
+          <div><dt>In practice</dt><dd>The Atlas release workflow builds, fans out three reviewers, joins their findings and waits at a human approval gate. If the test command fails, the task loops back to the fix step a bounded number of times and then stops for you.</dd></div>
+        </dl>
+        <div class="groups">
+          <section class="grp" aria-labelledby="workflows-g1">
+            <h4 id="workflows-g1">Shape</h4>
+            <dl class="items">
+              <div><dt>A graph of steps</dt><dd>Steps form a DAG with routing conditions, bounded loop-back, fan-out and join, and sub-workflows.</dd></div>
+              <div><dt>Plan a workflow from a goal</dt><dd>A planning step can design the workflow at runtime and compile it as a sub-workflow, under the same gate, checkpoint and budget rules.</dd></div>
+            </dl>
+          </section>
+          <section class="grp" aria-labelledby="workflows-g2">
+            <h4 id="workflows-g2">Gates</h4>
+            <dl class="items">
+              <div><dt>Four kinds</dt><dd>A shell command, an artifact check, a human approval, or an evaluator-optimizer critic loop.</dd></div>
+              <div><dt>On failure</dt><dd>Retry, loop back, or request remediation from an earlier step.</dd></div>
+            </dl>
+          </section>
+          <section class="grp" aria-labelledby="workflows-g3">
+            <h4 id="workflows-g3">Author and inspect</h4>
+            <dl class="items">
+              <div><dt>Workflow studio</dt><dd>Create, edit, run and inspect workflows in the app.</dd></div>
+              <div><dt>A durable step journal</dt><dd>One entry per step attempt with model, account, tokens, cost, gate outcome and timings. It survives daemon restarts and the queue's terminal-task eviction.</dd></div>
+            </dl>
+          </section>
+        </div>
+        <details class="adv">
+          <summary>Smaller capabilities in this area <span class="adv__n">(1)</span></summary>
+          <ul>
+            <li><strong>Step journal filters</strong> Filter the journal by task, agent, step, queue, team or outcome.</li>
+          </ul>
+        </details>
+        <details class="src">
+          <summary>Where this lives in the source</summary>
+          <ul>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/core/src/workflows.ts"><code>packages/core/src/workflows.ts</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/app/src/components/WorkflowStudio.tsx"><code>packages/app/src/components/WorkflowStudio.tsx</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/app/src/components/WorkflowFormCard.tsx"><code>packages/app/src/components/WorkflowFormCard.tsx</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/protocol/src/mcp-tools.ts"><code>packages/protocol/src/mcp-tools.ts</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/README.md"><code>README.md</code></a></li>
+          </ul>
+        </details>
+      </article>
+
+      <article class="cat" id="schedules" aria-labelledby="schedules-title" data-kw="schedule job cron interval one-shot timezone overlap catch-up snooze history import export retry dead letter requeue run now wake sleep budget template">
+        <header class="cat__head">
+          <p class="kicker">Organize the work</p>
+          <h3 id="schedules-title">Scheduled jobs that survive sleep</h3>
+          <p class="cat__short">Cron, interval and one-shot jobs that run unattended</p>
+        </header>
+        <dl class="story">
+          <div><dt>The problem</dt><dd>Recurring work, like a nightly dependency check, normally means a cron entry on one machine that nobody remembers and nothing records.</dd></div>
+          <div><dt>What changes</dt><dd>Schedule agent work by cron, interval or once. Each run is recorded with how it was triggered and how it ended, and a laptop that was asleep does not silently lose a run.</dd></div>
+          <div><dt>In practice</dt><dd>A nightly job on the Atlas team checks for outdated packages at 02:00 in your timezone. The laptop was asleep, so the run is marked late and coalesced. A failed run retries, and after repeated failure lands in the dead letter list until you requeue it.</dd></div>
+        </dl>
+        <figure class="shot shot--light">
+          <a href="assets/chimera-schedules.png" data-zoom><img src="assets/chimera-schedules.png" width="1600" height="1000" alt="Queues → schedules: jobs with cron/interval cadence, next run and last result, plus the selected job's run history (scheduled, manual, catch-up; ok/failed/skipped)." loading="lazy" decoding="async"></a>
+          <figcaption>Actual Chimera interface · demo data</figcaption>
+        </figure>
+        <div class="groups">
+          <section class="grp" aria-labelledby="schedules-g1">
+            <h4 id="schedules-g1">Cadence and target</h4>
+            <dl class="items">
+              <div><dt>Cron, interval, one-shot</dt><dd>With an explicit timezone, and next-run time shown for each job.</dd></div>
+              <div><dt>Three kinds of target</dt><dd>A team and role, an inline agent definition, or an existing agent that is resumed if paused. A killed or missing target disables the job.</dd></div>
+              <div><dt>Prompt templates</dt><dd>Use the job name, timestamp, ISO time or agent id in the prompt.</dd></div>
+            </dl>
+          </section>
+          <section class="grp" aria-labelledby="schedules-g2">
+            <h4 id="schedules-g2">Reliability</h4>
+            <dl class="items">
+              <div><dt>Overlap policy</dt><dd>Decide what happens when a run is still going at the next tick.</dd></div>
+              <div><dt>Catch-up</dt><dd>Optionally run a missed occurrence if it is not staler than a limit you set.</dd></div>
+              <div><dt>Sleep and wake</dt><dd>Runs that come due while the machine slept coalesce unless wake is enabled on macOS. Sleep-wake runs record how late they were.</dd></div>
+              <div><dt>Budget ceiling per job</dt><dd>Cap what one run may spend.</dd></div>
+              <div><dt>Retries and dead letter</dt><dd>A bounded retry budget, then a dead-letter state. Requeue revives a dead-lettered job, resets its retries and re-arms the next occurrence.</dd></div>
+            </dl>
+          </section>
+          <section class="grp" aria-labelledby="schedules-g3">
+            <h4 id="schedules-g3">Operate</h4>
+            <dl class="items">
+              <div><dt>Run now and snooze</dt><dd>Fire a job on demand, or snooze it until later.</dd></div>
+              <div><dt>Run history</dt><dd>Each run records whether it was scheduled, manual or catch-up, and whether it was ok, failed or skipped.</dd></div>
+              <div><dt>Import and export</dt><dd>Move a schedule definition between installs.</dd></div>
+            </dl>
+          </section>
+        </div>
+        <details class="adv">
+          <summary>Smaller capabilities in this area <span class="adv__n">(2)</span></summary>
+          <ul>
+            <li><strong>Sleep-wake records</strong> A run that fired late after sleep records its trigger and how late it was.</li>
+            <li><strong>Dead-letter event</strong> A dead-lettered job raises an event you can subscribe to.</li>
+          </ul>
+        </details>
+        <details class="src">
+          <summary>Where this lives in the source</summary>
+          <ul>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/core/src/jobs.ts"><code>packages/core/src/jobs.ts</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/core/src/scheduler.ts"><code>packages/core/src/scheduler.ts</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/core/src/wake.ts"><code>packages/core/src/wake.ts</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/app/src/components/ScheduleDetail.tsx"><code>packages/app/src/components/ScheduleDetail.tsx</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/app/src/components/ScheduleFormCard.tsx"><code>packages/app/src/components/ScheduleFormCard.tsx</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/app/src/components/ScheduleLibraryCard.tsx"><code>packages/app/src/components/ScheduleLibraryCard.tsx</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/README.md"><code>README.md</code></a></li>
+          </ul>
+        </details>
+      </article>
+    </section>
+
+    <section class="fam" id="family-remember" aria-labelledby="family-remember-title" data-family="remember">
+      <header class="fam__head">
+        <h2 id="family-remember-title">Remember and review</h2>
+        <p class="sub">What the fleet learned, what it produced, and the human check before it lands.</p>
+      </header>
+      <article class="cat" id="memory" aria-labelledby="memory-title" data-kw="memory note decision fact todo question wiki link backlink folder tag pin search semantic lexical graph chronicle index">
+        <header class="cat__head">
+          <p class="kicker">Remember and review</p>
+          <h3 id="memory-title">Shared memory the whole fleet can search</h3>
+          <p class="cat__short">Shared notes with ranked search, graphs and pins</p>
+        </header>
+        <dl class="story">
+          <div><dt>The problem</dt><dd>Every new agent starts from zero. What one agent learned on Monday is gone by Tuesday, and the next agent repeats the mistake.</dd></div>
+          <div><dt>What changes</dt><dd>Agents and people write notes, decisions, facts, todos and questions into one shared store, and search it by meaning or by keyword before starting related work.</dd></div>
+          <div><dt>In practice</dt><dd>An Atlas agent records a decision that the site uses system fonts only. A week later another agent searches memory before touching the stylesheet, finds the decision, and follows it.</dd></div>
+        </dl>
+        <figure class="shot shot--light">
+          <a href="assets/chimera-memory.png" data-zoom><img src="assets/chimera-memory.png" width="1600" height="1000" alt="Chimera shared memory: notes by folder with pins and tags, and the selected note's links and backlinks (demo data)" loading="lazy" decoding="async"></a>
+          <figcaption>Actual Chimera interface · demo data</figcaption>
+        </figure>
+        <div class="groups">
+          <section class="grp" aria-labelledby="memory-g1">
+            <h4 id="memory-g1">Write and organize</h4>
+            <dl class="items">
+              <div><dt>Kinds</dt><dd>Note, decision, fact, todo and question.</dd></div>
+              <div><dt>Folders, tags and pins</dt><dd>Organize notes in folders, label them with tags and pin the ones that matter.</dd></div>
+              <div><dt>Backlinks</dt><dd>Wiki-style links connect notes, and linked-from lists appear on each one.</dd></div>
+            </dl>
+          </section>
+          <section class="grp" aria-labelledby="memory-g2">
+            <h4 id="memory-g2">Find</h4>
+            <dl class="items">
+              <div><dt>Hybrid search</dt><dd>Lexical and semantic search together.</dd></div>
+              <div><dt>Scope is ranking</dt><dd>Scoping a search changes ranking. It is not access control.</dd></div>
+              <div><dt>Your own history</dt><dd>An agent can search the record of its own past turns after its context was compacted.</dd></div>
+            </dl>
+          </section>
+          <section class="grp" aria-labelledby="memory-g3">
+            <h4 id="memory-g3">Inspect</h4>
+            <dl class="items">
+              <div><dt>Graph</dt><dd>A graph of links and dangling references; semantic edges appear only once the vector index is ready.</dd></div>
+              <div><dt>Capacity and index status</dt><dd>See how full memory is and whether the semantic index is built.</dd></div>
+            </dl>
+          </section>
+        </div>
+        <details class="adv">
+          <summary>Smaller capabilities in this area <span class="adv__n">(2)</span></summary>
+          <ul>
+            <li><strong>Memory pressure events</strong> Events fire when memory is under pressure or when notes are evicted.</li>
+            <li><strong>Index status</strong> Check whether the vector index is built before relying on semantic links.</li>
+          </ul>
+        </details>
+        <details class="src">
+          <summary>Where this lives in the source</summary>
+          <ul>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/app/src/screens/MemoryScreen.tsx"><code>packages/app/src/screens/MemoryScreen.tsx</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/app/src/components/MemoryGraph.tsx"><code>packages/app/src/components/MemoryGraph.tsx</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/app/src/components/MemoryNoteEditor.tsx"><code>packages/app/src/components/MemoryNoteEditor.tsx</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/protocol/src/mcp-tools.ts"><code>packages/protocol/src/mcp-tools.ts</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/README.md"><code>README.md</code></a></li>
+          </ul>
+        </details>
+      </article>
+
+      <article class="cat" id="artifacts" aria-labelledby="artifacts-title" data-kw="artifact checkpoint revert snapshot design file output gate check restore">
+        <header class="cat__head">
+          <p class="kicker">Remember and review</p>
+          <h3 id="artifacts-title">Artifacts and checkpoints</h3>
+          <p class="cat__short">Keep what agents produce and snapshot a tree without touching HEAD</p>
+        </header>
+        <dl class="story">
+          <div><dt>The problem</dt><dd>Agents produce files and plans that get lost in a transcript, and a bad edit has no easy way back.</dd></div>
+          <div><dt>What changes</dt><dd>Register the outputs that matter as artifacts the workflow can check, and take checkpoints you can roll a working tree back to.</dd></div>
+          <div><dt>In practice</dt><dd>An Atlas agent registers a plan artifact. The workflow gate checks that it exists before the build step. A later edit goes wrong, so you revert the working tree to the last checkpoint.</dd></div>
+        </dl>
+        <p class="limits"><strong>Limits.</strong> A revert is a hard reset of that working tree; use it on purpose.</p>
+        <div class="groups">
+          <section class="grp" aria-labelledby="artifacts-g1">
+            <h4 id="artifacts-g1">Artifacts</h4>
+            <dl class="items">
+              <div><dt>Add, list, read</dt><dd>Agents register named outputs and read them back later.</dd></div>
+              <div><dt>Usable as gate checks</dt><dd>A workflow step can require that an artifact exists.</dd></div>
+              <div><dt>Revisions in the design workspace</dt><dd>Snapshots of artifact revisions can be browsed there, and the selected one pinned.</dd></div>
+            </dl>
+          </section>
+          <section class="grp" aria-labelledby="artifacts-g2">
+            <h4 id="artifacts-g2">Checkpoints</h4>
+            <dl class="items">
+              <div><dt>Create and list</dt><dd>Take a checkpoint of a working directory and see them in the project view.</dd></div>
+              <div><dt>Revert</dt><dd>Hard-reset a working tree to a prior checkpoint.</dd></div>
+              <div><dt>Never touches your history</dt><dd>Checkpoints do not change HEAD, the index or git history.</dd></div>
+            </dl>
+          </section>
+        </div>
+        <details class="src">
+          <summary>Where this lives in the source</summary>
+          <ul>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/core/src/artifacts.ts"><code>packages/core/src/artifacts.ts</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/core/src/checkpoints.ts"><code>packages/core/src/checkpoints.ts</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/app/src/components/ArtifactsStrip.tsx"><code>packages/app/src/components/ArtifactsStrip.tsx</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/app/src/components/CheckpointsCard.tsx"><code>packages/app/src/components/CheckpointsCard.tsx</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/app/src/components/DesignWorkspace.tsx"><code>packages/app/src/components/DesignWorkspace.tsx</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/README.md"><code>README.md</code></a></li>
+          </ul>
+        </details>
+      </article>
+
+      <article class="cat" id="review" aria-labelledby="review-title" data-kw="review room diff finding decision evidence provenance merge commit worktree isolation lease handoff single writer land">
+        <header class="cat__head">
+          <p class="kicker">Remember and review</p>
+          <h3 id="review-title">Review, evidence and worktrees</h3>
+          <p class="cat__short">A human check with evidence before work lands, plus worktree leases</p>
+        </header>
+        <dl class="story">
+          <div><dt>The problem</dt><dd>Agent changes arrive as a pile of edits. Reviewing them means hunting for branches, diffs and the reason a change exists.</dd></div>
+          <div><dt>What changes</dt><dd>Every agent works in its own git worktree. A review room shows the diff, findings and the decision, and an evidence panel traces a change from branch to diff to merge commit.</dd></div>
+          <div><dt>In practice</dt><dd>An Atlas worker finishes in its own worktree. In the review room you add a finding on one hunk, the worker fixes it, and you approve. The evidence panel then links the branch, the diff and the merge commit.</dd></div>
+        </dl>
+        <p class="limits"><strong>Limits.</strong> Worktrees isolate changes, not processes or filesystem access. An agent with full permissions can still reach outside its worktree.</p>
+        <div class="groups">
+          <section class="grp" aria-labelledby="review-g1">
+            <h4 id="review-g1">Review room</h4>
+            <dl class="items">
+              <div><dt>Live diff</dt><dd>The diff refreshes while the task is still in progress.</dd></div>
+              <div><dt>Findings and decision</dt><dd>Add and resolve findings, then decide. The decision button guards against double-submit.</dd></div>
+            </dl>
+          </section>
+          <section class="grp" aria-labelledby="review-g2">
+            <h4 id="review-g2">Evidence</h4>
+            <dl class="items">
+              <div><dt>Changes and evidence</dt><dd>A panel traces provenance branch, then diff, then merge commit.</dd></div>
+            </dl>
+          </section>
+          <section class="grp" aria-labelledby="review-g3">
+            <h4 id="review-g3">Worktrees</h4>
+            <dl class="items">
+              <div><dt>One worktree per agent</dt><dd>Created with git worktree under a per-key directory so concurrent agents do not edit the same files.</dd></div>
+              <div><dt>Single-writer lease</dt><dd>One agent holds the write lease for a worktree. Leases can be listed, handed off or released; a release while the holder is still live needs force.</dd></div>
+            </dl>
+          </section>
+        </div>
+        <details class="adv">
+          <summary>Smaller capabilities in this area <span class="adv__n">(1)</span></summary>
+          <ul>
+            <li><strong>Force-release a lease</strong> Release a worktree lease even while its holder is live, only on purpose.</li>
+          </ul>
+        </details>
+        <details class="src">
+          <summary>Where this lives in the source</summary>
+          <ul>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/core/src/reviews.ts"><code>packages/core/src/reviews.ts</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/core/src/evidence.ts"><code>packages/core/src/evidence.ts</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/core/src/worktree-lease.ts"><code>packages/core/src/worktree-lease.ts</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/app/src/screens/ReviewRoomScreen.tsx"><code>packages/app/src/screens/ReviewRoomScreen.tsx</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/app/src/components/ChangesEvidencePanel.tsx"><code>packages/app/src/components/ChangesEvidencePanel.tsx</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/README.md"><code>README.md</code></a></li>
+          </ul>
+        </details>
+      </article>
+    </section>
+
+    <section class="fam" id="family-connect" aria-labelledby="family-connect-title" data-family="connect">
+      <header class="fam__head">
+        <h2 id="family-connect-title">Connect and extend</h2>
+        <p class="sub">Tools, secrets, desktop control, skills, hooks and other machines, with controls over what each can reach.</p>
+      </header>
+      <article class="cat" id="mcp-store" aria-labelledby="mcp-store-title" data-kw="mcp store server trust untrusted full oauth bearer import discovery proxy direct session shared exclusive http proposal built-in laya browser desktop package ownership exclusive session proposal http">
+        <header class="cat__head">
+          <p class="kicker">Connect and extend</p>
+          <h3 id="mcp-store-title">MCP store with trust and OAuth</h3>
+          <p class="cat__short">MCP servers with trust levels, OAuth and discovery</p>
+        </header>
+        <dl class="story">
+          <div><dt>The problem</dt><dd>Every MCP server you add is code with access to your agent. Wiring them into each client by hand leaves nothing you can review.</dd></div>
+          <div><dt>What changes</dt><dd>One store holds every MCP server. An agent's proposal arrives disabled and untrusted, and agents can propose servers but cannot enable, trust, add credentials to or sign in to them. Calls to an untrusted server that can write ask first.</dd></div>
+          <div><dt>In practice</dt><dd>An Atlas agent proposes an HTTP MCP server it found. It appears in Settings as a disabled, untrusted proposal. You review it, sign in with OAuth yourself and mark it trusted. Until you enable it, agents cannot call its tools. The daemon may still run its guarded, unauthenticated OAuth metadata check to see how the server signs in, and the sign-in itself stays a human step.</dd></div>
+        </dl>
+        <figure class="shot shot--light">
+          <a href="assets/chimera-mcp-store.png" data-zoom><img src="assets/chimera-mcp-store.png" width="1600" height="1000" alt="Settings → MCP store: built-in servers (no uninstall) beside external servers, each with a trust badge (full/untrusted) and an OAuth status chip (authorized, needs re-auth, bearer, never); hosts are reserved example domains." loading="lazy" decoding="async"></a>
+          <figcaption>Actual Chimera interface · demo data</figcaption>
+        </figure>
+        <div class="groups">
+          <section class="grp" aria-labelledby="mcp-store-g1">
+            <h4 id="mcp-store-g1">Install and trust</h4>
+            <dl class="items">
+              <div><dt>Disabled and untrusted proposals</dt><dd>An agent's proposal and a package installed from the store are saved disabled and untrusted. Servers imported from Claude or Codex config come in enabled and fully trusted. Either can be changed afterwards. Trust is full or untrusted, and unknown means untrusted.</dd></div>
+              <div><dt>Approval on risky calls</dt><dd>A call to an untrusted server that may write asks for approval. Calls the server hints are read-only are allowed.</dd></div>
+              <div><dt>Reviewed packages</dt><dd>Package-based servers are reviewed before install, with lifecycle scripts off.</dd></div>
+              <div><dt>Built-in servers</dt><dd>Chimera's own browser and desktop servers and the Laya server are built in and cannot be uninstalled.</dd></div>
+            </dl>
+          </section>
+          <section class="grp" aria-labelledby="mcp-store-g2">
+            <h4 id="mcp-store-g2">Discover and import</h4>
+            <dl class="items">
+              <div><dt>Import from Claude and Codex</dt><dd>Find the servers already configured in those clients and import them. Imports arrive enabled and fully trusted, so look them over, and switch trust down for any you want approvals on.</dd></div>
+              <div><dt>OAuth discovery</dt><dd>For a remote URL you add or import, the daemon makes an unauthenticated request for public OAuth metadata through an SSRF guard: public addresses only, redirects re-checked, time and size bounded. If it finds an authorization server the entry defaults to OAuth. This can happen while the server is disabled, and an inconclusive result never blocks the add. A localhost or LAN server is stored but not auto-detected, so choose its auth type yourself. The same public-only rule holds when an untrusted entry, such as an agent's proposal, signs in. A fully trusted entry may use private addresses, and so may the live connection of any server you enable, so a local MCP server keeps working.</dd></div>
+              <div><dt>Agents can propose</dt><dd>An agent's proposal is a disabled, untrusted entry for you to review. It cannot enable or trust it, add headers or credentials, or complete OAuth, and it does not install a package.</dd></div>
+            </dl>
+          </section>
+          <section class="grp" aria-labelledby="mcp-store-g3">
+            <h4 id="mcp-store-g3">Operate</h4>
+            <dl class="items">
+              <div><dt>OAuth and bearer</dt><dd>HTTP servers use bearer tokens or OAuth, with a status chip and a re-authorize action.</dd></div>
+              <div><dt>Session modes</dt><dd>Share one session, give each agent its own, or take it exclusively.</dd></div>
+              <div><dt>Direct or proxy-only</dt><dd>Choose whether agents see a server's native tools or reach them only through the proxy.</dd></div>
+            </dl>
+          </section>
+          <section class="grp" aria-labelledby="mcp-store-g4">
+            <h4 id="mcp-store-g4">Both directions</h4>
+            <dl class="items">
+              <div><dt>Chimera as an MCP server</dt><dd>Claude Code, Codex or any stdio MCP client can drive Chimera through its MCP server. A small core of tools (spawn, wait, send, ask, memory, team basics) is always visible; the rest are found and called on demand, so their schemas are not sent on every turn.</dd></div>
+              <div><dt>One tool surface out</dt><dd>The same store connects Chimera out to other MCP servers, so agents reach one set of tools instead of every client configuring the same servers.</dd></div>
+            </dl>
+          </section>
+        </div>
+        <details class="adv">
+          <summary>Smaller capabilities in this area <span class="adv__n">(2)</span></summary>
+          <ul>
+            <li><strong>Remove, list, call</strong> List, add and remove servers, inspect their tools and call a tool through the store.</li>
+            <li><strong>Importable servers</strong> List what could be imported before importing it.</li>
+          </ul>
+        </details>
+        <details class="src">
+          <summary>Where this lives in the source</summary>
+          <ul>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/core/src/mcpstore.ts"><code>packages/core/src/mcpstore.ts</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/core/src/providers/mcpstore-oauth-detect.ts"><code>packages/core/src/providers/mcpstore-oauth-detect.ts</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/core/src/mcp-imports.ts"><code>packages/core/src/mcp-imports.ts</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/core/src/mcp-packages.ts"><code>packages/core/src/mcp-packages.ts</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/core/src/broker.ts"><code>packages/core/src/broker.ts</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/app/src/screens/SettingsScreen.tsx"><code>packages/app/src/screens/SettingsScreen.tsx</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/README.md"><code>README.md</code></a></li>
+          </ul>
+        </details>
+      </article>
+
+      <article class="cat" id="secrets" aria-labelledby="secrets-title" data-kw="secret secrets keychain grant inject reveal audit redaction environment variable credential token">
+        <header class="cat__head">
+          <p class="kicker">Connect and extend</p>
+          <h3 id="secrets-title">A secrets manager with grants and an audit trail</h3>
+          <p class="cat__short">Named secrets with per-agent grants and an audit trail</p>
+        </header>
+        <dl class="story">
+          <div><dt>The problem</dt><dd>Agents need tokens, and pasting them into prompts or committing them next to the code puts them in logs and transcripts.</dd></div>
+          <div><dt>What changes</dt><dd>Store a secret once, grant it to specific agents in a mode you choose, and have every read audited. Values are stored in the system keychain.</dd></div>
+          <div><dt>In practice</dt><dd>The Atlas deploy agent gets a deploy token in inject mode: it appears as an environment variable the next time the agent starts. A review agent gets reveal mode and has to read it through the secret tool, which writes an audit entry each time.</dd></div>
+        </dl>
+        <figure class="shot shot--light">
+          <a href="assets/chimera-secrets.png" data-zoom><img src="assets/chimera-secrets.png" width="1600" height="1000" alt="Settings → Secrets: named secrets with descriptions and per-agent grant modes; values are never shown, only names and masked state." loading="lazy" decoding="async"></a>
+          <figcaption>Actual Chimera interface · demo data</figcaption>
+        </figure>
+        <p class="limits"><strong>Limits.</strong> On macOS the value is passed to the keychain command as an argument, so it is briefly visible to other local processes. A corrupt secrets file makes the daemon refuse to start rather than guess.</p>
+        <div class="groups">
+          <section class="grp" aria-labelledby="secrets-g1">
+            <h4 id="secrets-g1">Store</h4>
+            <dl class="items">
+              <div><dt>System keychain</dt><dd>Values go to the system keychain. The secrets file holds only names, descriptions and grants, never values, and is private to your user.</dd></div>
+              <div><dt>Names, not values, in the UI</dt><dd>The settings screen shows names, descriptions and masked state.</dd></div>
+            </dl>
+          </section>
+          <section class="grp" aria-labelledby="secrets-g2">
+            <h4 id="secrets-g2">Grant</h4>
+            <dl class="items">
+              <div><dt>Inject or reveal</dt><dd>Inject sets an environment variable at the agent's next start. Reveal lets the agent read the value through a tool.</dd></div>
+              <div><dt>Uniform denial</dt><dd>An agent that is not granted a secret, one that is granted inject only, and a secret that does not exist all look the same.</dd></div>
+              <div><dt>Agents list only their own grants</dt><dd>An agent cannot enumerate secrets it was not given.</dd></div>
+            </dl>
+          </section>
+          <section class="grp" aria-labelledby="secrets-g3">
+            <h4 id="secrets-g3">Audit and operate</h4>
+            <dl class="items">
+              <div><dt>Audit</dt><dd>Writes, grants and reads are recorded, with allow or deny for grants and reads.</dd></div>
+              <div><dt>Redaction</dt><dd>A value an agent revealed is registered for redaction in logs.</dd></div>
+              <div><dt>Operator-only management</dt><dd>Setting, deleting, granting and revoking are not exposed to agents through MCP.</dd></div>
+            </dl>
+          </section>
+        </div>
+        <details class="adv">
+          <summary>Smaller capabilities in this area <span class="adv__n">(1)</span></summary>
+          <ul>
+            <li><strong>Corrupt file fails closed</strong> A corrupt secrets file stops the daemon instead of silently losing grants.</li>
+          </ul>
+        </details>
+        <details class="src">
+          <summary>Where this lives in the source</summary>
+          <ul>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/core/src/secrets.ts"><code>packages/core/src/secrets.ts</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/core/src/keychain.ts"><code>packages/core/src/keychain.ts</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/app/src/components/SecretsSection.tsx"><code>packages/app/src/components/SecretsSection.tsx</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/protocol/src/mcp-tools.ts"><code>packages/protocol/src/mcp-tools.ts</code></a></li>
+          </ul>
+        </details>
+      </article>
+
+      <article class="cat" id="computer-use" aria-labelledby="computer-use-title" data-kw="computer use browser headless desktop control laya macos lease monitor stop screenshot preview exclusive">
+        <header class="cat__head">
+          <p class="kicker">Connect and extend</p>
+          <h3 id="computer-use-title">Browser and desktop control, with a monitor</h3>
+          <p class="cat__short">Browser, desktop control and optional Laya assistance</p>
+        </header>
+        <dl class="story">
+          <div><dt>The problem</dt><dd>An agent that can click and type on your machine is powerful and risky, and you need to see what it is doing and stop it.</dd></div>
+          <div><dt>What changes</dt><dd>Give agents a headless browser or, on macOS, control of the real desktop, optionally with Laya, a local assistant that ranks candidate actions. While an agent holds the desktop, a live preview appears in that agent's own transcript with a Stop button. Desktop control is exclusive, so two agents never fight over the mouse.</dd></div>
+          <div><dt>In practice</dt><dd>An Atlas agent drives the macOS desktop to check how the staging page renders in your real browser window. A small preview sits at the upper right of that agent's transcript with the target window and the latest actions. When one looks wrong, you press Stop desktop control.</dd></div>
+        </dl>
+        <figure class="shot shot--light">
+          <a href="assets/chimera-computer-use.png" data-zoom><img src="assets/chimera-computer-use.png" width="1600" height="1000" alt="Agent transcript with the Desktop control monitor (preview + recent actions + Stop button) over a synthetic target image clearly labelled DEMO — not a real desktop." loading="lazy" decoding="async"></a>
+          <figcaption>Actual Chimera monitor component · synthetic demo target</figcaption>
+        </figure>
+        <p class="limits"><strong>Limits.</strong> The screenshot above is a synthetic demo target, clearly labelled, not a real desktop. Desktop control and Laya are macOS only. Laya only helps rank actions: the exclusive lease and the Stop button apply the same way with or without it.</p>
+        <div class="groups">
+          <section class="grp" aria-labelledby="computer-use-g1">
+            <h4 id="computer-use-g1">Three ways in</h4>
+            <dl class="items">
+              <div><dt>Laya (optional)</dt><dd>Optional local action-ranking assistance for computer use. It needs macOS 14 or later. You install it from the Computer use card, which downloads one English model pinned to a full revision and checked against a digest; after that it runs offline. It is English-only: a multilingual or typed-decision request fails rather than fetching a model Chimera has not reviewed.</dd></div>
+              <div><dt>Headless browser</dt><dd>Browser automation without a window, with its own session for each agent; not supported on Linux arm64 or Windows arm64. The lease and the live preview below belong to desktop control, not to this.</dd></div>
+              <div><dt>Desktop control</dt><dd>Control the real desktop, which an agent has to acquire first. macOS only.</dd></div>
+            </dl>
+          </section>
+          <section class="grp" aria-labelledby="computer-use-g2">
+            <h4 id="computer-use-g2">Stay in control</h4>
+            <dl class="items">
+              <div><dt>Exclusive desktop lease</dt><dd>An agent acquires and releases desktop control, so only one controls it at a time. A call in progress cannot be taken over, and an idle lease expires after five minutes.</dd></div>
+              <div><dt>Preview in the owner's transcript</dt><dd>The monitor sits at the upper right of the transcript of the agent that holds the lease, and only there. It shows the lease owner, whether it is busy, the target window and recent tool outcomes.</dd></div>
+              <div><dt>Hide is not Stop</dt><dd>Hiding or collapsing the preview only pauses the preview; the agent keeps control. Stop desktop control ends it and also turns off automatic startup.</dd></div>
+              <div><dt>Not a recorder</dt><dd>The monitor does not keep screenshots, typed text or call arguments.</dd></div>
+            </dl>
+          </section>
+        </div>
+        <details class="src">
+          <summary>Where this lives in the source</summary>
+          <ul>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/core/src/computer-use.ts"><code>packages/core/src/computer-use.ts</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/core/src/mcpstore.ts"><code>packages/core/src/mcpstore.ts</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/app/src/components/ComputerUseMonitor.tsx"><code>packages/app/src/components/ComputerUseMonitor.tsx</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/app/src/components/ComputerUseCard.tsx"><code>packages/app/src/components/ComputerUseCard.tsx</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/README.md"><code>README.md</code></a></li>
+          </ul>
+        </details>
+      </article>
+
+      <article class="cat" id="skills-plugins" aria-labelledby="skills-plugins-title" data-kw="skill plugin discovery search read toggle index context">
+        <header class="cat__head">
+          <p class="kicker">Connect and extend</p>
+          <h3 id="skills-plugins-title">Skills and plugins on demand</h3>
+          <p class="cat__short">Install, enable and bind skills and plugins</p>
+        </header>
+        <dl class="story">
+          <div><dt>The problem</dt><dd>Loading every skill into every prompt wastes context, and agents rarely know which skill fits the task.</dd></div>
+          <div><dt>What changes</dt><dd>Agents search the skill index and load a skill at the moment they need it. Plugins can be switched on and off from one card.</dd></div>
+          <div><dt>In practice</dt><dd>An Atlas agent about to write a test searches skills for testing guidance, reads the one it finds and applies it, without carrying the others in its prompt.</dd></div>
+        </dl>
+        <div class="groups">
+          <section class="grp" aria-labelledby="skills-plugins-g1">
+            <h4 id="skills-plugins-g1">Skills</h4>
+            <dl class="items">
+              <div><dt>Search and read</dt><dd>Agents search for a skill and read it only when needed.</dd></div>
+              <div><dt>Scoped to the project</dt><dd>The index favors the agent's project's own skills first.</dd></div>
+            </dl>
+          </section>
+          <section class="grp" aria-labelledby="skills-plugins-g2">
+            <h4 id="skills-plugins-g2">Plugins</h4>
+            <dl class="items">
+              <div><dt>List and toggle</dt><dd>See plugins and enable or disable them.</dd></div>
+              <div><dt>Per-role skills and plugins</dt><dd>Roles list the skills and plugins their agents get.</dd></div>
+            </dl>
+          </section>
+        </div>
+        <details class="src">
+          <summary>Where this lives in the source</summary>
+          <ul>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/core/src/skills.ts"><code>packages/core/src/skills.ts</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/core/src/plugins.ts"><code>packages/core/src/plugins.ts</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/app/src/components/PluginsCard.tsx"><code>packages/app/src/components/PluginsCard.tsx</code></a></li>
+          </ul>
+        </details>
+      </article>
+
+      <article class="cat" id="hooks" aria-labelledby="hooks-title" data-kw="event subscription hook trigger notify webhook toast os command spawn push topic filter throttle wake">
+        <header class="cat__head">
+          <p class="kicker">Connect and extend</p>
+          <h3 id="hooks-title">Event subscriptions and hooks</h3>
+          <p class="cat__short">Rules on daemon events that notify, queue work or run a command</p>
+        </header>
+        <dl class="story">
+          <div><dt>The problem</dt><dd>Polling for an event wastes tokens, and reacting to one automatically usually means a custom script.</dd></div>
+          <div><dt>What changes</dt><dd>An agent can sleep until an event arrives. A hook reacts to an event with no agent in the loop: notify, queue a task, spawn, run a sandboxed command, or send a notification.</dd></div>
+          <div><dt>In practice</dt><dd>A hook on Atlas pushes a regression-check task whenever code lands on main. A notify rule sends an OS notification when a queue drains, throttled so it does not repeat.</dd></div>
+        </dl>
+        <div class="groups">
+          <section class="grp" aria-labelledby="hooks-g1">
+            <h4 id="hooks-g1">Subscriptions</h4>
+            <dl class="items">
+              <div><dt>Wake on an event</dt><dd>Subscribe, then end your turn. Topics include agent settled or spawned, task state, gate verdict, queue drained, repo landed, memory added, permission or question pending, budget warning, system woke, prompt stalled and job dead-lettered.</dd></div>
+              <div><dt>Filters</dt><dd>Narrow by agent, tree, task, queue, team, state or tags.</dd></div>
+            </dl>
+          </section>
+          <section class="grp" aria-labelledby="hooks-g2">
+            <h4 id="hooks-g2">Hooks and notifications</h4>
+            <dl class="items">
+              <div><dt>Durable hooks</dt><dd>Run actions when a matching event fires: notify an agent, push a task, spawn an agent, run a local command or send a notification.</dd></div>
+              <div><dt>Channels</dt><dd>Toast, OS notification or webhook.</dd></div>
+              <div><dt>Notify rules</dt><dd>Event, filter, channel and throttle per rule, with a test button that bypasses the throttle.</dd></div>
+              <div><dt>Last fired</dt><dd>The hooks card shows when a rule last fired or was suppressed.</dd></div>
+            </dl>
+          </section>
+        </div>
+        <details class="adv">
+          <summary>Smaller capabilities in this area <span class="adv__n">(1)</span></summary>
+          <ul>
+            <li><strong>Tag filters</strong> Match a task's tags in a hook or subscription filter.</li>
+          </ul>
+        </details>
+        <details class="src">
+          <summary>Where this lives in the source</summary>
+          <ul>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/core/src/hooks.ts"><code>packages/core/src/hooks.ts</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/core/src/subscriptions.ts"><code>packages/core/src/subscriptions.ts</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/core/src/notify.ts"><code>packages/core/src/notify.ts</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/app/src/components/HooksCard.tsx"><code>packages/app/src/components/HooksCard.tsx</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/app/src/components/NotifyRulesCard.tsx"><code>packages/app/src/components/NotifyRulesCard.tsx</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/README.md"><code>README.md</code></a></li>
+          </ul>
+        </details>
+      </article>
+
+      <article class="cat" id="federation" aria-labelledby="federation-title" data-kw="federation peer remote machine ssh tunnel pairing invite allow spawn accounts concurrency cloudflare read-only">
+        <header class="cat__head">
+          <p class="kicker">Connect and extend <span class="pill pill--warn">Experimental</span></p>
+          <h3 id="federation-title">Federation across machines</h3>
+          <p class="cat__short">Connect Chimera instances across machines</p>
+        </header>
+        <dl class="story">
+          <div><dt>The problem</dt><dd>Sometimes the machine with the repository or the GPU is not the one you are sitting at.</dd></div>
+          <div><dt>What changes</dt><dd>Pair Chimera installs so one can see another's agents and, only if you allow it, start work there. Peers are read-only by default.</dd></div>
+          <div><dt>In practice</dt><dd>You pair your laptop with a desktop that holds the Atlas build cache. The peer is read-only until you explicitly allow it to spawn, and then only with the accounts you listed.</dd></div>
+        </dl>
+        <p class="limits"><strong>Limits.</strong> Federation is the most experimental surface, with little everyday use. It is configured as peers in config, not a single switch.</p>
+        <div class="groups">
+          <section class="grp" aria-labelledby="federation-g1">
+            <h4 id="federation-g1">Safe by default</h4>
+            <dl class="items">
+              <div><dt>Read-only peers</dt><dd>Per-peer spawn permission defaults to off. The account allowlist defaults to none, and concurrency is capped.</dd></div>
+              <div><dt>Provider keys stay local</dt><dd>Peers exchange account names, never keys or tokens. Configuration and the account set stay on each machine. The one secret that travels is the single-use pairing token inside the invite.</dd></div>
+            </dl>
+          </section>
+          <section class="grp" aria-labelledby="federation-g2">
+            <h4 id="federation-g2">Connect</h4>
+            <dl class="items">
+              <div><dt>SSH-tunneled socket</dt><dd>Pinned host keys and a dedicated restricted key; optional Cloudflare Access in front.</dd></div>
+              <div><dt>Pairing by invite</dt><dd>The raw token appears only in the invite blob. Lists show hashes, and the host key is pinned on first use.</dd></div>
+              <div><dt>Peer status</dt><dd>A local snapshot of peers' last-known status and cached host-tool summaries.</dd></div>
+            </dl>
+          </section>
+        </div>
+        <details class="src">
+          <summary>Where this lives in the source</summary>
+          <ul>
+            <li><a href="https://github.com/nedimYilmaz/chimera/tree/main/packages/core/src/federation"><code>packages/core/src/federation</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/app/src/components/FederationPairing.tsx"><code>packages/app/src/components/FederationPairing.tsx</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/README.md"><code>README.md</code></a></li>
+          </ul>
+        </details>
+      </article>
+    </section>
+
+    <section class="fam" id="family-see" aria-labelledby="family-see-title" data-family="see">
+      <header class="fam__head">
+        <h2 id="family-see-title">See and steer</h2>
+        <p class="sub">One place to notice what needs you, look back at what ran, and work next to the agents.</p>
+      </header>
+      <article class="cat" id="inbox" aria-labelledby="inbox-title" data-kw="inbox attention notification question approval prompt failed blocked ask human escalate toast dedupe">
+        <header class="cat__head">
+          <p class="kicker">See and steer</p>
+          <h3 id="inbox-title">One attention inbox</h3>
+          <p class="cat__short">Questions, approvals and notifications that need you</p>
+        </header>
+        <dl class="story">
+          <div><dt>The problem</dt><dd>Permission prompts, questions, approvals and failures arrive in different places and the important one is buried.</dd></div>
+          <div><dt>What changes</dt><dd>A single, prioritized, de-duplicated feed of everything waiting on you, with the actions to resolve it.</dd></div>
+          <div><dt>In practice</dt><dd>Overnight an Atlas worker asks a question, a gate waits for approval and one task fails. In the morning the inbox lists all three, most urgent first, instead of three tabs.</dd></div>
+        </dl>
+        <div class="groups">
+          <section class="grp" aria-labelledby="inbox-g1">
+            <h4 id="inbox-g1">What lands here</h4>
+            <dl class="items">
+              <div><dt>Permission prompts</dt><dd>Pending tool permission requests.</dd></div>
+              <div><dt>Questions</dt><dd>Agents can ask you, another agent or a team, and you answer from the app.</dd></div>
+              <div><dt>Approval gates</dt><dd>Workflow steps waiting for a human.</dd></div>
+              <div><dt>Failed and blocked tasks</dt><dd>So you notice them.</dd></div>
+            </dl>
+          </section>
+          <section class="grp" aria-labelledby="inbox-g2">
+            <h4 id="inbox-g2">Notifications</h4>
+            <dl class="items">
+              <div><dt>Prioritized and de-duplicated</dt><dd>One feed derived from live state.</dd></div>
+              <div><dt>Notify rules</dt><dd>Optional toast, OS or webhook notifications for the events you pick.</dd></div>
+            </dl>
+          </section>
+        </div>
+        <details class="src">
+          <summary>Where this lives in the source</summary>
+          <ul>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/app/src/screens/InboxScreen.tsx"><code>packages/app/src/screens/InboxScreen.tsx</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/app/src/components/NotifyRulesCard.tsx"><code>packages/app/src/components/NotifyRulesCard.tsx</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/core/src/notify.ts"><code>packages/core/src/notify.ts</code></a></li>
+          </ul>
+        </details>
+      </article>
+
+      <article class="cat" id="history" aria-labelledby="history-title" data-kw="history events replay diagnostics doctor support report audit chain journal slo health export backfill cost run">
+        <header class="cat__head">
+          <p class="kicker">See and steer</p>
+          <h3 id="history-title">History, events and diagnostics</h3>
+          <p class="cat__short">Look back at what ran: events, replay and diagnostics</p>
+        </header>
+        <dl class="story">
+          <div><dt>The problem</dt><dd>When something went wrong last night, chat scrollback does not tell you which run, which model, what it cost or what happened in order.</dd></div>
+          <div><dt>What changes</dt><dd>One history of everything the fleet ran, an event log you can page through and replay, and diagnostics you can run without starting the daemon.</dd></div>
+          <div><dt>In practice</dt><dd>A scheduled Atlas job failed overnight. History shows the run, its trigger and its cost. The events screen shows the sequence around it, and you export a sanitized Markdown excerpt for a bug report.</dd></div>
+        </dl>
+        <div class="groups">
+          <section class="grp" aria-labelledby="history-g1">
+            <h4 id="history-g1">Look back</h4>
+            <dl class="items">
+              <div><dt>Run history</dt><dd>Agents, queue tasks and scheduled firings in one list with trigger, model, cost, outcome and duration. Kind and outcome chips filter it, and it refreshes itself.</dd></div>
+              <div><dt>Events</dt><dd>A full-width event table with paged replay and backfill.</dd></div>
+              <div><dt>Agents as of a time</dt><dd>Reconstruct agent status from the last snapshot plus later events.</dd></div>
+            </dl>
+          </section>
+          <section class="grp" aria-labelledby="history-g2">
+            <h4 id="history-g2">Diagnose</h4>
+            <dl class="items">
+              <div><dt>Doctor</dt><dd>A command that checks your install without starting the daemon.</dd></div>
+              <div><dt>Support report</dt><dd>Privacy-minimized JSON for a bug report.</dd></div>
+              <div><dt>Sanitized export</dt><dd>A bounded Markdown export of retained events from an agent and its sub-agents.</dd></div>
+              <div><dt>Audit chain</dt><dd>Verify the local audit hash chain. Verification reports; it does not repair.</dd></div>
+              <div><dt>Performance</dt><dd>A service-level screen over latency, tokens, cost, gate failures and error rates.</dd></div>
+            </dl>
+          </section>
+        </div>
+        <details class="adv">
+          <summary>Smaller capabilities in this area <span class="adv__n">(2)</span></summary>
+          <ul>
+            <li><strong>Event search export bound</strong> An export is capped at a fixed number of events and does not write files.</li>
+            <li><strong>Chronicle</strong> Semantic search over your own agent's past turns, commands and results.</li>
+          </ul>
+        </details>
+        <details class="src">
+          <summary>Where this lives in the source</summary>
+          <ul>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/app/src/screens/HistoryScreen.tsx"><code>packages/app/src/screens/HistoryScreen.tsx</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/app/src/screens/EventsScreen.tsx"><code>packages/app/src/screens/EventsScreen.tsx</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/app/src/screens/SloScreen.tsx"><code>packages/app/src/screens/SloScreen.tsx</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/core/src/run-history.ts"><code>packages/core/src/run-history.ts</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/core/src/replay.ts"><code>packages/core/src/replay.ts</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/core/src/audit-ledger.ts"><code>packages/core/src/audit-ledger.ts</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/README.md"><code>README.md</code></a></li>
+          </ul>
+        </details>
+      </article>
+
+      <article class="cat" id="workbench" aria-labelledby="workbench-title" data-kw="workbench file viewer terminal dock design workspace command palette keyboard help welcome pin path line highlight resize">
+        <header class="cat__head">
+          <p class="kicker">See and steer</p>
+          <h3 id="workbench-title">A workbench next to the agents</h3>
+          <p class="cat__short">File viewer, in-app terminal, design canvas and command palette</p>
+        </header>
+        <dl class="story">
+          <div><dt>The problem</dt><dd>Watching agents from one window and reading their files from another breaks your flow.</dd></div>
+          <div><dt>What changes</dt><dd>Open the file an agent mentioned at the exact line, run a command in an in-app terminal, review design artifacts, and reach supported actions from the keyboard.</dd></div>
+          <div><dt>In practice</dt><dd>An Atlas agent reports a problem at a file and line. You open it from the transcript with the line highlighted, check something in the in-app terminal below, and move on without leaving the app.</dd></div>
+        </dl>
+        <div class="groups">
+          <section class="grp" aria-labelledby="workbench-g1">
+            <h4 id="workbench-g1">Read and run</h4>
+            <dl class="items">
+              <div><dt>File tree and viewer</dt><dd>Open a path, and a path with a line number scrolls to and highlights that line.</dd></div>
+              <div><dt>In-app terminal</dt><dd>A resizable dock. While it has focus, every keystroke belongs to it.</dd></div>
+              <div><dt>Agents and the terminal</dt><dd>An agent can read and write a terminal you opened for it.</dd></div>
+            </dl>
+          </section>
+          <section class="grp" aria-labelledby="workbench-g2">
+            <h4 id="workbench-g2">Design</h4>
+            <dl class="items">
+              <div><dt>Design workspace</dt><dd>Snapshots of artifact revisions with the selected snapshot pinned.</dd></div>
+            </dl>
+          </section>
+          <section class="grp" aria-labelledby="workbench-g3">
+            <h4 id="workbench-g3">Move fast</h4>
+            <dl class="items">
+              <div><dt>Command palette</dt><dd>Search commands, shortcuts, slash commands, settings and entities from one palette.</dd></div>
+              <div><dt>Mouse and keyboard match</dt><dd>Mouse controls trigger the same actions as their shortcuts.</dd></div>
+              <div><dt>Help and welcome</dt><dd>In-app help and a first-run screen.</dd></div>
+            </dl>
+          </section>
+        </div>
+        <details class="adv">
+          <summary>Smaller capabilities in this area <span class="adv__n">(2)</span></summary>
+          <ul>
+            <li><strong>Pins</strong> Pin a task or an agent so its live fields stay in view.</li>
+            <li><strong>Agent-to-agent history</strong> An overlay of agent messages opens from the command palette.</li>
+          </ul>
+        </details>
+        <details class="src">
+          <summary>Where this lives in the source</summary>
+          <ul>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/app/src/screens/FileViewer.tsx"><code>packages/app/src/screens/FileViewer.tsx</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/app/src/screens/FileTree.tsx"><code>packages/app/src/screens/FileTree.tsx</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/app/src/components/TerminalDock.tsx"><code>packages/app/src/components/TerminalDock.tsx</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/app/src/components/DesignWorkspace.tsx"><code>packages/app/src/components/DesignWorkspace.tsx</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/app/src/components/CommandPalette.tsx"><code>packages/app/src/components/CommandPalette.tsx</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/app/src/screens/HelpScreen.tsx"><code>packages/app/src/screens/HelpScreen.tsx</code></a></li>
+            <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/packages/app/src/screens/WelcomeScreen.tsx"><code>packages/app/src/screens/WelcomeScreen.tsx</code></a></li>
+          </ul>
+        </details>
+      </article>
+    </section>
+
+    <section class="fam fam--edges" id="limits" aria-labelledby="limits-title">
+      <header class="fam__head">
+        <h2 id="limits-title">Where this stands today</h2>
+        <p class="sub">Chimera is early access software. The guide describes what the code does; it does not promise polish everywhere.</p>
+      </header>
+      <ul class="ticks ticks--warn">
+        <li>macOS on Apple Silicon is the only platform where the packaged desktop runtime has been run end to end. Intel is untested, Linux is source-only, and Windows is unsupported.</li>
+        <li>Signed public downloads are not available yet. Today you run Chimera from source; the <a href="index.html#install">install steps</a> are on the home page.</li>
+        <li><strong>Voice and meetings</strong> is preview. Voice is a preview. It needs the desktop app for microphone consent and is not part of the baseline workflow.</li>
+        <li><strong>Federation</strong> is experimental. Federation is the most experimental surface, with little everyday use. It is configured as peers in config, not a single switch.</li>
+      </ul>
+      <p class="fine">Screenshots show the actual Chimera interface with fictional demo data. <a href="https://github.com/nedimYilmaz/chimera/blob/main/site/assets/provenance.md">How they were made</a>.</p>
+    </section>
+      </div>
+    </div>
+
+    <section class="sec sec--dark final" aria-labelledby="guide-final-title">
+      <div class="wrap final__row">
+        <div class="final__copy">
+          <h2 id="guide-final-title">Read the code, then run it.</h2>
+          <p class="sub">Chimera is MIT licensed and developed in the open. Each area above links to the files that implement it.</p>
+        </div>
+        <div class="cta">
+          <a class="btn btn--light" href="https://github.com/nedimYilmaz/chimera">Explore on GitHub<span aria-hidden="true"> ↗</span></a>
+          <a class="link link--dark" href="index.html#install">Run it from source</a>
+          <a class="link link--dark" href="https://github.com/nedimYilmaz/chimera/issues">Share feedback</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <div class="wrap foot__grid">
+      <div class="foot__brand">
+        <a class="brand brand--dark" href="index.html"><img src="favicon.svg" alt="" width="28" height="28"><span>Chimera</span></a>
+        <p>A desktop workspace for Claude and Codex agent teams.</p>
+      </div>
+      <nav aria-label="Project links">
+        <h2 class="foot__h">Project</h2>
+        <ul>
+          <li><a href="index.html">Home page</a></li>
+          <li><a href="https://github.com/nedimYilmaz/chimera">GitHub repository</a></li>
+          <li><a href="https://github.com/nedimYilmaz/chimera/issues">Issues</a></li>
+          <li><a href="https://github.com/nedimYilmaz/chimera/blob/main/LICENSE">MIT license</a></li>
+        </ul>
+      </nav>
+      <nav aria-label="Feature groups">
+        <h2 class="foot__h">In this guide</h2>
+        <ul>
+          <li><a href="#family-run">Run agents</a></li>
+          <li><a href="#family-organize">Organize the work</a></li>
+          <li><a href="#family-remember">Remember and review</a></li>
+          <li><a href="#family-connect">Connect and extend</a></li>
+          <li><a href="#family-see">See and steer</a></li>
+        </ul>
+      </nav>
+    </div>
+    <div class="wrap foot__note">
+      <p>Screenshots: actual Chimera interface · demo data. <a href="https://github.com/nedimYilmaz/chimera/blob/main/site/assets/provenance.md">How they were made</a>.</p>
+      <p>Early access software. Issues are welcome; changes from pull requests are applied in the maintainer's tree.</p>
+    </div>
+  </footer>
+
+  <dialog class="lightbox" aria-label="Screenshot preview">
+    <form method="dialog"><button class="lightbox__close" aria-label="Close preview">Close <span aria-hidden="true">✕</span></button></form>
+    <img alt="">
+    <p class="lightbox__cap"></p>
+  </dialog>
+</body>
+</html>

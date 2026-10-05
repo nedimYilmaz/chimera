@@ -21,7 +21,9 @@ export function ActionChipRow({ chips }: { chips: readonly ActionChip[] }) {
     <div className={styles.row}>
       {chips.map((c) => (
         <span
-          key={c.key}
+          // `key` is the DISPLAYED chord, and chips with no shortcut (clone/export/import…) all
+          // carry "" — React identity needs the label too or siblings collide.
+          key={`${c.key}\u0000${c.label}`}
           className={[styles.chip, c.danger ? styles.danger : styles.safe, c.disabled ? styles.disabled : ""]
             .filter(Boolean)
             .join(" ")}

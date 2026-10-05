@@ -811,6 +811,10 @@ export function McpStoreSection() {
                 </div>
                 {!enabled && <span className={styles.warn} data-mcp-store-disabled-badge={s.name}>disabled</span>}
                 {s.type === "stdio" && s.managed && <span className={styles.faint} title={`${s.managed.packageName}@${s.managed.version}`}>npm · {s.managed.version}</span>}
+                {/* PROVENANCE: the marker is stamped by the daemon from the runtime manifest and cannot be
+                    supplied over RPC, so this badge is proof the server ships with Chimera -- a custom
+                    server that merely shares the name never gets it. */}
+                {s.type === "stdio" && s.builtIn && <span className={styles.ok} data-mcp-store-builtin-badge={s.name} title={`Ships with Chimera (${s.builtIn.id} ${s.builtIn.version}) and is managed by it. Not an external MCP server.`}>built-in · {s.builtIn.version}</span>}
                 {badge && (
                   <span className={toolsRow.connected ? styles.faint : styles.danger} data-mcp-store-badge={s.name}>{badge}</span>
                 )}
@@ -862,7 +866,8 @@ export function McpStoreSection() {
                   data-mcp-store-trust-toggle={s.name}
                   title="untrusted means this server's DATA is not trusted, even though the daemon trusts the connection enough to have installed it — a write-capable tool call on an untrusted server by an agent requires approval"
                 >{s.trust === "untrusted" ? "mark trusted" : "mark untrusted"}</button>
-                <button className={styles.linkBtn} onClick={() => setConfirmRemove(s.name)} data-mcp-store-uninstall={s.name}>uninstall</button>
+                {/* A built-in is part of the install, so removing it is refused by the daemon; disable it instead. */}
+                {!(s.type === "stdio" && s.builtIn) && <button className={styles.linkBtn} onClick={() => setConfirmRemove(s.name)} data-mcp-store-uninstall={s.name}>uninstall</button>}
               </div>
               {rowAuth.errorMessage && (
                 <div className={styles.danger} data-mcp-store-oauth-error={s.name}>authorize failed: {rowAuth.errorMessage}</div>

@@ -1,4 +1,4 @@
-import { catchUpStalenessMs, deadLetterReasonLines, inFlightKeyLabel, inFlightLabel, inFlightRecovered, jobRunHistory, lastResultLabel, lateRunLabel, nextRunLabel, resultTone, retryProgressLabel, runOutcomeLabels, runReasonLabel, triggerTitle, runRetentionLabel, triggerLabel, wakeNotice, WAKE_HOLD_LABEL, type JobRow, type JobRunView } from "../state/selectors.jobs";
+import { catchUpStalenessMs, deadLetterReasonLines, inFlightKeyLabel, inFlightLabel, inFlightRecovered, jobRunHistory, lastResultLabel, lateRunLabel, nextRunLabel, relativeLabel, resultTone, retryProgressLabel, runOutcomeLabels, runReasonLabel, triggerTitle, runRetentionLabel, triggerLabel, wakeNotice, WAKE_HOLD_LABEL, type JobRow, type JobRunView } from "../state/selectors.jobs";
 import { writeClipboard } from "../state/copyOnSelect";
 import { appStore } from "../state/store";
 import { MessageBody } from "./MessageBody";
@@ -96,7 +96,7 @@ export function ScheduleDetail({ row, spec, now, events, onOpenRun, error, onRet
         ) : null}
         {row.deliveryDroppedAt !== null ? (
           <div className={styles.disabledReason}>
-            delivery removed {nextRunLabel(row.deliveryDroppedAt, now)} — this job still runs and bills, but its results go nowhere
+            delivery removed {relativeLabel(row.deliveryDroppedAt - now)} — this job still runs and bills, but its results go nowhere
           </div>
         ) : null}
       </div>
@@ -133,7 +133,7 @@ export function ScheduleDetail({ row, spec, now, events, onOpenRun, error, onRet
           <dt>last run</dt>
           <dd>
             <span className={toneClass}>{lastResultLabel(row.lastRun)}</span>
-            {row.lastRun ? <span className={styles.faint}> · {nextRunLabel(row.lastRun.ts, now)}</span> : null}
+            {row.lastRun ? <span className={styles.faint}> · {relativeLabel(row.lastRun.ts - now)}</span> : null}
           </dd>
         </dl>
 
@@ -172,7 +172,7 @@ export function ScheduleDetail({ row, spec, now, events, onOpenRun, error, onRet
           <ul className={styles.runList}>
             {visibleRuns!.map((run, i) => (
               <li key={`${run.ts}-${i}-${run.taskId ?? run.agentId ?? ""}`} className={`${styles.runRow} ${runRowClass(run.result)} ${run.trigger === "sleep-wake" ? styles.runRowLate : ""}`}>
-                <span className={styles.runWhen}>{nextRunLabel(run.ts, now)}</span>
+                <span className={styles.runWhen}>{relativeLabel(run.ts - now)}</span>
                 <span className={styles.runTrigger} title={triggerTitle(run)}>{triggerLabel(run)}</span>
                 <span className={toneClassOf(run.result)}>{runGlyph(run.result)} {outcomes[runs.indexOf(run)]}</span>
                 <span className={styles.runCost}>${run.costUsd.toFixed(2)}</span>

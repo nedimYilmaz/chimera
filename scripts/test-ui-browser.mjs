@@ -228,6 +228,18 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
   await waitFor(`document.querySelector('[data-computer-use] [role="status"]')?.textContent === 'Permissions required'`);
   check("computer use identifies Chimera as permission owner", await evaluate(`document.querySelector('[data-computer-use]').textContent.includes('Permission owner: Chimera') && !document.querySelector('[data-computer-use]').textContent.includes('CuaDriver')`));
   check("computer use controls fit a 390px screen", await evaluate(`(() => { const card = document.querySelector('[data-computer-use]'); return card.scrollWidth <= card.clientWidth + 1 && [...card.querySelectorAll('button')].every(b => b.getBoundingClientRect().right <= 390); })()`));
+  await waitFor(`document.querySelectorAll('[data-computer-use] [data-built-in]').length === 3`);
+  check("computer use labels built-in integrations and first-use assets", await evaluate(`(() => {
+    const rows = [...document.querySelectorAll('[data-computer-use] [data-built-in]')];
+    const laya = document.querySelector('[data-built-in="laya"]');
+    return rows.every(li => li.querySelector('[data-built-in-badge]')?.textContent === 'Built-in')
+      && laya.textContent.includes('Not installed') && laya.textContent.includes('download on first use')
+      && !document.querySelector('[data-built-in="chimera-browser"]').textContent.includes('first use');
+  })()`));
+  check("computer use built-in rows fit a 390px screen", await evaluate(`[...document.querySelectorAll('[data-computer-use] [data-built-in]')].every(li => li.scrollWidth <= li.clientWidth + 1 && li.getBoundingClientRect().right <= 390)`));
+  await evaluate(`([...document.querySelectorAll('[data-built-in="laya"] button')].find(b => b.textContent === 'Install Laya')).click()`);
+  await waitFor(`document.querySelector('[data-built-in="laya"]')?.getAttribute('data-built-in-state') === 'installing'`);
+  check("computer use installs Laya through the managed first-use download", await evaluate(`!document.querySelector('[data-built-in="laya"] button') && document.querySelector('[data-built-in="laya"]').textContent.includes('Downloading')`));
   await evaluate(`([...document.querySelectorAll('[data-computer-use] button')].find(b => b.textContent === 'Allow Chimera access')).click()`);
   await waitFor(`document.querySelector('[data-computer-use]').textContent.includes('fully quit and reopen Chimera')`);
   check("computer use permission flow explains app relaunch", true);

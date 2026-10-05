@@ -5684,6 +5684,36 @@ export const McpStoreCallResultSchema = z.object({
 }).strict();
 export type McpStoreCallResult = z.infer<typeof McpStoreCallResultSchema>;
 
+// Provenance marker for the integrations Chimera itself ships. A name or command shape is not
+// proof of origin (a user can register their own `laya`), so reconcile only ever updates an entry
+// that carries this marker. It is stamped by the daemon from the runtime manifest and rejected on
+// `mcpstore.add`, so an agent or import cannot forge it.
+export const McpBuiltInIdSchema = z.enum(["laya", "chimera-browser", "chimera-desktop"]);
+export type McpBuiltInId = z.infer<typeof McpBuiltInIdSchema>;
+export const McpBuiltInSchema = z.object({ id: McpBuiltInIdSchema, version: z.string().min(1).max(64) }).strict();
+export type McpBuiltIn = z.infer<typeof McpBuiltInSchema>;
+
+// Operator-facing status of the Chimera-managed computer-use integrations. `provisioning` says HOW the
+// tool reaches the machine so the UI never implies Laya's model assets ship in the installer:
+// "managed-download" means the app fetches them on first use and reports progress here.
+export const BuiltInStateSchema = z.enum(["ready", "not-installed", "installing", "failed", "unsupported-platform", "unavailable", "name-taken"]);
+export type BuiltInState = z.infer<typeof BuiltInStateSchema>;
+export const BuiltInStatusSchema = z.object({
+  id: McpBuiltInIdSchema,
+  state: BuiltInStateSchema,
+  provisioning: z.enum(["bundled", "managed-download"]),
+  version: z.string().max(64).optional(),
+  reason: z.string().max(500).optional(),
+  modelAssets: z.literal("downloaded-on-first-use").optional(),
+}).strict();
+export type BuiltInStatus = z.infer<typeof BuiltInStatusSchema>;
+// `managed:false` = this daemon is not running from a packaged runtime (dev checkout): there is no
+// manifest, so there is nothing to report and nothing is registered automatically.
+export const BuiltInsStatusResultSchema = z.object({ managed: z.boolean(), integrations: z.array(BuiltInStatusSchema) }).strict();
+export type BuiltInsStatusResult = z.infer<typeof BuiltInsStatusResultSchema>;
+export const BuiltInsInstallParamsSchema = z.object({ id: z.literal("laya") }).strict();
+export type BuiltInsInstallParams = z.infer<typeof BuiltInsInstallParamsSchema>;
+
 export const McpStoreStdioSpecSchema = z.object({
   type: z.literal("stdio"),
   command: z.string().min(1),
@@ -5694,6 +5724,7 @@ export const McpStoreStdioSpecSchema = z.object({
   trust: McpStoreTrustSchema,
   sessionMode: McpStoreSessionModeSchema.optional(),
   managed: McpManagedPackageSchema.optional(),
+  builtIn: McpBuiltInSchema.optional(),
 }).strict();
 // MCP-REMOTE-IMPORT slice 1: optional keychain-backed auth for a remote (http) server.
 // Mirrors AccountAuth's tokenRef pattern above (~line 84-97) -- `keychainRef` is a

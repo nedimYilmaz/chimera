@@ -1,7 +1,8 @@
 import { lstatSync, readFileSync, statSync } from "node:fs";
-import { isAbsolute, join } from "node:path";
+import { join, posix, win32 } from "node:path";
 import { createHash } from "node:crypto";
-import { McpStoreEntrySchema, type McpStoreEntry, type McpStoreServerSpec } from "@chimera/protocol";
+import { z } from "zod";
+import { McpStoreEntrySchema, type McpBuiltIn, type McpStoreEntry, type McpStoreServerSpec } from "@chimera/protocol";
 
 export type ComputerUseOptions = {
   home: string; node: string; layaPython: string; playwrightCli: string;
@@ -12,29 +13,99 @@ export function desktopSocket(home: string, platform: NodeJS.Platform = process.
     : join(home, "computer-use", "desktop.sock");
 }
 
+// A manifest or fixture for another OS must be validated with THAT OS's path rules, not the build
+// host's: "C:\\x" is absolute on Windows and relative on POSIX, and a fixture test on macOS has to
+// be able to prove the Windows/Linux shapes without running there.
+const pathRules = (platform: NodeJS.Platform) => (platform === "win32" ? win32 : posix);
+function assertAbsolute(platform: NodeJS.Platform, ...paths: (string | undefined)[]): void {
+  for (const path of paths) {
+    if (path !== undefined && !pathRules(platform).isAbsolute(path)) throw new Error(`Computer Use paths must be absolute: ${path}`);
+  }
+}
+
+type EntryBase = { home: string; platform?: NodeJS.Platform; env?: Record<string, string>; builtIn?: McpBuiltIn };
+const withBuiltIn = (entry: Record<string, unknown>, builtIn: McpBuiltIn | undefined): McpStoreEntry =>
+  McpStoreEntrySchema.parse(builtIn ? { ...entry, builtIn } : entry);
+
+// A reviewed model checkpoint. The wheel carries no weights, so without these env vars Laya fetches
+// whatever the Hub's mutable `main` is at first use. `revision` is a full commit SHA (never the
+// symbolic `reviewed`, which resolves from the installed package's own table and would silently move
+// with a Laya upgrade) and `files` is Laya's FLAT digest shape, verified against each checkpoint's own
+// directory after download and before any weight is parsed.
+export const LayaCheckpointSchema = z.object({
+  repo: z.string().regex(/^[A-Za-z0-9][\w.-]*\/[\w.-]+$/),
+  revision: z.string().regex(/^[a-f0-9]{40}$/),
+  files: z.record(z.string().regex(/^[\w.-]+$/).refine((name) => name !== "." && name !== "..", "must be a plain file name"), z.string().regex(/^[a-f0-9]{64}$/))
+    .refine((files) => "model.safetensors" in files, "must pin model.safetensors"),
+}).strict();
+export type LayaCheckpoint = z.infer<typeof LayaCheckpointSchema>;
+
+// The env that makes a pinned entry unable to reach anything but the reviewed English checkpoint:
+//  - LAYA_REVISION + flat LAYA_SHA256_DIGESTS: the revision and bytes Laya will accept;
+//  - HF_HUB_OFFLINE=1: nothing is fetched at first use. The install step downloaded and verified the
+//    English checkpoint once; every other checkpoint Laya's router can pick (multilingual,
+//    typed-decisions) was never evaluated and has no Chimera-reviewed digest, so it must fail to load
+//    rather than be fetched from mutable main (a flat digest would also refuse it, but only AFTER a
+//    ~680 MB download);
+//  - LAYA_MODELS/LAYA_DEFAULT_MODEL: documentation of intent only -- LAYA_MODELS is a preload list,
+//    not a routing restriction, so offline mode is the actual enforcement.
+// These are applied AFTER the caller's env so no caller can weaken the pin.
+export function layaCheckpointEnv(checkpoint: LayaCheckpoint): Record<string, string> {
+  const pin = LayaCheckpointSchema.parse(checkpoint);
+  return {
+    LAYA_REVISION: pin.revision, LAYA_SHA256_DIGESTS: JSON.stringify(pin.files),
+    HF_HUB_OFFLINE: "1", LAYA_MODELS: "english", LAYA_DEFAULT_MODEL: "english",
+  };
+}
+
+// One builder per adapter so the app-bundled registration (builtin-integrations.ts) and the legacy
+// dev registrar compose the exact same entry shapes -- the session modes are the security contract
+// (laya shared, browser per-agent, desktop exclusive) and must not be restated in two places.
+export function layaEntry(o: EntryBase & { python: string; checkpoint?: LayaCheckpoint }): McpStoreEntry {
+  assertAbsolute(o.platform ?? process.platform, o.home, o.python);
+  const env = { LAYA_PRELOAD: "0", LAYA_THREADS: "4", ...o.env, ...(o.checkpoint ? layaCheckpointEnv(o.checkpoint) : {}) };
+  return withBuiltIn({ name: "laya", command: o.python, args: ["-m", "laya.mcp.server"], env, sessionMode: "shared" }, o.builtIn);
+}
+export function browserEntry(o: EntryBase & { node: string; cli: string; executable?: string }): McpStoreEntry {
+  assertAbsolute(o.platform ?? process.platform, o.home, o.node, o.cli, o.executable);
+  return withBuiltIn({
+    name: "chimera-browser", command: o.node,
+    args: [o.cli, "--isolated", "--headless", "--caps", "vision", ...(o.executable ? ["--executable-path", o.executable] : [])],
+    ...(o.env && Object.keys(o.env).length > 0 ? { env: o.env } : {}), sessionMode: "agent",
+  }, o.builtIn);
+}
+export function desktopEntry(o: EntryBase & { driver: string }): McpStoreEntry {
+  const platform = o.platform ?? process.platform;
+  assertAbsolute(platform, o.home, o.driver);
+  return withBuiltIn({
+    name: "chimera-desktop", command: o.driver, args: ["mcp", "--embedded", "--socket", desktopSocket(o.home, platform)],
+    env: { CUA_DRIVER_EMBEDDED: "1", ...o.env }, sessionMode: "exclusive",
+  }, o.builtIn);
+}
+
 // These are tool adapters, not provider backends: both Claude and Codex discover the
 // same installed tools through their existing Chimera MCP grant.
 export function computerUseEntries(opts: ComputerUseOptions): McpStoreEntry[] {
-  for (const path of [opts.home, opts.node, opts.layaPython, opts.playwrightCli, opts.browserExecutable, opts.desktopDriver]) {
-    if (path !== undefined && !isAbsolute(path)) throw new Error(`Computer Use paths must be absolute: ${path}`);
-  }
-  const entries: unknown[] = [
-    { name: "laya", command: opts.layaPython, args: ["-m", "laya.mcp.server"], env: { LAYA_PRELOAD: "0", LAYA_THREADS: "4" }, sessionMode: "shared" },
-    { name: "chimera-browser", command: opts.node, args: [opts.playwrightCli, "--isolated", "--headless", "--caps", "vision", ...(opts.browserExecutable ? ["--executable-path", opts.browserExecutable] : [])], sessionMode: "agent" },
+  const base = { home: opts.home, platform: opts.platform };
+  const entries = [
+    layaEntry({ ...base, python: opts.layaPython }),
+    browserEntry({ ...base, node: opts.node, cli: opts.playwrightCli, executable: opts.browserExecutable }),
   ];
-  if (opts.desktopDriver) entries.push({ name: "chimera-desktop", command: opts.desktopDriver,
-    args: ["mcp", "--embedded", "--socket", desktopSocket(opts.home, opts.platform)],
-    env: { CUA_DRIVER_EMBEDDED: "1" }, sessionMode: "exclusive" });
-  return entries.map(entry => McpStoreEntrySchema.parse(entry));
+  if (opts.desktopDriver) entries.push(desktopEntry({ ...base, driver: opts.desktopDriver }));
+  return entries;
 }
 
 // The daemon only runs `cua-driver mcp --embedded --socket ...`, a stdio PROXY to a service the
 // Chimera app owns (computer_use.rs: spawn, prefs, "Stop desktop control"). When that service is
 // down the proxy exits during `initialize` and the SDK reports only "MCP error -32000: Connection
-// closed". Recognise the built-in entry by identity (name + shape + the socket THIS home would
-// have been registered with) so a custom `chimera-desktop` pointing elsewhere is never annotated.
+// closed". Recognise the built-in entry by its daemon-stamped provenance marker, or -- for an entry
+// the legacy registrar wrote before the marker existed -- by identity (name + shape + the socket
+// THIS home would have been registered with), so a custom `chimera-desktop` pointing elsewhere is
+// never annotated.
 export function isBuiltInDesktopEntry(name: string, spec: McpStoreServerSpec, home: string, platform: NodeJS.Platform = process.platform): boolean {
-  if (name !== "chimera-desktop" || spec.type !== "stdio" || spec.sessionMode !== "exclusive" || !spec.args.includes("--embedded")) return false;
+  if (name !== "chimera-desktop" || spec.type !== "stdio") return false;
+  if (spec.builtIn?.id === "chimera-desktop") return true;
+  if (spec.sessionMode !== "exclusive" || !spec.args.includes("--embedded")) return false;
   const at = spec.args.indexOf("--socket");
   return at >= 0 && spec.args[at + 1] === desktopSocket(home, platform);
 }
@@ -56,22 +127,33 @@ const SETTINGS = "Chimera Settings > MCP > Chimera Computer Use";
 // socket, never launches anything and never writes, so it cannot re-enable a service the operator
 // stopped. Returns undefined whenever the files do not PROVE a cause (e.g. unreadable, or the
 // socket exists and the preference is on) -- the caller then keeps the original error verbatim.
-export function desktopHostGuidance(home: string, platform: NodeJS.Platform = process.platform): string | undefined {
+//
+// `bundledDriver` is the driver a built-in entry points at. The app derives the same path from the
+// runtime manifest when desktop.json is absent (desktop.json is only an explicit override), so
+// "no desktop.json" is then normal and the bundled driver is what must exist.
+export function desktopHostGuidance(home: string, platform: NodeJS.Platform = process.platform, bundledDriver?: string): string | undefined {
   const dir = join(home, "computer-use");
   const setup = readJsonFile(join(dir, "desktop.json"));
   if (setup.kind === "denied") return undefined;
+  let driverPath: unknown = setup.kind === "ok" && isRecord(setup.value) ? setup.value["driverPath"] : undefined;
+  let bundled = false;
   if (setup.kind === "absent") {
-    return `Chimera desktop control is not set up on this machine (no computer-use/desktop.json). Install the Computer Use integration in ${SETTINGS}, then retry.`;
+    if (bundledDriver === undefined) {
+      return `Chimera desktop control is not set up on this machine (no computer-use/desktop.json). Install the Computer Use integration in ${SETTINGS}, then retry.`;
+    }
+    driverPath = bundledDriver;
+    bundled = true;
   }
-  const driverPath = setup.kind === "ok" && isRecord(setup.value) ? setup.value["driverPath"] : undefined;
-  if (typeof driverPath !== "string" || !isAbsolute(driverPath)) {
+  if (typeof driverPath !== "string" || !pathRules(platform).isAbsolute(driverPath)) {
     return `Chimera desktop control setup is invalid (computer-use/desktop.json). Run the Computer Use setup again in ${SETTINGS}, then retry.`;
   }
   try {
     if (!statSync(driverPath).isFile()) throw Object.assign(new Error("not a file"), { code: "ENOENT" });
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") return undefined;
-    return `The Chimera desktop control runtime is missing (${driverPath}). Run the Computer Use setup again in ${SETTINGS}, then retry.`;
+    return bundled
+      ? `The desktop control runtime bundled with Chimera is missing (${driverPath}). Reinstall Chimera to restore it, then retry.`
+      : `The Chimera desktop control runtime is missing (${driverPath}). Run the Computer Use setup again in ${SETTINGS}, then retry.`;
   }
 
   const prefs = readJsonFile(join(dir, "preferences.json"));

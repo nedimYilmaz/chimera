@@ -88,6 +88,9 @@ const INTENTIONALLY_EXCLUDED_RPCS = new Set([
   // Installing executable dependencies requires explicit operator review. Shared
   // discovery/call remains agent-facing; package lifecycle must never become a tool.
   "mcpstore.package.inspect", "mcpstore.package.install",
+  // Built-in computer-use integrations: the install state and the first-use Laya download are
+  // operator (UI) actions. Their TOOLS are ordinary mcp_store entries and stay agent-discoverable.
+  "computerUse.builtins.status", "computerUse.builtins.install", "computerUse.builtins.rollback",
   // Diagnostic status is exposed; a full index rebuild remains operator-owned.
   "chronicle.reindex",
   // TERMINAL-READBACK: the INGEST half. The desktop app tees the PTY output it is already drawing

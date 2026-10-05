@@ -23,6 +23,11 @@ import {
 
 const repositoryRoot = resolve(import.meta.dirname, "../../..");
 
+// These drive the gate's process supervision: shebang executables, SIGINT/SIGTERM handlers, 130/143
+// exit codes and process-group reaping. None of that exists on Windows, where the gate does not
+// create process groups, so they run on POSIX hosts only.
+const posixTest = process.platform === "win32" ? test.skip : test;
+
 async function waitForFile(path: string, timeoutMs = 10_000) {
   const startedAt = Date.now();
   const deadline = Date.now() + timeoutMs;
@@ -216,7 +221,7 @@ process.exitCode = await runBrowserSuiteCli(${JSON.stringify(id)}, async ({ repo
     expect(await readdir(scratchParent, { recursive: true }), JSON.stringify(result.report)).toEqual([]);
   });
 
-  test("a Chromium endpoint timeout reaps only the owned browser", async () => {
+  posixTest("a Chromium endpoint timeout reaps only the owned browser", async () => {
     const fakeBrowser = join(testRoot, "fake-chromium.mjs");
     const reapedFile = join(testRoot, "browser-reaped");
     const readyFile = join(testRoot, "browser-ready");
@@ -255,7 +260,7 @@ setInterval(() => {}, 1000);
     expect(await readdir(scratchParent, { recursive: true }), JSON.stringify(result.report)).toEqual([]);
   });
 
-  test.each(["SIGINT", "SIGTERM"] as const)("%s interrupts the active suite and preserves non-owned resources", async (signal) => {
+  posixTest.each(["SIGINT", "SIGTERM"] as const)("%s interrupts the active suite and preserves non-owned resources", async (signal) => {
     const suiteId = signal === "SIGINT" ? "ui" : "meeting";
     const browser = join(testRoot, `signal-browser-${signal}.mjs`);
     const readyFile = join(testRoot, `ready-${signal}`);
@@ -347,7 +352,7 @@ setInterval(() => {}, 1000);
     expect(JSON.stringify(result.report).length).toBeLessThan(10_000);
   });
 
-  test("reaps stubborn inherited-pipe descendants after their group leader exits", async () => {
+  posixTest("reaps stubborn inherited-pipe descendants after their group leader exits", async () => {
     const ready = join(testRoot, "descendant");
     const child = spawn(process.execPath, ["-e", `
       const { spawn } = require('node:child_process');
@@ -436,7 +441,7 @@ setInterval(() => {}, 1000);
     expect(() => createSuiteReporter("ui").check("probe", true, undefined, -1)).toThrow("Invalid check duration");
   });
 
-  test.each(["deadline", "SIGINT", "SIGTERM"])("bounds stuck suite %s and preserves an unrelated owned fixture", async (mode) => {
+  posixTest.each(["deadline", "SIGINT", "SIGTERM"])("bounds stuck suite %s and preserves an unrelated owned fixture", async (mode) => {
     const ready = join(testRoot, "stuck-ready");
     const script = join(testRoot, "stuck.mjs");
     await writeFile(script, `import { spawn } from 'node:child_process';

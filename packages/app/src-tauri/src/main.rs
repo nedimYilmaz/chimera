@@ -21,6 +21,7 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let resources = app.path().resource_dir()?;
+            let desktop_resources = resources.clone();
             tauri::async_runtime::spawn_blocking(move || {
                 if let Err(error) = desktop_runtime::start(&resources, &daemon::chimera_home(), &std::env::args().skip(1).collect::<Vec<_>>()) {
                     eprintln!("Chimera startup: {error}");
@@ -48,7 +49,7 @@ fn main() {
             tauri::async_runtime::spawn(driver);
             app.manage(handle);
             app.manage(pty::PtyState::default());
-            let desktop = computer_use::ComputerUseState::default();
+            let desktop = computer_use::ComputerUseState::with_resources(desktop_resources);
             app.manage(desktop.clone());
             let bundle_id = app.config().identifier.clone();
             tauri::async_runtime::spawn_blocking(move || {

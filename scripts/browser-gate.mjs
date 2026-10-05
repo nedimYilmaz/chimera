@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { constants, existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { access } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { delimiter, dirname, isAbsolute, join, resolve } from "node:path";
+import { dirname, join, posix, resolve, win32 } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const RESULT_PREFIX = "__CHIMERA_BROWSER_GATE_RESULT__=";
@@ -27,6 +27,9 @@ export const REQUIRED_CHECK_IDS = {
     "ui.computer-use-controls-fit-a-390px-screen",
     "ui.computer-use-permission-flow-explains-app-relaunch",
     "ui.computer-use-starts-and-stops-through-native-host-controls",
+    "ui.computer-use-labels-built-in-integrations-and-first-use-assets",
+    "ui.computer-use-built-in-rows-fit-a-390px-screen",
+    "ui.computer-use-installs-laya-through-the-managed-first-use-download",
     "ui.metrics-390px-provider-capacity-stays-separate-from-session-and-compaction",
     "ui.metrics-630px-provider-capacity-stays-separate-from-session-and-compaction",
     "ui.metrics-1180px-provider-capacity-stays-separate-from-session-and-compaction",
@@ -422,9 +425,9 @@ function executableCandidates(platform, environment) {
   }
   if (platform === "win32") {
     return [
-      environment.PROGRAMFILES && join(environment.PROGRAMFILES, "Google/Chrome/Application/chrome.exe"),
-      environment["PROGRAMFILES(X86)"] && join(environment["PROGRAMFILES(X86)"], "Microsoft/Edge/Application/msedge.exe"),
-      environment.LOCALAPPDATA && join(environment.LOCALAPPDATA, "Chromium/Application/chrome.exe"),
+      environment.PROGRAMFILES && win32.join(environment.PROGRAMFILES, "Google/Chrome/Application/chrome.exe"),
+      environment["PROGRAMFILES(X86)"] && win32.join(environment["PROGRAMFILES(X86)"], "Microsoft/Edge/Application/msedge.exe"),
+      environment.LOCALAPPDATA && win32.join(environment.LOCALAPPDATA, "Chromium/Application/chrome.exe"),
       "chrome.exe",
       "msedge.exe",
     ].filter(Boolean);
@@ -432,10 +435,13 @@ function executableCandidates(platform, environment) {
   return ["google-chrome", "google-chrome-stable", "chromium", "chromium-browser", "microsoft-edge", "brave-browser"];
 }
 
-function resolvePathCommand(command, pathValue, fileExists) {
-  if (isAbsolute(command)) return fileExists(command) ? command : null;
-  for (const entry of (pathValue ?? "").split(delimiter).filter(Boolean)) {
-    const candidate = join(entry, command);
+// PATH syntax follows the TARGET platform, not the host, so discovery for an injected platform
+// resolves the same way on every machine.
+function resolvePathCommand(command, pathValue, fileExists, platform) {
+  const path = platform === "win32" ? win32 : posix;
+  if (path.isAbsolute(command)) return fileExists(command) ? command : null;
+  for (const entry of (pathValue ?? "").split(path.delimiter).filter(Boolean)) {
+    const candidate = path.join(entry, command);
     if (fileExists(candidate)) return candidate;
   }
   return null;
@@ -449,9 +455,9 @@ export function discoverChromium(options = {}) {
   const pathValue = options.pathValue ?? environment.PATH;
 
   if (explicitPath) {
-    const resolved = isAbsolute(explicitPath)
+    const resolved = (platform === "win32" ? win32 : posix).isAbsolute(explicitPath)
       ? explicitPath
-      : resolvePathCommand(explicitPath, pathValue, fileExists);
+      : resolvePathCommand(explicitPath, pathValue, fileExists, platform);
     if (!resolved || !fileExists(resolved)) {
       throw new Error(`CHIMERA_TEST_CHROME does not exist: ${explicitPath}`);
     }
@@ -459,7 +465,7 @@ export function discoverChromium(options = {}) {
   }
 
   for (const candidate of executableCandidates(platform, environment)) {
-    const resolved = resolvePathCommand(candidate, pathValue, fileExists);
+    const resolved = resolvePathCommand(candidate, pathValue, fileExists, platform);
     if (resolved) return resolved;
   }
   throw new Error("No supported local Chromium browser found. Set CHIMERA_TEST_CHROME to an existing executable; this gate never downloads a browser.");

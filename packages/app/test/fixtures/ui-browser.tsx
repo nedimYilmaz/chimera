@@ -604,7 +604,7 @@ function ScenarioView({ name }: { name: Scenario }) {
   if (name === "queues") return <PaneStage name="queues"><QueuesScreen /></PaneStage>;
   if (name === "teams") return <PaneStage name="teams"><TeamsScreen /></PaneStage>;
   if (name === "desktop-preview") return <DesktopPreviewProbe />;
-  if (name === "computer-use") return <Stage><ComputerUseCard request={computerRequest} /></Stage>;
+  if (name === "computer-use") return <Stage><ComputerUseCard request={computerRequest} builtInsStatus={builtInsStatus} installBuiltInTool={installBuiltInTool} /></Stage>;
   if (name === "settings") return <Stage><SettingsScreen /></Stage>;
   if (name === "spawn") return <Stage><SpawnCard onClose={() => {}} /></Stage>;
   if (name === "confirm-actions" || name === "team-actions" || name === "queue-actions") return <ActionProbe name={name} />;
@@ -613,6 +613,19 @@ function ScenarioView({ name }: { name: Scenario }) {
 
 let root: Root | null = null;
 let computerStatus = { autoStart: false, configured: true, running: false, permissionOwner: "Chimera", accessibility: false, screenRecording: false };
+// The daemon's view of the Chimera-managed integrations (computerUse.builtins.status). Installing Laya
+// flips only its row, the way the real first-use download does.
+const freshBuiltIns = () => ({ managed: true, integrations: [
+  { id: "laya", state: "not-installed", provisioning: "managed-download", version: "0.3.27", modelAssets: "downloaded-on-first-use", reason: "Laya's Python packages and models download on first use." },
+  { id: "chimera-browser", state: "ready", provisioning: "bundled", version: "0.0.83" },
+  { id: "chimera-desktop", state: "ready", provisioning: "bundled", version: "0.33.3" },
+] }) as never;
+let builtInsFixture = freshBuiltIns();
+const builtInsStatus = async () => builtInsFixture;
+const installBuiltInTool = async () => {
+  builtInsFixture = { ...(builtInsFixture as { integrations: { id: string }[] }), integrations: (builtInsFixture as { integrations: { id: string }[] }).integrations.map(i => i.id === "laya" ? { ...i, state: "installing", reason: undefined } : i) } as never;
+  return { started: true };
+};
 const computerRequest = async (command: string) => {
   if (command === "computer_use_start") computerStatus = { ...computerStatus, running: true, autoStart: true };
   if (command === "computer_use_stop") computerStatus = { ...computerStatus, running: false, autoStart: false };
@@ -620,6 +633,7 @@ const computerRequest = async (command: string) => {
   return computerStatus;
 };
 function show(name: Scenario): void {
+  if (name === "computer-use") builtInsFixture = freshBuiltIns();
   if (name === "desktop-preview") {
     Object.assign(desktop, { running: true, previewFails: false, defer: false, frames: 0, monitor: releasedLease, pending: [], calls: [] });
     appStore.dispatch({ type: "agentRecords", records: [{ ...agentRecords[0], agentId: desktopAgentB, displayLabel: "UI QA Agent B", treeId: desktopAgentB }] as never });

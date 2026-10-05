@@ -24,6 +24,16 @@ import { KeychainOAuthClientProvider, readMcpStoreOAuthSnapshot } from "./provid
 
 export class UnknownMcpStoreServerError extends Error { code = "protocol" as const; name = "UnknownMcpStoreServerError"; }
 export class DuplicateMcpStoreServerError extends Error { code = "conflict" as const; name = "DuplicateMcpStoreServerError"; }
+export class McpStoreProvenanceError extends Error { code = "protocol" as const; name = "McpStoreProvenanceError"; }
+
+// Key order differs between add()'s spread and a schema re-parse, so a no-op reconcile must compare
+// canonical (sorted-key) JSON or it would rewrite an unchanged file on every restart.
+const canonical = (value: unknown): unknown =>
+  Array.isArray(value) ? value.map(canonical)
+    : typeof value === "object" && value !== null
+      ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([k, v]) => [k, canonical(v)]))
+      : value;
+export const specJson = (spec: McpStoreServerSpec): string => JSON.stringify(canonical(spec));
 
 // ---------- registry: persisted CRUD ----------
 // Deliberately its own file ($CHIMERA_HOME/mcpstore.json), same discipline as
@@ -63,6 +73,26 @@ export class McpStoreRegistry {
     this.servers = next;
   }
 
+  // The ONLY writer that may stamp `builtIn` (see add()). Daemon-internal: the built-in
+  // reconciler edits a draft copy; every resulting entry is re-validated and the file is written
+  // once, and only when the persisted form actually changed, so a restart is byte-idempotent.
+  reconcile(mutate: (draft: Map<string, McpStoreServerSpec>) => void): boolean {
+    const draft = new Map(this.servers);
+    mutate(draft);
+    const next = new Map<string, McpStoreServerSpec>();
+    for (const [name, spec] of draft) {
+      const { name: _name, ...parsed } = McpStoreEntrySchema.parse({ name, ...spec });
+      next.set(name, parsed);
+    }
+    const same = next.size === this.servers.size && [...next].every(([name, spec]) => {
+      const current = this.servers.get(name);
+      return current !== undefined && specJson(current) === specJson(spec);
+    });
+    if (same) return false;
+    this.save(next);
+    return true;
+  }
+
   list(): McpStoreEntry[] {
     return [...this.servers.entries()]
       .map(([name, spec]) => ({ name, ...spec }))
@@ -79,6 +109,9 @@ export class McpStoreRegistry {
 
   add(entry: McpStoreEntry): McpStoreEntry {
     entry = McpStoreEntrySchema.parse(entry);
+    // `builtIn` is the daemon's own provenance stamp. Every caller of add() (RPC, import,
+    // proposals, the package installer) is outside that trust boundary, so none may claim it.
+    if (entry.type === "stdio" && entry.builtIn) throw new McpStoreProvenanceError(`mcp store server "${entry.name}" cannot claim built-in provenance`);
     if (this.servers.has(entry.name)) throw new DuplicateMcpStoreServerError(`mcp store server "${entry.name}" already exists`);
     const { name, ...rest } = entry;
     // Preserve legacy defaults while validating the entire entry at the persistence
@@ -288,7 +321,7 @@ function isAuthRejection(err: unknown): boolean {
 function desktopFailureNote(name: string, spec: McpStoreServerSpec | undefined, home: string, err: unknown, midCall: boolean): string | undefined {
   if (!spec || err instanceof McpStoreConnectionError || !isBuiltInDesktopEntry(name, spec, home)) return undefined;
   if (midCall && (err as { code?: unknown } | null)?.code !== -32000) return undefined;
-  const guidance = desktopHostGuidance(home);
+  const guidance = desktopHostGuidance(home, process.platform, spec.type === "stdio" && spec.builtIn ? spec.command : undefined);
   if (guidance === undefined) return undefined;
   const raw = (err as { message?: unknown } | null)?.message;
   return `${guidance} (underlying: ${typeof raw === "string" ? raw : String(err)})`;

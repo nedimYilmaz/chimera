@@ -47,7 +47,9 @@ function runWrapper(args: string[]): Run {
 const iso = (atMs: number): string => new Date(atMs).toISOString().replace(/\.\d{3}Z$/, "Z");
 const IN_ONE_HOUR = iso(Date.now() + 3_600_000);
 
-describe("chimera-wake wrapper — accepted", () => {
+// The wrapper drives macOS pmset and parses with BSD `date -j`; RTC wake is macOS-only, so the
+// accepted path can only run there. The rejections below exit before any date call and run anywhere.
+describe.runIf(process.platform === "darwin")("chimera-wake wrapper — accepted", () => {
   it("probe touches nothing and reports its version", () => {
     const r = runWrapper(["probe"]);
     expect(r.code).toBe(0);
@@ -105,7 +107,9 @@ describe("chimera-wake wrapper — rejected before pmset is ever reached", () =>
     // F01-QA-follow-up: exactly 365 days out was wrongly accepted under the old `-le` guard
     // (the plan says "less than 365 days"); `-lt` now rejects the boundary. The +5s pad clears
     // the JS-Date.now()-to-shell-`date`-call gap so this can't flake into the accepted branch.
-    ["a timestamp just over 365 days out (the old boundary)", ["schedule", iso(Date.now() + 365 * 86_400_000 + 5_000)]],
+    // Computed when the file is collected, not when the case runs: under a loaded full-suite run
+    // a 5s margin elapsed before the case ran and the timestamp fell back inside the horizon.
+    ["a timestamp just over 365 days out (the old boundary)", ["schedule", iso(Date.now() + 365 * 86_400_000 + 3_600_000)]],
     ["schedule with no timestamp", ["schedule"]],
     ["schedule with two words", ["schedule", "a", "b"]],
     ["schedule with a valid timestamp plus a stowaway word", ["schedule", IN_ONE_HOUR, "extra"]],

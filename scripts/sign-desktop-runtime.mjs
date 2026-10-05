@@ -10,8 +10,26 @@ const identity = process.env.APPLE_SIGNING_IDENTITY;
 if (!identity?.startsWith('Developer ID Application: ')) throw new Error('APPLE_SIGNING_IDENTITY must be a Developer ID Application identity');
 const root = resolve(process.argv[2] ?? 'packages/app/src-tauri/standalone/runtime');
 const temp = await mkdtemp(join(tmpdir(), 'chimera-runtime-sign-'));
-const entitlements = join(temp, 'jit.plist');
-await writeFile(entitlements, '<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>com.apple.security.cs.allow-jit</key><true/><key>com.apple.security.cs.allow-unsigned-executable-memory</key><true/></dict></plist>');
+const plist = keys => `<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict>${keys.map(key => `<key>${key}</key><true/>`).join('')}</dict></plist>`;
+// Least privilege per binary. Each grant is the minimum that binary needs under the hardened runtime:
+//  jit     V8/JavaScriptCore-style JITs (node, claude, Chrome headless shell).
+//  python  loads wheels the app downloads at first use (Laya's torch), which are not signed by us, so
+//          library validation must be off; ctypes/libffi closures need unsigned executable memory.
+//  driver  exactly the entitlements cua-driver's own Developer ID signature carries (apple-events,
+//          screen-capture). The TCC grants themselves belong to the Chimera app that hosts it.
+const profiles = {
+  jit: ['com.apple.security.cs.allow-jit', 'com.apple.security.cs.allow-unsigned-executable-memory'],
+  python: ['com.apple.security.cs.allow-unsigned-executable-memory', 'com.apple.security.cs.disable-library-validation'],
+  driver: ['com.apple.security.automation.apple-events', 'com.apple.security.device.screen-capture'],
+};
+const profileFor = name => {
+  if (['node', 'claude', 'chrome-headless-shell'].includes(name)) return 'jit';
+  if (/^python3(\.\d+)?$/.test(name)) return 'python';
+  if (name === 'cua-driver') return 'driver';
+  return null;
+};
+const entitlements = {};
+for (const [name, keys] of Object.entries(profiles)) { entitlements[name] = join(temp, `${name}.plist`); await writeFile(entitlements[name], plist(keys)); }
 let count = 0;
 async function sign(dir) {
   for (const entry of await readdir(dir, { withFileTypes: true })) {
@@ -23,7 +41,8 @@ async function sign(dir) {
     try { await fd.read(magic, 0, 4, 0); } finally { await fd.close(); }
     if (!['feedface', 'feedfacf', 'cefaedfe', 'cffaedfe', 'cafebabe', 'bebafeca', 'cafebabf', 'bfbafeca'].includes(magic.toString('hex'))) continue;
     const args = ['--force', '--sign', identity, '--timestamp', '--options', 'runtime'];
-    if (['node', 'claude'].includes(basename(path))) args.push('--entitlements', entitlements);
+    const profile = profileFor(basename(path));
+    if (profile) args.push('--entitlements', entitlements[profile]);
     execFileSync('/usr/bin/codesign', [...args, path], { stdio: ['ignore', 'ignore', 'pipe'] });
     count++;
   }
