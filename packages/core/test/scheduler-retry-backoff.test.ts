@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { describe, it, expect, vi } from "vitest";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Engine } from "@chimera/core/engine";
@@ -7,7 +7,7 @@ import { FakeAgentBackend, type FakeStep } from "@chimera/core/backends/fake";
 import type { AgentBackend } from "@chimera/core/backend";
 import type { TaskRecord } from "@chimera/protocol";
 import { makeEngineHome } from "./helpers.js";
-import { waitUntil } from "./coord-helpers.js";
+import { makeCoordination, waitUntil } from "./coord-helpers.js";
 
 const backends = (fake: FakeAgentBackend) => new Map<string, AgentBackend>([["claude", fake]]);
 const TEAM_SPEC = { name: "crew", roles: { dev: { role: "blank", overrides: { cwd: "/tmp", account: "main", isolation: "none" } } }, maxConcurrent: 2, queue: "work" };
@@ -30,7 +30,83 @@ function flakyGateArgs(counterPath: string, failCount: number): string[] {
 }
 
 describe("RETRY-BACKOFF: workflow step-gate delayed retry + dead-letter (scheduler.ts/queues.ts)", () => {
-  it("exponential backoff: each retry's delay roughly doubles the previous one", async () => {
+  it("exponential backoff schedules 150/300ms and cannot dispatch before either deadline", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000_000);
+    let gateCalls = 0;
+    const rig = makeCoordination([ONE_TURN, ONE_TURN, ONE_TURN], undefined, {
+      gateExec: async () => ({ ok: ++gateCalls > 2, message: "scripted gate" }),
+    });
+    // Like scheduler-explain-task.test.ts, observe the existing in-memory retry seam.
+    // Calling the wake handler early exercises its deadline guard independently of timers.
+    const retries = rig.scheduler as unknown as {
+      pendingRetries: Map<string, number>;
+      releaseDueRetries(): Promise<void>;
+    };
+    const release = vi.spyOn(rig.queues, "releaseForRetry");
+    try {
+      rig.queues.create({ name: "work" });
+      rig.workflows.create({
+        name: "backoff", onFail: "retry",
+        retryPolicy: { backoff: "exponential", baseMs: 150, maxAttempts: 3 },
+        steps: [{ id: "s0", title: "test", gate: { kind: "command", spec: { command: "scripted" } } }],
+      });
+      rig.queues.update("work", { workflow: "backoff" });
+      rig.teams.create(TEAM_SPEC);
+      const task = rig.queues.push("work", { prompt: "x" });
+      await rig.scheduler.tick();
+      // Flush the fake backend's turn and the scheduler's deferred event handler.
+      await vi.advanceTimersByTimeAsync(1);
+
+      for (const [attempt, delay] of [150, 300].entries()) {
+        const parkedAt = Date.now();
+        const deadline = retries.pendingRetries.get(task.taskId);
+        expect(deadline).toBe(parkedAt + delay);
+        expect(task.stepAttempts).toBe(attempt + 1);
+        const assertParked = () => {
+          expect(task.state).toBe("in_progress");
+          expect(task.agentId).toBe(rig.fake.spawns[attempt]!.agentId);
+          expect(rig.sup.status(task.agentId!).state).toBe("killed");
+          expect(rig.queues.nextPending("work")).toBeNull();
+          expect(rig.fake.spawns).toHaveLength(attempt + 1);
+          expect(gateCalls).toBe(attempt + 1);
+          expect(release).toHaveBeenCalledTimes(attempt);
+          expect(retries.pendingRetries.get(task.taskId)).toBe(deadline);
+          const persisted = JSON.parse(readFileSync(join(rig.dir, "queues.json"), "utf8")) as { tasks: TaskRecord[] };
+          expect(persisted.tasks.find((t) => t.taskId === task.taskId)).toMatchObject({
+            state: "in_progress", agentId: task.agentId, stepAttempts: attempt + 1,
+          });
+        };
+        // Neither an unrelated drain nor a premature timer wake may make a parked task eligible.
+        await retries.releaseDueRetries();
+        await rig.scheduler.tick();
+        assertParked();
+        await vi.advanceTimersByTimeAsync(delay - 1);
+        await retries.releaseDueRetries();
+        await rig.scheduler.tick();
+        assertParked();
+
+        await vi.advanceTimersByTimeAsync(1);
+        expect(release).toHaveBeenCalledTimes(attempt + 1);
+        expect(rig.fake.spawns).toHaveLength(attempt + 2);
+        expect(task.stepHistory[attempt + 1]!.startedAt).toBe(deadline);
+        // Nested zero-delay timers run on successive fake-clock ticks: backend, then scheduler.
+        await vi.advanceTimersByTimeAsync(2);
+      }
+      // Graceful close emits the terminal event after the passing gate.
+      await vi.advanceTimersByTimeAsync(1);
+      expect(task.state).toBe("done");
+      expect(task.stepHistory.map((h) => h.outcome)).toEqual(["retried", "retried", "passed"]);
+      expect(retries.pendingRetries.size).toBe(0);
+    } finally {
+      rig.scheduler.detach();
+      for (const spawn of rig.fake.spawns) await rig.sup.kill(spawn.agentId);
+      vi.restoreAllMocks();
+      vi.useRealTimers();
+    }
+  });
+
+  it("real command gates fail twice then pass through delayed fresh retries", async () => {
     const dir = mkdtempSync(join(tmpdir(), "chimera-backoff-"));
     const counter = join(dir, "counter");
     const fake = new FakeAgentBackend([ONE_TURN, ONE_TURN, ONE_TURN]);
@@ -39,12 +115,6 @@ describe("RETRY-BACKOFF: workflow step-gate delayed retry + dead-letter (schedul
     await e.handle("workflow.create", {
       spec: {
         name: "backoff", onFail: "retry",
-        // baseMs is deliberately large (not the 20-40ms this suite usually uses elsewhere) —
-        // under this sandbox's documented real-timer flakiness (concurrent test-file
-        // contention delays setTimeout firing unevenly, see supervisor/scheduler-session-limit
-        // tests' own notes), a small base leaves too little margin between "real backoff" and
-        // "scheduling noise" to assert a stable growth ratio. A bigger base keeps the RELATIVE
-        // jitter small enough for the loose ratio check below to hold reliably.
         retryPolicy: { backoff: "exponential", baseMs: 150, maxAttempts: 3 },
         steps: [{ id: "s0", title: "test", gate: { kind: "command", spec: { command: process.execPath, args: flakyGateArgs(counter, 2) } } }],
       },
@@ -60,17 +130,14 @@ describe("RETRY-BACKOFF: workflow step-gate delayed retry + dead-letter (schedul
     expect(final.stepHistory).toHaveLength(3);
     expect(final.stepHistory.map((h) => h.outcome)).toEqual(["retried", "retried", "passed"]);
 
-    // the delay BEFORE each retry, measured from the previous attempt's gate evaluation
-    // (endedAt) to the next attempt's fresh spawn (startedAt) — this is the actual wall-clock
-    // backoff the scheduler applied, not just computeRetryDelayMs' pure output (already unit
-    // tested, deterministically, in protocol/test/retry-policy.test.ts — this integration test's
-    // only job is proving the scheduler actually WAITS and that later attempts wait LONGER, so
-    // the tolerance here is deliberately loose).
-    const gap1 = final.stepHistory[1]!.startedAt - final.stepHistory[0]!.endedAt!;
-    const gap2 = final.stepHistory[2]!.startedAt - final.stepHistory[1]!.endedAt!;
-    expect(gap1).toBeGreaterThanOrEqual(100);         // roughly baseMs (150ms), generous floor
-    expect(gap2).toBeGreaterThan(gap1 * 1.15);        // grows with attempt count (300ms vs 150ms nominal)
-  }, 20000);   // real-timer test (two real backoff delays, ~150ms + ~300ms) — vitest's 5000ms default is too tight
+    // Real child startup and dispatch overhead can inflate either gap independently.
+    // Exact delay growth and early-dispatch rejection are proved with the clock above.
+    expect(fake.spawns).toHaveLength(3);
+    for (const [attempt, delay] of [150, 300].entries()) {
+      expect(final.stepHistory[attempt + 1]!.startedAt - final.stepHistory[attempt]!.endedAt!)
+        .toBeGreaterThanOrEqual(delay);
+    }
+  }, 20000);
 
   it("exhaustion routes to dead_letter (not failed) and does NOT cascade-fail dependents", async () => {
     const fake = new FakeAgentBackend([ONE_TURN]);
