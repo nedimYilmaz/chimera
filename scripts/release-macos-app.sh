@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# MACOS-SIGN-NOTARIZE: builds the Tauri desktop app DMG signed + notarized for Developer ID
+# MACOS-SIGN-NOTARIZE: builds the Tauri desktop .app signed + notarized for Developer ID
 # distribution. See docs/RELEASE-SIGNING.md for the full one-time setup checklist (certificate,
 # app-specific password, env vars) -- this script only drives the build once that setup is done.
 #
@@ -48,7 +48,7 @@ fi
 if [ "${#missing[@]}" -gt 0 ]; then
   echo "error: missing required env var(s) for a signed+notarized build:" >&2
   printf '  - %s\n' "${missing[@]}" >&2
-  echo "see docs/RELEASE-SIGNING.md. Refusing to build an unsigned/unnotarized release DMG." >&2
+  echo "see docs/RELEASE-SIGNING.md. Refusing to build an unsigned/unnotarized release app." >&2
   exit 1
 fi
 
@@ -64,22 +64,16 @@ fi
 
 release_marker="$(mktemp -t chimera-release)"
 trap 'rm -f -- "$release_marker"' EXIT
-echo "building signed + notarized DMG (this can take several minutes while Apple notarizes)..."
-# `app` must be listed too: with only `dmg`, Tauri deletes the intermediate .app once the DMG is
-# built, and both the checks below and package-macos-release.mjs (the installer's tar.gz) need it.
-(cd packages/app && pnpm tauri build --bundles app,dmg)
+echo "building the signed + notarized app (this can take several minutes while Apple notarizes)..."
+# Only the .app ships: package-macos-release.mjs tars it for the installer. Tauri notarizes the
+# .app but not a DMG, so a DMG bundle was a second, unnotarized artifact nothing published.
+(cd packages/app && pnpm tauri build --bundles app)
 
 APP_PATH="packages/app/src-tauri/target/release/bundle/macos/chimera.app"
-fresh_dmgs=()
-while IFS= read -r -d '' artifact; do fresh_dmgs+=("$artifact"); done < <(find packages/app/src-tauri/target/release/bundle/dmg -maxdepth 1 -name '*.dmg' -newer "$release_marker" -print0)
-if [ "${#fresh_dmgs[@]}" -ne 1 ]; then
-  echo "error: expected exactly one freshly built DMG; refusing to validate a stale or ambiguous artifact" >&2
-  exit 1
-fi
-DMG_PATH="${fresh_dmgs[0]}"
-
-if [ ! -d "$APP_PATH" ] || [ -z "$DMG_PATH" ]; then
-  echo "error: build did not produce the expected .app/.dmg -- check the tauri build output above" >&2
+# Refuse to validate a stale bundle left by an earlier local build.
+# Info.plist is rewritten by every build; the bundle directory's own mtime need not change.
+if [ ! -f "$APP_PATH/Contents/Info.plist" ] || [ -z "$(find "$APP_PATH/Contents/Info.plist" -newer "$release_marker")" ]; then
+  echo "error: build did not produce a fresh $APP_PATH -- check the tauri build output above" >&2
   exit 1
 fi
 
@@ -91,10 +85,4 @@ spctl -a -t execute -v "$APP_PATH"
 xcrun stapler validate "$APP_PATH"
 
 echo
-echo "=== verification: $DMG_PATH ==="
-spctl -a -t open --context context:primary-signature -v "$DMG_PATH"
-xcrun stapler validate "$DMG_PATH"
-node scripts/release-checksums.mjs "$DMG_PATH"
-
-echo
-echo "all checks passed: $DMG_PATH is signed, notarized, and stapled."
+echo "all checks passed: $APP_PATH is signed, notarized, and stapled."
