@@ -20,7 +20,9 @@ export const realDurableWriteDeps: DurableWriteDeps = { openSync, writeSync, fsy
 // unclean shutdown, silently leaving the OLD file in place even though this function already
 // returned. Both fsyncs are required; either alone leaves a gap (data-without-rename, or
 // rename-without-durable-data).
-export function writeFileDurable(targetPath: string, data: string, deps: DurableWriteDeps = realDurableWriteDeps): void {
+export function writeFileDurable(
+  targetPath: string, data: string, deps: DurableWriteDeps = realDurableWriteDeps, platform: NodeJS.Platform = process.platform,
+): void {
   const tmpPath = `${targetPath}.tmp`;
   const fd = deps.openSync(tmpPath, "w");
   try {
@@ -30,12 +32,15 @@ export function writeFileDurable(targetPath: string, data: string, deps: Durable
     deps.closeSync(fd);
   }
   deps.renameSync(tmpPath, targetPath);
-  const dirFd = deps.openSync(dirname(targetPath), "r");
-  try {
-    deps.fsyncSync(dirFd);
-  } finally {
-    deps.closeSync(dirFd);
-  }
+  fsyncDirectory(dirname(targetPath), deps, platform);
+}
+
+// Makes a rename inside `dir` durable. Windows refuses fsync on a directory handle (EPERM), which
+// failed the daemon's first state write so it never came up; NTFS journals the rename's metadata
+// itself, so there is nothing to flush there.
+export function fsyncDirectory(dir: string, deps: DurableWriteDeps = realDurableWriteDeps, platform: NodeJS.Platform = process.platform): void {
+  if (platform === "win32") return;
+  fsyncPathDurable(dir, deps);
 }
 
 // fsync a path that's already fully written (a sealed segment, a directory-after-rename, ...) —

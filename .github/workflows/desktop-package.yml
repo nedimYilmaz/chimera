@@ -49,7 +49,7 @@ jobs:
           package_name: ${{ inputs.package_name }}
           windows_publisher_thumbprint: ${{ inputs.windows_publisher_thumbprint }}
       - name: Linux native dependencies
-        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev patchelf
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev patchelf xdg-utils
       - name: Build Linux AppImage
         run: pnpm --filter @chimera/app tauri build --bundles appimage
       - name: Verify and name native artifact

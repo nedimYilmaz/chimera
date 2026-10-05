@@ -3,7 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { basename, join } from "node:path";
 import { EventLogDurabilityConfigSchema, type ChronicleExportRequest, type ChronicleExportResponse, type ChronicleMatchField, type ChronicleSearchHit, type ChronicleSearchRequest, type ChronicleSearchResponse, type EventKind, type EventLogDurabilityConfig, type NormalizedEvent } from "@chimera/protocol";
 import {
-  DurableAppendLog, fsyncPathDurable, realDurableWriteDeps, writeFileDurable,
+  DurableAppendLog, fsyncDirectory, realDurableWriteDeps, writeFileDurable,
   type ClearTimerFn, type DurableWriteDeps, type TimerFn,
 } from "./durable-write.js";
 import { scanSegments, SCAN_BACKGROUND, SCAN_INTERACTIVE } from "./segment-scan.js";
@@ -270,7 +270,7 @@ export class EventLog {
     const lastSeq = this.recent[this.recent.length - 1]!.seq;
     const sealed = join(this.eventsDir, `events.${firstSeq}-${lastSeq}.jsonl`);
     renameSync(this.file, sealed);          // atomic seal; appendLog recreates `events.jsonl` lazily on next append
-    fsyncPathDurable(this.eventsDir, this.ioDeps);   // fsync on rotate rename + dir
+    fsyncDirectory(this.eventsDir, this.ioDeps);   // fsync on rotate rename + dir
     // Checksum is computed from the in-memory `recent` window (exactly what was written, byte
     // for byte — JSON.stringify is deterministic per object) rather than re-reading the sealed
     // file from disk: avoids a full extra I/O pass per rotation on top of the fsyncs above.

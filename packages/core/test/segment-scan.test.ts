@@ -104,19 +104,27 @@ describe("the worker and the inline reference agree", () => {
 });
 
 describe("the event loop keeps running during a scan", () => {
-  it("lets timers fire while sealed segments are being read", async () => {
-    // The property the whole change exists for. A synchronous read of this much JSON blocks every
-    // timer until it finishes; off-thread, they keep firing. Asserted as "the loop ticked at all",
-    // not as a duration — a wall-clock threshold would be a flake on a loaded machine.
+  it("lets the event loop turn while sealed segments are being read", async () => {
+    // The property the whole change exists for: the read must not hold the daemon's thread.
+    // Asserted by ORDER, not by time. An inline read finishes inside the call, so the scan's
+    // promise settles before any queued setImmediate; an off-thread read can only answer through a
+    // later loop turn, so the setImmediate runs first. Counting 1ms interval ticks used to stand in
+    // for this, but a warm worker answers in ~2ms on Linux and the interval never fired.
     const { segments } = makeSegments(8, 400);
-    let ticks = 0;
-    const timer = setInterval(() => { ticks++; }, 1);
-    try {
-      await scanSegments({ segments, agentId: "nobody", need: 500 });   // worst case: reads them all
-    } finally {
-      clearInterval(timer);
-    }
-    expect(ticks).toBeGreaterThan(0);
+    let loopTurned = false;
+    setImmediate(() => { loopTurned = true; });
+    await scanSegments({ segments, agentId: "nobody", need: 500 });   // worst case: reads them all
+    expect(loopTurned).toBe(true);
+  });
+
+  it("the order check above would catch an inline read", async () => {
+    // Guards the guard: the same check against the synchronous reference must come out false,
+    // or the test above would pass whatever thread the read ran on.
+    const { segments } = makeSegments(8, 400);
+    let loopTurned = false;
+    setImmediate(() => { loopTurned = true; });
+    await Promise.resolve(scanSegmentsInline({ segments, agentId: "nobody", need: 500 }));
+    expect(loopTurned).toBe(false);
   });
 });
 
