@@ -1,9 +1,7 @@
 See why new agents are waiting
 OS resources and admission capacity
 
-Disclosure (on every frame): Demo data · scripted daemon · fictional Atlas
-
 [0:02] 1 · Open the agent inspector
-[0:04] 2 · Inspect OS memory and CPU
-[0:11] RSS is separate from token context
+[0:05] 2 · Inspect OS memory and CPU
+[0:10] RSS is separate from token context
 [0:14] 3 · At capacity: new agents wait

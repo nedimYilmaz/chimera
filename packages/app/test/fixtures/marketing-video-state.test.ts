@@ -38,6 +38,16 @@ describe('usage video fixture safety and visible state', () => {
     hooks.transition('d1e5a7c3', 'done');
     expect(detail().tasks.at(-1)?.state).toBe('done');
   });
+  it('answers shared header and inspector resources in both still and video fixtures', () => {
+    for (const read of [marketingRpc, rpc]) {
+      for (const agentId of [ids.conductor, ids.pricing]) {
+        const result = AgentResourcesResponseSchema.parse(read('agent.resources', { agentId }));
+        expect(result.sample.agentId).toBe(agentId);
+        expect(result.sample.totals).toMatchObject({ cpuPct: 15.5, rssBytes: 232 * 1024 ** 2 });
+      }
+    }
+    expect(hooks.misses()).toEqual([]);
+  });
   it('validates the new capture services and makes revoked snapshot bodies unreadable', () => {
     expect(AgentResourcesResponseSchema.parse(rpc('agent.resources', { agentId: ids.conductor })).sample.totals.procCount).toBe(2);
     expect(CanvasGetResponseSchema.parse(rpc('canvas.get', { projectId: 'atlas-website' })).nodes).toHaveLength(4);

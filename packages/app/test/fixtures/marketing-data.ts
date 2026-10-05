@@ -295,9 +295,18 @@ function memoryStats() {
 
 export function marketingRpc(method: string, params: Record<string, unknown> = {}): unknown {
   switch (method) {
+    case "issues.sourceList":
+    case "issues.linkList": return [];
+    case "stt.status": return { preferences: { v: 1, engine: null, language: "en" }, engines: [], install: { state: "idle", progress: 0 }, model: { id: "small-q5_1", bytes: 1, sha256: "0".repeat(64), license: "MIT", runtimeVersion: "demo", runtimeSha256: "0".repeat(64), path: "/demo/stt/model" } };
     case "daemon.status": return daemonStatus;
     case "agent.list": return agentRecords;
     case "agent.status": return agentRecords.find((a) => a.agentId === params.agentId) ?? agentRecords[0];
+    case "agent.resources": return {
+    sample: { agentId: String(params.agentId), sampledAt: Date.now(), state: "ok", rootPid: 4200,
+      procs: [{ pid: 4200, ppid: 1, name: "codex-demo", role: "agent", cpuPct: 12.4, rssBytes: 184 * 1024 ** 2, elapsedSec: 90 }, { pid: 4201, ppid: 4200, name: "node-demo", role: "tool", cpuPct: 3.1, rssBytes: 48 * 1024 ** 2, elapsedSec: 45 }],
+      totals: { cpuPct: 15.5, rssBytes: 232 * 1024 ** 2, procCount: 2 }, truncated: false },
+    admission: { running: 6, cap: 6, ceiling: 8, healthy: true, cpuPressure: true, memPressure: false, load1: 8, cores: 8, freeMemGb: 3, explain: "load 8/8 cores, 3 GB free" }
+    };
     case "agent.tail": return replay[String(params.agentId)] ?? [];
     case "events.replay": return replay[String(params.agentId)] ?? [];
     case "team.list": return teams;

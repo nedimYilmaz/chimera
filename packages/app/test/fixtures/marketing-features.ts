@@ -248,15 +248,15 @@ const leaseMonitor = {
   ],
 };
 
-// A synthetic stand-in for the desktop target — drawn here, never captured from a screen. The banner
-// states it plainly so the screenshot can never read as real desktop activity.
+// A synthetic stand-in for the desktop target — drawn here, never captured from a screen.
+// Asset provenance documents its origin; the presentation omits repeated demo labels.
 const demoTarget = () => {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="960" height="600" viewBox="0 0 960 600" font-family="system-ui, sans-serif">
 <rect width="960" height="600" fill="#101419"/>
 <rect x="40" y="52" width="880" height="508" rx="10" fill="#1a2028" stroke="#2c3541"/>
 <rect x="40" y="52" width="880" height="34" rx="10" fill="#232b35"/>
 <circle cx="64" cy="69" r="6" fill="#e5675d"/><circle cx="86" cy="69" r="6" fill="#e6b455"/><circle cx="108" cy="69" r="6" fill="#62c370"/>
-<text x="480" y="74" fill="#8b97a6" font-size="14" text-anchor="middle">Atlas pricing — preview (demo window)</text>
+<text x="480" y="74" fill="#8b97a6" font-size="14" text-anchor="middle">Atlas pricing — preview</text>
 <text x="80" y="140" fill="#e8edf3" font-size="26" font-weight="600">Pick the plan that fits</text>
 <g font-size="15" fill="#c9d2dd">
 <rect x="80" y="170" width="250" height="230" rx="10" fill="#202833" stroke="#2c3541"/><text x="100" y="204" font-weight="600">Starter</text><text x="100" y="244" font-size="30" fill="#e8edf3">$0</text><text x="100" y="284">3 projects</text><text x="100" y="312">Community support</text>
@@ -265,9 +265,6 @@ const demoTarget = () => {
 </g>
 <rect x="375" y="350" width="120" height="34" rx="6" fill="#4d8fe8"/><text x="435" y="372" fill="#fff" font-size="14" text-anchor="middle">Choose Team</text>
 <circle cx="435" cy="367" r="16" fill="none" stroke="#f0b429" stroke-width="3"/>
-<text x="480" y="400" fill="#f0b429" fill-opacity="0.16" font-size="190" font-weight="800" text-anchor="middle" transform="rotate(-14 480 330)">DEMO</text>
-<rect x="0" y="0" width="960" height="52" fill="#f0b429"/>
-<text x="480" y="36" fill="#1a1300" font-size="34" font-weight="800" text-anchor="middle">DEMO · synthetic target</text>
 </svg>`;
   return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 };
@@ -354,7 +351,7 @@ export function computerNative(command: string, _args?: Record<string, unknown>)
   switch (command) {
     case "computer_use_status":
       return { configured: true, driverSource: "bundled", running: computerState.running, autoStart: false, permissionOwner: "Chimera", accessibility: true, screenRecording: true };
-    // Only the lease owner's monitor asks for this; the frame is the labelled synthetic demo target.
+    // Only the lease owner's monitor asks for this; the frame is the synthetic Atlas pricing target.
     case "computer_use_preview":
       return demoTarget();
     case "computer_use_stop":

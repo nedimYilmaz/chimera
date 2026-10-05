@@ -1,9 +1,7 @@
 Keep desktop control in view
 Preview ownership and action history
 
-Disclosure (on every frame): Demo data · scripted daemon · fictional Atlas
-
 [0:02] 1 · See the desktop control owner
 [0:06] 2 · Expand the desktop preview
-[0:12] Synthetic target · action history is scripted
+[0:12] Review recent desktop actions
 [0:16] 3 · Collapse to keep the workspace clear

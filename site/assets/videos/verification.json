@@ -32,11 +32,11 @@
             "time_base": "1/19200",
             "start_pts": 0,
             "start_time": "0.000000",
-            "duration_ts": 705280,
-            "duration": "36.733333",
-            "bit_rate": "1152229",
+            "duration_ts": 706560,
+            "duration": "36.800000",
+            "bit_rate": "1106888",
             "bits_per_raw_sample": "8",
-            "nb_frames": "551",
+            "nb_frames": "552",
             "extradata_size": 25,
             "disposition": {
               "default": 1,
@@ -72,9 +72,9 @@
           "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
           "format_long_name": "QuickTime / MOV",
           "start_time": "0.000000",
-          "duration": "36.733333",
-          "size": "5293830",
-          "bit_rate": "1152921",
+          "duration": "36.800000",
+          "size": "5094858",
+          "bit_rate": "1107577",
           "probe_score": 100,
           "tags": {
             "major_brand": "isom",
@@ -137,7 +137,7 @@
             },
             "tags": {
               "ENCODER": "Lavc libvpx",
-              "DURATION": "00:00:36.734000000"
+              "DURATION": "00:00:36.800000000"
             }
           }
         ],
@@ -148,9 +148,9 @@
           "format_name": "matroska,webm",
           "format_long_name": "Matroska / WebM",
           "start_time": "0.000000",
-          "duration": "36.734000",
-          "size": "4203233",
-          "bit_rate": "915388",
+          "duration": "36.800000",
+          "size": "4190271",
+          "bit_rate": "910928",
           "probe_score": 100,
           "tags": {
             "encoder": "Lavf"
@@ -186,11 +186,11 @@
             "time_base": "1/19200",
             "start_pts": 0,
             "start_time": "0.000000",
-            "duration_ts": 520960,
-            "duration": "27.133333",
-            "bit_rate": "1184776",
+            "duration_ts": 513280,
+            "duration": "26.733333",
+            "bit_rate": "1117644",
             "bits_per_raw_sample": "8",
-            "nb_frames": "407",
+            "nb_frames": "401",
             "extradata_size": 25,
             "disposition": {
               "default": 1,
@@ -226,9 +226,9 @@
           "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
           "format_long_name": "QuickTime / MOV",
           "start_time": "0.000000",
-          "duration": "27.133333",
-          "size": "4020917",
-          "bit_rate": "1185528",
+          "duration": "26.733333",
+          "size": "3737319",
+          "bit_rate": "1118399",
           "probe_score": 100,
           "tags": {
             "major_brand": "isom",
@@ -291,7 +291,7 @@
             },
             "tags": {
               "ENCODER": "Lavc libvpx",
-              "DURATION": "00:00:27.134000000"
+              "DURATION": "00:00:26.734000000"
             }
           }
         ],
@@ -302,9 +302,9 @@
           "format_name": "matroska,webm",
           "format_long_name": "Matroska / WebM",
           "start_time": "0.000000",
-          "duration": "27.134000",
-          "size": "3557456",
-          "bit_rate": "1048855",
+          "duration": "26.734000",
+          "size": "3284563",
+          "bit_rate": "982887",
           "probe_score": 100,
           "tags": {
             "encoder": "Lavf"
@@ -340,11 +340,11 @@
             "time_base": "1/19200",
             "start_pts": 0,
             "start_time": "0.000000",
-            "duration_ts": 544000,
-            "duration": "28.333333",
-            "bit_rate": "1222621",
+            "duration_ts": 545280,
+            "duration": "28.400000",
+            "bit_rate": "1212467",
             "bits_per_raw_sample": "8",
-            "nb_frames": "425",
+            "nb_frames": "426",
             "extradata_size": 25,
             "disposition": {
               "default": 1,
@@ -380,9 +380,9 @@
           "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
           "format_long_name": "QuickTime / MOV",
           "start_time": "0.000000",
-          "duration": "28.333333",
-          "size": "4332758",
-          "bit_rate": "1223366",
+          "duration": "28.400000",
+          "size": "4306893",
+          "bit_rate": "1213209",
           "probe_score": 100,
           "tags": {
             "major_brand": "isom",
@@ -445,7 +445,7 @@
             },
             "tags": {
               "ENCODER": "Lavc libvpx",
-              "DURATION": "00:00:28.334000000"
+              "DURATION": "00:00:28.400000000"
             }
           }
         ],
@@ -456,9 +456,9 @@
           "format_name": "matroska,webm",
           "format_long_name": "Matroska / WebM",
           "start_time": "0.000000",
-          "duration": "28.334000",
-          "size": "3456266",
-          "bit_rate": "975863",
+          "duration": "28.400000",
+          "size": "3527869",
+          "bit_rate": "993765",
           "probe_score": 100,
           "tags": {
             "encoder": "Lavf"
@@ -494,11 +494,11 @@
             "time_base": "1/19200",
             "start_pts": 0,
             "start_time": "0.000000",
-            "duration_ts": 432640,
-            "duration": "22.533333",
-            "bit_rate": "991820",
+            "duration_ts": 426240,
+            "duration": "22.200000",
+            "bit_rate": "899869",
             "bits_per_raw_sample": "8",
-            "nb_frames": "338",
+            "nb_frames": "333",
             "extradata_size": 25,
             "disposition": {
               "default": 1,
@@ -534,9 +534,9 @@
           "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
           "format_long_name": "QuickTime / MOV",
           "start_time": "0.000000",
-          "duration": "22.533333",
-          "size": "2795876",
-          "bit_rate": "992618",
+          "duration": "22.200000",
+          "size": "2499368",
+          "bit_rate": "900673",
           "probe_score": 100,
           "tags": {
             "major_brand": "isom",
@@ -599,7 +599,7 @@
             },
             "tags": {
               "ENCODER": "Lavc libvpx",
-              "DURATION": "00:00:22.534000000"
+              "DURATION": "00:00:22.200000000"
             }
           }
         ],
@@ -610,9 +610,9 @@
           "format_name": "matroska,webm",
           "format_long_name": "Matroska / WebM",
           "start_time": "0.000000",
-          "duration": "22.534000",
-          "size": "2460041",
-          "bit_rate": "873361",
+          "duration": "22.200000",
+          "size": "2199676",
+          "bit_rate": "792676",
           "probe_score": 100,
           "tags": {
             "encoder": "Lavf"
@@ -650,7 +650,7 @@
             "start_time": "0.000000",
             "duration_ts": 480000,
             "duration": "25.000000",
-            "bit_rate": "749836",
+            "bit_rate": "705299",
             "bits_per_raw_sample": "8",
             "nb_frames": "375",
             "extradata_size": 25,
@@ -689,8 +689,8 @@
           "format_long_name": "QuickTime / MOV",
           "start_time": "0.000000",
           "duration": "25.000000",
-          "size": "2345641",
-          "bit_rate": "750605",
+          "size": "2206463",
+          "bit_rate": "706068",
           "probe_score": 100,
           "tags": {
             "major_brand": "isom",
@@ -765,8 +765,8 @@
           "format_long_name": "Matroska / WebM",
           "start_time": "0.000000",
           "duration": "25.000000",
-          "size": "2103930",
-          "bit_rate": "673257",
+          "size": "1943270",
+          "bit_rate": "621846",
           "probe_score": 100,
           "tags": {
             "encoder": "Lavf"
@@ -802,11 +802,11 @@
             "time_base": "1/19200",
             "start_pts": 0,
             "start_time": "0.000000",
-            "duration_ts": 456960,
-            "duration": "23.800000",
-            "bit_rate": "1012912",
+            "duration_ts": 449280,
+            "duration": "23.400000",
+            "bit_rate": "932482",
             "bits_per_raw_sample": "8",
-            "nb_frames": "357",
+            "nb_frames": "351",
             "extradata_size": 25,
             "disposition": {
               "default": 1,
@@ -842,9 +842,9 @@
           "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
           "format_long_name": "QuickTime / MOV",
           "start_time": "0.000000",
-          "duration": "23.800000",
-          "size": "3015741",
-          "bit_rate": "1013694",
+          "duration": "23.400000",
+          "size": "2729812",
+          "bit_rate": "933269",
           "probe_score": 100,
           "tags": {
             "major_brand": "isom",
@@ -907,7 +907,7 @@
             },
             "tags": {
               "ENCODER": "Lavc libvpx",
-              "DURATION": "00:00:23.800000000"
+              "DURATION": "00:00:23.400000000"
             }
           }
         ],
@@ -918,9 +918,9 @@
           "format_name": "matroska,webm",
           "format_long_name": "Matroska / WebM",
           "start_time": "0.000000",
-          "duration": "23.800000",
-          "size": "2438673",
-          "bit_rate": "819722",
+          "duration": "23.400000",
+          "size": "2235930",
+          "bit_rate": "764420",
           "probe_score": 100,
           "tags": {
             "encoder": "Lavf"
@@ -936,11 +936,11 @@
       "status": "passed",
       "width": 1280,
       "height": 800,
-      "duration": 36.734,
+      "duration": 36.8,
       "advanced": true,
-      "decoded": 13,
+      "decoded": 14,
       "captionCount": 9,
-      "src": "http://127.0.0.1:54644/chimera/assets/videos/chimera-team-queue-lifecycle.webm",
+      "src": "http://127.0.0.1:51990/chimera/assets/videos/chimera-team-queue-lifecycle.webm",
       "captions": 9
     },
     {
@@ -948,11 +948,11 @@
       "status": "passed",
       "width": 1280,
       "height": 800,
-      "duration": 36.733333,
+      "duration": 36.8,
       "advanced": true,
       "decoded": 15,
       "captionCount": 9,
-      "src": "http://127.0.0.1:54644/chimera/assets/videos/chimera-team-queue-lifecycle.mp4",
+      "src": "http://127.0.0.1:51990/chimera/assets/videos/chimera-team-queue-lifecycle.mp4",
       "captions": 9
     },
     {
@@ -960,11 +960,11 @@
       "status": "passed",
       "width": 1280,
       "height": 800,
-      "duration": 27.134,
+      "duration": 26.734,
       "advanced": true,
       "decoded": 15,
       "captionCount": 6,
-      "src": "http://127.0.0.1:54644/chimera/assets/videos/chimera-memory-search-link.webm",
+      "src": "http://127.0.0.1:51990/chimera/assets/videos/chimera-memory-search-link.webm",
       "captions": 6
     },
     {
@@ -972,11 +972,11 @@
       "status": "passed",
       "width": 1280,
       "height": 800,
-      "duration": 27.133333,
+      "duration": 26.733333,
       "advanced": true,
       "decoded": 16,
       "captionCount": 6,
-      "src": "http://127.0.0.1:54644/chimera/assets/videos/chimera-memory-search-link.mp4",
+      "src": "http://127.0.0.1:51990/chimera/assets/videos/chimera-memory-search-link.mp4",
       "captions": 6
     },
     {
@@ -984,11 +984,11 @@
       "status": "passed",
       "width": 1280,
       "height": 800,
-      "duration": 28.334,
+      "duration": 28.4,
       "advanced": true,
-      "decoded": 15,
+      "decoded": 16,
       "captionCount": 4,
-      "src": "http://127.0.0.1:54644/chimera/assets/videos/chimera-context-handoff.webm",
+      "src": "http://127.0.0.1:51990/chimera/assets/videos/chimera-context-handoff.webm",
       "captions": 4
     },
     {
@@ -996,11 +996,11 @@
       "status": "passed",
       "width": 1280,
       "height": 800,
-      "duration": 28.333333,
+      "duration": 28.4,
       "advanced": true,
-      "decoded": 16,
+      "decoded": 17,
       "captionCount": 4,
-      "src": "http://127.0.0.1:54644/chimera/assets/videos/chimera-context-handoff.mp4",
+      "src": "http://127.0.0.1:51990/chimera/assets/videos/chimera-context-handoff.mp4",
       "captions": 4
     },
     {
@@ -1008,11 +1008,11 @@
       "status": "passed",
       "width": 1280,
       "height": 800,
-      "duration": 22.534,
+      "duration": 22.2,
       "advanced": true,
-      "decoded": 16,
+      "decoded": 15,
       "captionCount": 4,
-      "src": "http://127.0.0.1:54644/chimera/assets/videos/chimera-resource-diagnostics.webm",
+      "src": "http://127.0.0.1:51990/chimera/assets/videos/chimera-resource-diagnostics.webm",
       "captions": 4
     },
     {
@@ -1020,11 +1020,11 @@
       "status": "passed",
       "width": 1280,
       "height": 800,
-      "duration": 22.533333,
+      "duration": 22.2,
       "advanced": true,
       "decoded": 17,
       "captionCount": 4,
-      "src": "http://127.0.0.1:54644/chimera/assets/videos/chimera-resource-diagnostics.mp4",
+      "src": "http://127.0.0.1:51990/chimera/assets/videos/chimera-resource-diagnostics.mp4",
       "captions": 4
     },
     {
@@ -1034,9 +1034,9 @@
       "height": 800,
       "duration": 25,
       "advanced": true,
-      "decoded": 15,
+      "decoded": 17,
       "captionCount": 5,
-      "src": "http://127.0.0.1:54644/chimera/assets/videos/chimera-project-canvas.webm",
+      "src": "http://127.0.0.1:51990/chimera/assets/videos/chimera-project-canvas.webm",
       "captions": 5
     },
     {
@@ -1046,9 +1046,9 @@
       "height": 800,
       "duration": 25,
       "advanced": true,
-      "decoded": 18,
+      "decoded": 16,
       "captionCount": 5,
-      "src": "http://127.0.0.1:54644/chimera/assets/videos/chimera-project-canvas.mp4",
+      "src": "http://127.0.0.1:51990/chimera/assets/videos/chimera-project-canvas.mp4",
       "captions": 5
     },
     {
@@ -1056,11 +1056,11 @@
       "status": "passed",
       "width": 1280,
       "height": 800,
-      "duration": 23.8,
+      "duration": 23.4,
       "advanced": true,
-      "decoded": 16,
+      "decoded": 17,
       "captionCount": 4,
-      "src": "http://127.0.0.1:54644/chimera/assets/videos/chimera-desktop-preview.webm",
+      "src": "http://127.0.0.1:51990/chimera/assets/videos/chimera-desktop-preview.webm",
       "captions": 4
     },
     {
@@ -1068,11 +1068,11 @@
       "status": "passed",
       "width": 1280,
       "height": 800,
-      "duration": 23.8,
+      "duration": 23.4,
       "advanced": true,
-      "decoded": 17,
+      "decoded": 15,
       "captionCount": 4,
-      "src": "http://127.0.0.1:54644/chimera/assets/videos/chimera-desktop-preview.mp4",
+      "src": "http://127.0.0.1:51990/chimera/assets/videos/chimera-desktop-preview.mp4",
       "captions": 4
     },
     {
@@ -1115,7 +1115,7 @@
         "assets/videos/chimera-desktop-preview.vtt",
         "assets/videos/chimera-desktop-preview.mp4",
         "assets/videos/chimera-desktop-preview.webm",
-        "assets/videos/provenance.md"
+        "how-made.html#videos"
       ],
       "scope": "Real static gallery, caption tracks and text/poster alternatives; no scripts or autoplay"
     }

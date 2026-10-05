@@ -288,3 +288,27 @@ describe("TranscriptHeader — CONDUCTOR-FULL-ACCESS permission chip", () => {
     expect(chip!.props["className"] as string).not.toMatch(/toneWarn/);
   });
 });
+
+describe("Transcript metric basis disclosure", () => {
+  it("distinguishes the effective compaction basis from the actual provider session window", () => {
+    const r = renderHeader({ fullContext: 225000, limit: 450000, contextLimits: { source: "codex", sessionWindow: 475000, compactAt: 450000, requestedWindow: 500000, maxWindow: 1050000 } });
+    expect(r.root.findByProps({ "data-context-meter": "known" }).props.title).toContain("effective context limit");
+    const detail = r.root.findByProps({ "data-context-detail": true });
+    expect(detail.children.join("")).toContain("effective context limit");
+    expect(detail.findAllByType("span").map(s => s.children.join(""))).toContain("450k");
+    expect(r.root.findByProps({ "data-context-limits": true }).children.join("")).toContain("Active session 475k");
+    act(() => r.unmount());
+  });
+  it("uses unknown for absent current context instead of a zero counter", () => {
+    const r = renderHeader({ fullContext: null, limit: 450000 });
+    expect(r.root.findByProps({ "data-context-detail": true }).findAllByType("span")[0]!.children.join("")).toBe("unknown");
+    act(() => r.unmount());
+  });
+});
+
+it("keeps a measured prompt counter when only the denominator is unknown", () => {
+  const r = renderHeader({ fullContext: 200000, limit: 0 });
+  expect(r.root.findByProps({ "data-context-meter": "unknown" })).toBeDefined();
+  expect(r.root.findByProps({ "data-context-detail": true }).findAllByType("span").map(s => s.children.join(""))).toEqual(["200k", "unknown"]);
+  act(() => r.unmount());
+});

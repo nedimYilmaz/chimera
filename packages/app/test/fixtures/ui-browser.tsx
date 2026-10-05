@@ -196,6 +196,7 @@ const gitWrites: unknown[] = [];
 let gitIndex = "index-1", gitVersion = "content-1", gitText = "original text\n";
 let gitFiles = [{ path: "one.txt", index: "M", worktree: "M", staged: true }, { path: "nested/" + "long-path-".repeat(8) + ".txt", index: " ", worktree: "M", staged: false }];
 let resourcesActive = false;
+let metricsActive = false;
 const resourcePending: { resolve(value: unknown): void; reject(error: unknown): void }[] = [];
 let teamStabilityActive = false;
 let teamStabilitySeq = 0;
@@ -330,6 +331,7 @@ window.__UI_QA_RPC__ = (method, params) => {
       return result;
     }
   }
+  if (metricsActive && method === "agent.resources") return resources.snapshot();
   if (resourcesActive && method === "agent.resources") return new Promise((resolve, reject) => resourcePending.push({ resolve, reject }));
   if (groupOrderFixture) {
     if (method === "group.list") return { groups: orderGroups };
@@ -742,14 +744,19 @@ function DesignProbe() {
 }
 function MetricsProbe() {
   const [large, setLarge] = useState(false);
-  return <Stage><div data-metrics-probe style={{ minWidth: 0, overflow: "auto", containerType: "inline-size", containerName: "agent-transcript" }}>
+  const [longModel, setLongModel] = useState(false);
+  return <Stage><div data-metrics-probe style={{ minWidth: 0, minHeight: 0, flex: 1, display: "flex", flexDirection: "column", containerType: "inline-size", containerName: "agent-transcript" }}>
     <TranscriptHeader name="codex-prompt-engineer-with-a-very-long-agent-name" fullId="8eb20180-058c-469f-9ba4-bc36447d550c" state="running" tone="success" overBudget={false}
-      model="gpt-6-astra" effort="high" account="codex-account-with-a-very-long-name" costUsd={12.34} usageTotal={113696}
+      resourceAgentId={agentId} model={longModel ? "gpt-6-astra-with-a-very-long-model-identifier-and-additional-settings" : "gpt-6-astra"} effort="high" account="codex-account-with-a-very-long-name" costUsd={12.34} usageTotal={113696}
       usage={{ input: 113101, output: 20007, cacheRead: large ? 2293760 : 2000, cacheCreation: 0 }}
       contextLimits={{ source: "codex", defaultWindow: 272000, maxWindow: large ? 1050000 : 872000, sessionWindow: 258400, compactAt: 120000 }} fullContext={109416} limit={258400} ring={[1200, 1800]} compacting={large} hint={{ above: 38, below: 0 }}
       detailOpen={false} onToggleDetail={() => {}} onAction={() => {}} onToggleVoiceHistory={() => {}} />
     <button data-metrics-update onClick={() => setLarge(!large)}>Update usage</button>
-    <MessageBody text={"Long continuous text: " + "measurement".repeat(80) + "\n\nA readable paragraph with all controls retained."} done rawView={false} />
+    <button data-metrics-long-model onClick={() => setLongModel(!longModel)}>Long model</button>
+    <div data-metrics-body style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
+    <MessageBody text={"Long continuous text: " + "measurement".repeat(800) + "\n\nA readable paragraph with all controls retained."} done rawView={false} />
+    </div>
+    <textarea data-metrics-composer aria-label="Header test composer" style={{ height: 64, flexShrink: 0, boxSizing: "border-box", width: "100%" }} />
   </div></Stage>;
 }
 function TopbarProbe() {
@@ -922,6 +929,8 @@ function show(name: Scenario): void {
   issueActive = name === "issue-board";
   if (issueActive) { issueSeq = 0; issuePending.clear(); issueWrites.length = 0; issueOutcome = "posted"; issueWritePending = null; issueSyncPending = null; queueIssues("issue-queue").status.reset(); closeIssueComment(); appStore.dispatch({ type: "connected", connected: true }); appStore.dispatch({ type: "selectTab", tab: "queues" }); }
   resourcesActive = name === "resources";
+  metricsActive = name === "metrics";
+  if (metricsActive) appStore.dispatch({ type: "connected", connected: true });
   if (resourcesActive || name === "context-links") {
     resourcePending.length = 0;
     appStore.dispatch({ type: "connected", connected: true });

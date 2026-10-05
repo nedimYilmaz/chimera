@@ -91,6 +91,11 @@ function checkPage(htmlPath) {
   const html = read(htmlPath);
   checkTerms(html, htmlPath);
   checkToolCounts(html, htmlPath);
+  if (/<figcaption[^>]*>[^<]*(?:demo data|scripted daemon|synthetic demo)/i.test(html)) fail(`${htmlPath}: repeated fixture label in media caption`);
+  if (htmlPath === 'site/videos.html') {
+    if (!html.includes('how-made.html#videos')) fail('videos: missing How made link');
+    if (/Capture source <code>|Actual interface · fictional data|scripted daemon/i.test(html)) fail('videos: technical capture clutter in gallery');
+  }
 
   const need = [
     [/<html[^>]*\slang="[a-z-]+"/i, "<html lang>"],
@@ -193,7 +198,11 @@ if (existsSync(join(root,'site/videos.html'))) {
     const provenance = JSON.parse(read('site/assets/videos/provenance.json'));
     if (provenance.clips.length < 5 || provenance.clips.length > 7) fail('videos: expected 5–7 clips');
     if (provenance.sourceTreeDirty) fail('videos: fixture capture source was dirty');
+    if (provenance.presentation?.persistentDemoLabel !== false) fail('videos: presentation must omit persistent demo labels');
+    if (!/fictional/i.test(provenance.notice ?? '') || !/scripted/i.test(provenance.notice ?? '') || !provenance.fixtureVsReal?.scripted?.some(line => /synthetic.*desktop|desktop.*synthetic/i.test(line))) fail('videos: missing fictional, scripted or synthetic desktop provenance');
+    if (!/^[0-9a-f]{40}$/.test(provenance.sourceRevision ?? '')) fail('videos: missing exact source revision');
     for (const clip of provenance.clips) {
+      if (!/^[0-9a-f]{40}$/.test(clip.captureSourceRevision ?? '')) fail(`videos: ${clip.id} missing exact capture revision`);
       if (clip.durationSeconds < 15 || clip.durationSeconds > 40) fail(`videos: ${clip.id} pacing`);
       for (const format of ['webm','mp4']) {
         const f = clip.files[format]; if (!f) { fail(`videos: ${clip.id} missing ${format}`); continue; }

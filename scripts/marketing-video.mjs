@@ -2,7 +2,7 @@
 //
 // The same stand-in as scripts/marketing-preview.mjs: the real React screens on the real app store in
 // local headless Chromium, answered by a mocked RPC bridge with the fictional "Atlas website" data. No
-// daemon, provider, account, network or agent is involved and nothing is drawn or generated. The
+// daemon, provider, account, network or agent is involved the desktop target is a synthetic fixture SVG. The
 // difference is the clock: this script drives scripted pointer movement, clicks and typing through
 // CDP, makes the queue change state through the real store event path, and films the result at a FIXED
 // frame rate (video time = frame index / fps), so a recapture of the same tree produces the same
@@ -19,7 +19,7 @@
 // Adding a clip: add an entry to CLIPS with a `run(rec)` that only uses the Recorder verbs (caption /
 // click / type / press / hold / transition). Every verb that changes the UI is followed by an `expect`
 // on the DOM, so a scene that did not happen fails the capture instead of being filmed. All data stays
-// fictional; the on-video disclosure band is asserted on every captured frame.
+// fictional; its generation and capture provenance is recorded alongside the films.
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { copyFileSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync, existsSync } from "node:fs";
@@ -34,7 +34,7 @@ import {
   removeScratchDirectory,
   terminateOwnedProcess,
 } from "./browser-gate.mjs";
-import { DISCLOSURE, FRAME, FROZEN_CLOCK_SCRIPT, startFixtureServer } from "./marketing-video-fixture.mjs";
+import { FRAME, FROZEN_CLOCK_SCRIPT, startFixtureServer } from "./marketing-video-fixture.mjs";
 import { buildMp4Tool, decodedFrameHashes, encodeMp4, encodeWebm, probeMp4, probeWithFfmpeg, resolveFfmpeg } from "./marketing-video-encode.mjs";
 
 const repoRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
@@ -75,13 +75,16 @@ const FIXTURE_VS_REAL = {
     "The daemon: a scripted fixture answers every RPC; nothing is spawned, scheduled or executed",
     "Task state changes (pending, in progress, done) are replayed by the script; no worker ran the task",
     "All data is fictional: the Atlas website demo project, /demo paths and invented note text",
-    "Visual treatment: disclosure/captions/cursor overlay, production animations settled; deterministic eased camera, kinetic titles/captions and pointer/click overlays; measured fixture RTT hidden",
+    "Visual treatment: captions/cursor overlay, production animations settled; deterministic eased camera, kinetic titles/captions and pointer/click overlays; measured fixture RTT hidden",
+    "Desktop target: a synthetic SVG drawn by marketing-features.ts inside the real monitor; its lease and action history are scripted, no desktop was captured or controlled",
     "Timing: the film is sampled at a fixed 15 frames per second, so durations here are not response times",
   ],
 };
 
-const PRODUCT_BASE = "3a6898e7783bc92d5cbc71e929fb2204a2fcd96a";
-const PRODUCT_TREE = "de4190fe28a50d4dc9ab60430d20b20a5a91e98f";
+// Pin the complete source snapshot used by this process, including current product components.
+const PRODUCT_BASE = git("rev-parse", "HEAD");
+const PRODUCT_TREE = git("rev-parse", "HEAD^{tree}");
+if (!serveOnly && !preflight && git("status", "--porcelain")) throw new Error("Final capture requires a clean committed source tree; use --out outside the repository for combined screenshot/video captures.");
 const CLIPS = [
   {
     id: "team-queue-lifecycle",
@@ -142,7 +145,7 @@ const CLIPS = [
       await rec.expect(`/pending/.test(document.querySelector('[data-task-row="d1e5a7c3"]')?.innerText ?? '')`, "task pending");
       await rec.hold(1.6);
 
-      await rec.caption("6 · Scripted worker state: in progress");
+      await rec.caption("6 · The task is in progress");
       await rec.transition("d1e5a7c3", "in_progress");
       await rec.expect(`/in.progress/.test(document.querySelector('[data-task-row="d1e5a7c3"]')?.innerText ?? '')`, "task in progress");
       await rec.hold(2.4);
@@ -154,7 +157,7 @@ const CLIPS = [
       await rec.poster(true);
       await rec.hold(2.6);
 
-      await rec.caption("State changes replayed by a scripted daemon");
+      await rec.caption("Follow a task from pending to done");
       await rec.hold(2.6);
     },
   },
@@ -300,9 +303,9 @@ const CLIPS = [
     }
   },
   {
-    id: "desktop-preview", title: "Keep desktop control in view", subtitle: "Preview ownership and action history", scenario: "real desktop monitor with visibly labelled synthetic target; no real desktop control",
+    id: "desktop-preview", title: "Keep desktop control in view", subtitle: "Preview ownership and action history", scenario: "real desktop monitor with synthetic target; no real desktop control",
     async run(rec) {
-      await rec.title("Keep desktop control in view", "A labelled synthetic target in the real monitor.", 2);
+      await rec.title("Keep desktop control in view", "Preview ownership and recent actions.", 2);
       await rec.evaluate(`window.__MARKETING__.show('computer-use')`);
       await rec.expect(`document.querySelector('[data-computer-monitor]')`, "desktop monitor");
       await rec.cursorOn(880, 440);
@@ -317,7 +320,7 @@ const CLIPS = [
       await rec.focus('[data-computer-monitor]', 1.55); await rec.poster(true); await rec.hold(4);
       await rec.reveal('[data-action-state]');
       await rec.visible('[data-action-state]', 'recent action visible');
-      await rec.caption("Synthetic target · action history is scripted");
+      await rec.caption("Review recent desktop actions");
       await rec.expect(`document.querySelector('[data-action-state]')`, "action history"); await rec.hold(4);
       await rec.caption("3 · Collapse to keep the workspace clear");
       await rec.click('[aria-label="Collapse desktop preview"]');
@@ -428,18 +431,15 @@ try {
 
     get seconds() { return this.total / FPS; }
 
-    /** One settled capture, shown for `count` frames. The settle also proves the disclosure is on screen. */
+    /** One settled capture, shown for `count` frames. The settle also checks caption geometry and the presentation contract. */
     async snap(count = 1) {
       if (preflight) { this.total += count; return { path: null, sha: null }; }
       const settled = await evaluate(`document.fonts.ready.then(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => {
-        const title = document.getElementById('mv-title');
-        const label = title.hasAttribute('data-on') ? title.querySelector('.mv-tag') : document.getElementById('mv-band');
-        const wrapped = document.createRange();
-        wrapped.selectNodeContents(label);
-        resolve({ disclosed: label.textContent === ${q(DISCLOSURE)} && label.getBoundingClientRect().width > 0, lines: Math.round(wrapped.getBoundingClientRect().height / parseFloat(getComputedStyle(label).lineHeight)) });
+        const caption = document.getElementById('mv-caption');
+        const stage = document.getElementById('mv-stage');
+        resolve({ captionHeight: caption.getBoundingClientRect().height, stageTop: stage.getBoundingClientRect().top, repeatedLabel: Boolean(document.querySelector('#mv-band, .mv-tag')) });
       }))))`);
-      if (!settled.disclosed) throw new Error(`frame ${this.total}: the demo disclosure is not on screen`);
-      if (settled.lines > 1) throw new Error(`frame ${this.total}: the disclosure wraps onto ${settled.lines} lines`);
+      if (settled.repeatedLabel || settled.captionHeight !== FRAME.caption || settled.stageTop !== FRAME.caption) throw new Error(`frame ${this.total}: invalid caption or stage geometry`);
       const shot = await call("Page.captureScreenshot", { format: "jpeg", quality: 95, optimizeForSpeed: false });
       const bytes = Buffer.from(shot.data, "base64");
       const sha = sha256(bytes);
@@ -460,7 +460,7 @@ try {
     }
 
     async visible(selector, label) {
-      await this.expect(`(() => { const el=document.querySelector(${q(selector)}); if (!el) return false; const r=el.getBoundingClientRect(); let top=Math.max(r.top,${FRAME.band+FRAME.caption}),bottom=Math.min(r.bottom,${FRAME.height}); for(let p=el.parentElement;p;p=p.parentElement) {if(/auto|scroll|hidden/.test(getComputedStyle(p).overflowY)) { const a=p.getBoundingClientRect(); top=Math.max(top,a.top);bottom=Math.min(bottom,a.bottom); }} return bottom-top >= r.height*.7; })()`, label);
+      await this.expect(`(() => { const el=document.querySelector(${q(selector)}); if (!el) return false; const r=el.getBoundingClientRect(); let top=Math.max(r.top,${FRAME.caption}),bottom=Math.min(r.bottom,${FRAME.height}); for(let p=el.parentElement;p;p=p.parentElement) {if(/auto|scroll|hidden/.test(getComputedStyle(p).overflowY)) { const a=p.getBoundingClientRect(); top=Math.max(top,a.top);bottom=Math.min(bottom,a.bottom); }} return bottom-top >= r.height*.7; })()`, label);
     }
     async tween(frames, render) {
       for (let i = 1; i <= frames; i++) { const t = i / frames; await render(t * t * (3 - 2 * t)); await this.snap(); }
@@ -474,8 +474,8 @@ try {
     async resetCamera() { if (this.camera.scale !== 1) await this.cameraTo({ x:0, y:0, scale:1 }); }
     async focus(target, scale = 1.5, align = "center") {
       await this.resetCamera();
-      const rect = await evaluate(`(() => { const el = ${locate(target)}; if (!el) throw new Error('focus target missing'); const r=el.getBoundingClientRect(); return {x:r.x+${align === "start" ? "Math.min(r.width/2,200)" : "r.width/2"},y:r.y+r.height/2-${FRAME.band+FRAME.caption}}; })()`);
-      const height = FRAME.height-FRAME.band-FRAME.caption;
+      const rect = await evaluate(`(() => { const el = ${locate(target)}; if (!el) throw new Error('focus target missing'); const r=el.getBoundingClientRect(); return {x:r.x+${align === "start" ? "Math.min(r.width/2,200)" : "r.width/2"},y:r.y+r.height/2-${FRAME.caption}}; })()`);
+      const height = FRAME.height-FRAME.caption;
       await this.cameraTo({ scale, x: Math.max(FRAME.width*(1-scale), Math.min(0,FRAME.width/2-rect.x*scale)), y: Math.max(height*(1-scale),Math.min(0,height/2-rect.y*scale)) });
     }
     async title(heading, sub, seconds) {
@@ -564,7 +564,7 @@ try {
         while (p && !(p.scrollHeight > p.clientHeight + 1 && /(auto|scroll)/.test(getComputedStyle(p).overflowY))) p = p.parentElement;
         if (!p) return null;
         const pr = p.getBoundingClientRect(), er = el.getBoundingClientRect();
-        let top=Math.max(pr.top,${FRAME.band+FRAME.caption}), bottom=Math.min(pr.bottom,${FRAME.height});
+        let top=Math.max(pr.top,${FRAME.caption}), bottom=Math.min(pr.bottom,${FRAME.height});
         for(let a=p.parentElement;a;a=a.parentElement) { if(/auto|scroll|hidden/.test(getComputedStyle(a).overflowY)) {const r=a.getBoundingClientRect();top=Math.max(top,r.top);bottom=Math.min(bottom,r.bottom);} }
         const delta = er.bottom > bottom ? er.bottom - bottom + 12 : er.top < top ? er.top - top - 12 : 0;
         p.setAttribute('data-mv-scroll', '');
@@ -612,8 +612,11 @@ try {
     await call("Page.navigate", { url: `${fixture.url}?view=workspace` });
     await waitFor(`window.__MARKETING__ && window.__MARKETING_VIDEO__ && document.body.dataset.marketingReady === 'workspace'`, `${clip.id}: workspace mounted`);
     await waitFor(`document.querySelectorAll('[data-agent-row]').length >= 3 && document.body.innerText.includes('Three gates are tagged on the queue')`, `${clip.id}: workspace data`);
+    await waitFor(`document.querySelector('[data-resource-summary]')?.textContent.includes('CPU 15.5%') && document.querySelector('[data-resource-summary]')?.textContent.includes('RAM 232 MiB')`, `${clip.id}: compact header resources`);
     await frames2();
     await evaluate(`document.fonts.ready`);
+    const headerFit = await evaluate(`(() => { const h = document.querySelector('[data-transcript-header]'), m = h.querySelector('[data-transcript-metrics]'), r = h.getBoundingClientRect(), b = m.getBoundingClientRect(); return { width: r.width, height: r.height, metricsWidth: b.width, withinHeader: b.left >= r.left && b.right <= r.right + 1, detailsClosed: !m.open, resourceText: h.querySelector('[data-resource-summary]').textContent }; })()`);
+    if (!headerFit.withinHeader || !headerFit.detailsClosed) throw new Error(`${clip.id}: compact header does not fit or Details starts open`);
 
     const rec = new Recorder(clip);
     try {
@@ -676,8 +679,6 @@ try {
         `${clip.title}`,
         `${clip.subtitle}`,
         "",
-        `Disclosure (on every frame): ${DISCLOSURE}`,
-        "",
         ...rec.steps.map((step) => `[${Math.floor(step.at / 60)}:${String(Math.floor(step.at % 60)).padStart(2, "0")}] ${step.text}`),
         "",
       ].join("\n"),
@@ -690,6 +691,7 @@ try {
 
     results.push({
       id: clip.id,
+      headerFit,
       captureSourceRevision: git("rev-parse", "HEAD"),
       capturedAt: new Date().toISOString(),
       title: clip.title,
@@ -737,14 +739,13 @@ try {
       sourceRevisionMeaning: "Collection assembly/capture pipeline revision; each clip carries its own exact captureSourceRevision.",
       captureSourceRevisions: [...new Set(results.map(c=>c.captureSourceRevision))],
       sourceTreeDirty: dirty,
-      finalRecapture: "Captured using unchanged product source from the accepted QA base; fixture/capture source revision is recorded separately.",
+      finalRecapture: "Captured from the committed product and fixture source snapshot recorded above; each clip retains its exact capture revision.",
       capturedWith: { browser: browserVersion, ffmpeg: ffmpegVersion, webmEncoder: "libvpx (VP8)", mp4Encoder: mp4Tool ? "AVFoundation H.264 via scripts/marketing-video-mp4.swift (macOS)" : null, ffprobe: "Final verification requires FFprobe; verification.json records its version and stream/container results. Capture probes use ffmpeg and AVAssetReader." },
       timeline: { fps: FPS, viewport: `${FRAME.width}x${FRAME.height}`, clockFrozenAt: FROZEN_AT, note: "Video time is frame index / fps. Pointer glides, typing cadence and holds are scripted, so durations say nothing about live latency." },
-      onVideoDisclosure: DISCLOSURE,
+      presentation: { persistentDemoLabel: false, provenance: "provenance.json and provenance.md document fictional data, scripted RPC and synthetic desktop imagery; linked from the gallery" },
       fixtureVsReal: FIXTURE_VS_REAL,
       readability: {
-        note: "Text size in CSS px when the 1280px-wide video fills the given player width. The UI body text is not legible at phone width; the disclosure band and the captions are the readable layer, and the text steps carry the same content.",
-        disclosureBandPx: { 1280: FRAME.bandFont, 768: scale(FRAME.bandFont, 768), 390: scale(FRAME.bandFont, 390) },
+        note: "Text size in CSS px when the 1280px-wide video fills the given player width. The UI body text is not legible at phone width; the captions are the readable layer, and the text steps carry the same content.",
         captionPx: { 1280: FRAME.captionFont, 768: scale(FRAME.captionFont, 768), 390: scale(FRAME.captionFont, 390) },
         uiBodyPx: uiPx === null ? null : { 1280: uiPx, 768: scale(uiPx, 768), 390: scale(uiPx, 390) },
       },
@@ -761,10 +762,9 @@ try {
         "",
         `> ${provenance.notice}`,
         "",
-        `- Captured from source revision \`${provenance.sourceRevision}\`${dirty ? " (working tree had uncommitted changes)" : ""}. Product base: ${PRODUCT_BASE}; accepted tree ${PRODUCT_TREE}.`,
+        `- Captured from source revision \`${provenance.sourceRevision}\`${dirty ? " (working tree had uncommitted changes)" : ""}. Product/capture source snapshot: ${PRODUCT_BASE}; tree ${PRODUCT_TREE}.`,
         `- Browser: ${browserVersion}. Encoders: libvpx VP8 → WebM${mp4Tool ? "; AVFoundation H.264 → MP4 (macOS only, best effort)" : "; no MP4 on this machine"}. Final verification requires FFprobe; capture probes come from \`ffmpeg -i\` and AVAssetReader.`,
         `- Timeline: ${FPS} fps fixed, ${FRAME.width}×${FRAME.height}, page clock frozen at ${FROZEN_AT}. Durations are not performance evidence.`,
-        `- On every frame: "${DISCLOSURE}".`,
         `- Reproduce: \`${provenance.reproduce}\``,
         "",
         "## Real vs scripted",

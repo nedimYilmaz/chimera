@@ -3,7 +3,7 @@
 // Renders the REAL app components (TopBar, AgentsScreen, QueuesScreen, MemoryScreen, Footer) in
 // local headless Chromium, on the real app store, seeded with the fictional "Atlas website" demo
 // data from packages/app/test/fixtures/marketing-data.ts through a mocked RPC bridge. No daemon,
-// provider, account, network or agent is involved, and nothing here is drawn or generated.
+// provider, account, network or agent is involved, the desktop target is a synthetic fixture SVG.
 //
 //   node scripts/marketing-preview.mjs --serve     # print a local preview URL and keep serving
 //   node scripts/marketing-preview.mjs --capture   # write site/assets/*.png + provenance.{json,md}
@@ -118,7 +118,7 @@ const VIEWS = {
   },
   "computer-use": {
     file: "chimera-computer-use.png",
-    title: "Computer use (DEMO): the actual desktop-control monitor component showing a synthetic demo target, not a real desktop",
+    title: "Computer use (DEMO): the actual desktop-control monitor component showing a synthetic Atlas pricing preview",
     ready: `document.querySelector('[data-computer-monitor] img[src^="data:"]') !== null && document.querySelectorAll('[aria-label="Recent desktop actions"] li').length >= 3`,
   },
 };
@@ -287,12 +287,19 @@ try {
     await call("Page.navigate", { url }, sessionId);
     await waitFor("window.__MARKETING__", "marketing fixture boot");
     const written = [];
+    const headerFits = [];
 
     const open = async (name) => {
       const view = VIEWS[name];
       await evaluate(`window.__MARKETING__.show(${JSON.stringify(name)})`);
       await waitFor(`document.body.dataset.marketingReady === ${JSON.stringify(name)}`, `${name} mount`);
       await waitFor(view.ready, `${name} content`);
+      if (name === 'workspace' || name === 'computer-use') {
+        await waitFor(`document.querySelector('[data-resource-summary]')?.textContent.includes('CPU 15.5%') && document.querySelector('[data-resource-summary]')?.textContent.includes('RAM 232 MiB')`, `${name} compact header resources`);
+        const fit = await evaluate(`(() => { const h = document.querySelector('[data-transcript-header]'), m = h.querySelector('[data-transcript-metrics]'), r = h.getBoundingClientRect(), b = m.getBoundingClientRect(); return { width: r.width, height: r.height, metricsWidth: b.width, withinHeader: b.left >= r.left && b.right <= r.right + 1, detailsClosed: !m.open, resourceText: h.querySelector('[data-resource-summary]').textContent }; })()`);
+        if (!fit.withinHeader || !fit.detailsClosed) throw new Error(`${name}: compact header does not fit or Details starts open`);
+        headerFits.push({ view: name, viewport: { width: await evaluate('innerWidth'), height: await evaluate('innerHeight') }, ...fit });
+      }
       for (const step of view.steps ?? []) {
         // Real pointer input on the real rows, so queue/inspector/detail panes render exactly as
         // they do for a user rather than through a state shortcut.
@@ -336,6 +343,7 @@ try {
         capturedOn: new Date().toISOString().slice(0, 10),
         sourceRevision: git("rev-parse", "HEAD"),
         uncommittedProductChanges: status.length > 0,
+        headerFits,
         viewport: { width: WIDTH, height: HEIGHT, deviceScaleFactor: 1 },
         browser: browser.product,
         rendering: "Real React components on the real app store in headless Chromium; mocked RPC bridge; loopback-only network guard; no daemon, provider, account, filesystem, desktop or agent involved.",
@@ -347,7 +355,7 @@ try {
         ],
         dataSource: "packages/app/test/fixtures/marketing-data.ts (workspace, queues, memory) and packages/app/test/fixtures/marketing-features.ts (MCP store, secrets, schedules, teams, roles, projects, computer-use demo)",
         timestamps: "Relative to capture time; paths use the fictional /demo/atlas-website.",
-        fixtureNotes: "MCP servers are fictional entries on reserved .invalid hosts; secrets are names with masked state only, no values exist; no OAuth flow, tool call or schedule run is executed. Computer use is a DEMO: the monitor component is real, but its target image is a synthetic SVG drawn by the fixture (it carries a visible \"DEMO · synthetic target\" banner and a large DEMO watermark, so it cannot be mistaken for a real desktop) and the lease, actions and status are scripted — no desktop was captured or controlled, and no permission was requested. Projects, checkpoints, files, teams and role bindings are scripted fixture data; no git, filesystem or agent exists behind them.",
+        fixtureNotes: "MCP servers are fictional entries on reserved .invalid hosts; secrets are names with masked state only, no values exist; no OAuth flow, tool call or schedule run is executed. Computer use: the monitor component is real, but its target image is a synthetic SVG drawn by the fixture and the lease, actions and status are scripted — no desktop was captured or controlled, and no permission was requested. Projects, checkpoints, files, teams and role bindings are scripted fixture data; no git, filesystem or agent exists behind them.",
         reproduce: "node scripts/marketing-preview.mjs --capture",
         images: [
           ...Object.values(VIEWS).map((view) => ({ file: view.file, width: WIDTH, height: HEIGHT, shows: view.title })),

@@ -26,7 +26,7 @@ import { computerState, featureState } from "./marketing-features";
 type View = "workspace" | "queue" | "memory" | "mcp-store" | "secrets" | "schedules" | "teams" | "projects" | "roles" | "computer-use";
 
 // computer-use is the ordinary agent workspace with the lease-owning builder selected: its monitor is
-// the real ComputerUseMonitor, fed a synthetic (labelled demo) target by marketing-features.ts.
+// the real ComputerUseMonitor, fed a synthetic Atlas pricing target by marketing-features.ts.
 const screens = { workspace: AgentsScreen, queue: QueuesScreen, memory: MemoryScreen, "mcp-store": SettingsScreen, secrets: SettingsScreen, schedules: QueuesScreen, teams: TeamsScreen, projects: ProjectsScreen, roles: RolesScreen, "computer-use": AgentsScreen } as const;
 const tabs = { workspace: "agents", queue: "queues", memory: "memory", "mcp-store": "settings", secrets: "settings", schedules: "queues", teams: "teams", projects: "projects", roles: "roles", "computer-use": "agents" } as const;
 // Settings is one screen with a rail; these views differ only by which section is open.

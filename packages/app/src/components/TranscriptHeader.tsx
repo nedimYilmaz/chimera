@@ -1,3 +1,6 @@
+import { useState } from "react";
+import { useAgentResources, type ResourceRequest } from "../state/agentResources";
+import { AgentResourceDetails } from "./AgentResources";
 import type { CodexContextLimits } from "@chimera/protocol";
 import { ContextLimitsInfo } from "./ContextLimitsInfo";
 import type { TokenUsage, WorktreeLeaseChip } from "@chimera/ui-state";
@@ -7,17 +10,7 @@ import { accountToneVar, ctxPct, fmtCost, fmtTokens, sparkline } from "../state/
 import type { ScrollHint } from "../state/selectors";
 import styles from "./TranscriptPanel.module.css";
 
-// WORKFLOW-UI-2 (header parity) — the header row shared by TranscriptPanel
-// (a single agent's own transcript) and StitchedTranscriptPanel (a workflow
-// task's stitched transcript). Extracted VERBATIM from TranscriptPanel.tsx's
-// former inline header (headerTop: name/id button + state chip; chipRow:
-// model/account/cost/ctx meter + sparkline + "↑N more" hint) — every class
-// name is unchanged so both consumers render byte-identical DOM. `state` is
-// the CALLER-composed "glyph label" text (TranscriptPanel: `${visual.glyph}
-// ${st}`; StitchedTranscriptPanel: its own task-state glyph+word) — `tone`
-// drives the chip's color separately since two states can share a tone (e.g.
-// "waiting"/"killed" are both warn) but never a glyph.
-
+// Both single-agent and stitched workflow transcripts use this chrome.
 const toneClass: Record<string, string> = {
   success: styles.toneSuccess!,
   info: styles.toneInfo!,
@@ -27,6 +20,9 @@ const toneClass: Record<string, string> = {
 };
 
 export function TranscriptHeader({
+  resourceAgentId,
+  resourceRequest,
+  metricsAttribution,
   name,
   fullId,
   state,
@@ -59,6 +55,9 @@ export function TranscriptHeader({
   voiceHistoryOpen = false,
   onToggleVoiceHistory,
 }: {
+  resourceAgentId?: string;
+  resourceRequest?: ResourceRequest;
+  metricsAttribution?: string;
   name: string;
   fullId: string;
   state: string;
@@ -127,11 +126,17 @@ export function TranscriptHeader({
   voiceHistoryOpen?: boolean;
   onToggleVoiceHistory?: () => void;
 }) {
+  const resources = useAgentResources(resourceAgentId, !!resourceAgentId, resourceRequest);
+  const [metricsOpenFor, setMetricsOpenFor] = useState<string | null>(null);
+  const metricsKey = resourceAgentId ?? fullId;
+  const metricsOpen = metricsOpenFor === metricsKey;
+  const osKnown = resources.sample?.state === "ok" || resources.sample?.state === "stale";
+  const osState = !resources.connected ? "disconnected" : resources.stale ? "stale" : resources.loadState.unsupported || resources.sample?.state === "unavailable" || resources.loadState.error ? "unavailable" : "measuring";
   const ctxBasis = fullContext ?? null;
   const contextKnown = ctxBasis !== null && limit > 0;
   const contextPercent = contextKnown ? ctxPct(ctxBasis, limit) : null;
   return (
-    <div className={styles.header}>
+    <div className={styles.header} data-transcript-header>
       <div className={styles.headerTop}>
         <button
           type="button"
@@ -214,38 +219,6 @@ export function TranscriptHeader({
             </span>
           )
         ) : null}
-        {effort ? (
-          chipsInteractive ? (
-            <button
-              type="button"
-              className={`${styles.chip} ${styles.actionChip}`}
-              data-transcript-action="system.effort"
-              onClick={() => onAction("system.effort")}
-            >
-              effort: {effort} ▾
-            </button>
-          ) : (
-            <span className={styles.chip} title="this step has finished — no live agent to change" data-transcript-static="system.effort">
-              effort: {effort}
-            </span>
-          )
-        ) : null}
-        {account ? (
-          chipsInteractive ? (
-            <button
-              type="button"
-              className={`${styles.chip} ${styles.actionChip}`}
-              data-transcript-action="system.accountSwitch"
-              onClick={() => onAction("system.accountSwitch")}
-            >
-              <span style={{ color: `var(${accountToneVar(account)})` }}>▪</span> account: {account} ▾
-            </button>
-          ) : (
-            <span className={styles.chip} title="this step has finished — no live agent to change" data-transcript-static="system.accountSwitch">
-              <span style={{ color: `var(${accountToneVar(account)})` }}>▪</span> account: {account}
-            </span>
-          )
-        ) : null}
         {/* AGENT-RECONFIGURE: every setting in one panel. The model/effort/account chips beside it
             stay — they are the one-click path for the three settings changed most often — but each
             of those is its own respawn, so changing several is what the panel is for. */}
@@ -260,7 +233,7 @@ export function TranscriptHeader({
             ⚙ settings
           </button>
         ) : null}
-        <span className={styles.chip}>{fmtCost(costUsd)}</span>
+
         {/* CONDUCTOR-FULL-ACCESS: the live permission chip. Warn-toned when a full-access agent
             runs unattended ("auto" routing), else neutral — a full conductor is intentional, so
             not danger. Hidden until a snapshot/event carries the profile (older daemon renders as
@@ -312,9 +285,17 @@ export function TranscriptHeader({
             {c.label}
           </span>
         ))}
-      </div>
-      <div className={styles.metricsRow} aria-label="Token usage">
-        <span className={styles.ctx} title={contextLimits ? "Current prompt, including cache, against the active session window reported by Codex. Model maximum and compaction setting are shown separately." : "Current prompt, including cache, against the compaction limit. This is not cumulative usage."} data-context-meter={contextKnown ? "known" : "unknown"}>
+        <details className={styles.metricsDisclosure} data-transcript-metrics key={metricsKey}
+          onToggle={e => setMetricsOpenFor(e.currentTarget.open ? metricsKey : null)}
+          onKeyDown={e => {
+            if (e.key !== "Escape" || !e.currentTarget.open) return;
+            e.preventDefault(); e.stopPropagation(); e.currentTarget.open = false;
+            e.currentTarget.querySelector("summary")?.focus();
+          }}>
+        <summary className={styles.metricsSummary}>
+        {metricsAttribution && <span data-metrics-source>Step</span>}
+
+        <span className={styles.ctx} title={contextLimits ? "Current prompt, including cache, against the caller-resolved effective context limit. Actual session window, model maximum and compaction setting are shown separately." : "Current prompt, including cache, against the effective context limit. This is not cumulative usage."} data-context-meter={contextKnown ? "known" : "unknown"}>
           ctx{" "}
           <span className={compacting ? styles.ctxTrackBusy : styles.ctxTrack}>
             <span
@@ -325,12 +306,7 @@ export function TranscriptHeader({
               style={{ width: `${contextKnown ? Math.max(ctxBasis ? 1 : 0, contextPercent ?? 0) : 0}%` }}
             />
           </span>{" "}
-          {/* R2: the number next to the bar now SHARES the bar's own basis (used/limit) —
-              previously this showed usageTotal (input+output, cache-excluded) next to a
-              percentage computed from a DIFFERENT basis (fullContext, cache-included), the
-              "ctx 100% · 5.6k" inconsistency. usageTotal (the new/throughput figure) still shows,
-              but now in the dimmed ghost slot alongside the rate sparkline it already describes. */}
-          {contextKnown ? <>{contextPercent}%</> : "unknown"} · {fmtTokens(ctxBasis)}/{limit > 0 ? fmtTokens(limit) : "unknown"}{" "}
+          {contextKnown ? <>{contextPercent}%</> : "unknown"}{" "}
           {/* COMPACTION-VISIBLE: the mark pulses for a short window right after a compaction (the
               moment the bar drops, which otherwise looks like the meter glitched) and then
               settles into a quiet count. */}
@@ -354,6 +330,57 @@ export function TranscriptHeader({
             </span>
           ) : null}{" "}
         </span>
+        {resourceAgentId && <span className={styles.resourceSummary} data-resource-summary data-resource-state={osKnown ? resources.stale || !resources.connected ? "stale" : "ok" : osState}>
+          <span>CPU {osKnown && resources.sample!.totals.cpuPct !== null ? `${resources.sample!.totals.cpuPct.toFixed(1)}%` : osKnown ? "measuring" : osState}</span>
+          <span>RAM {osKnown && resources.sample!.totals.rssBytes !== null ? `${(resources.sample!.totals.rssBytes / 1024 ** 2).toFixed(0)} MiB` : osKnown || osState === "measuring" ? "unavailable" : osState}</span>
+          {osKnown && osState !== "measuring" && <span>{osState}</span>}
+          {resources.sample?.truncated && <span>partial</span>}
+        </span>}
+        <span className={styles.metricsLabel}>Details</span>
+        </summary>
+        <div className={styles.metricsDetails} inert={!metricsOpen} tabIndex={0} aria-label="Transcript metric details">
+        {metricsAttribution && <div data-metrics-attribution>{metricsAttribution}</div>}
+        <div className={styles.detailSettings}>
+        {effort ? (
+          chipsInteractive ? (
+            <button
+              type="button"
+              className={`${styles.chip} ${styles.actionChip}`}
+              data-transcript-action="system.effort"
+              onClick={() => onAction("system.effort")}
+            >
+              effort: {effort} ▾
+            </button>
+          ) : (
+            <span className={styles.chip} title="this step has finished — no live agent to change" data-transcript-static="system.effort">
+              effort: {effort}
+            </span>
+          )
+        ) : null}
+        {account ? (
+          chipsInteractive ? (
+            <button
+              type="button"
+              className={`${styles.chip} ${styles.actionChip}`}
+              data-transcript-action="system.accountSwitch"
+              onClick={() => onAction("system.accountSwitch")}
+            >
+              <span style={{ color: `var(${accountToneVar(account)})` }}>▪</span> account: {account} ▾
+            </button>
+          ) : (
+            <span className={styles.chip} title="this step has finished — no live agent to change" data-transcript-static="system.accountSwitch">
+              <span style={{ color: `var(${accountToneVar(account)})` }}>▪</span> account: {account}
+            </span>
+          )
+        ) : null}
+        <span className={styles.chip}>{fmtCost(costUsd)}</span>
+        </div>
+        <div>{name} · {fullId}</div>
+        {model && <div>Model: {model}{account ? ` · account ${account}` : ""}{effort ? ` · effort ${effort}` : ""}</div>}
+        {permissionProfile && <div>Permissions: {permissionProfile}{permissionRequest ? ` · ${permissionRequest}` : ""}{permissionAppliedToRunningProcess === false ? " · recorded but not applied to the running process; respawn required" : ""}</div>}
+        {toolPolicyDenied && <div>Host-tool policy denied {lastToolPolicyDenial?.tool ?? "a tool"}{lastToolPolicyDenial?.profile ? ` · profile ${lastToolPolicyDenial.profile}` : ""}</div>}
+        {(leaseChips ?? []).map(c => <div key={c.kind}>{c.label} · {c.title}</div>)}
+        <div data-context-detail>Current prompt <span>{ctxBasis !== null ? fmtTokens(ctxBasis) : "unknown"}</span> / effective context limit <span>{limit > 0 ? fmtTokens(limit) : "unknown"}</span> · includes cached input; separate from cumulative usage.</div>
         <ContextLimitsInfo limits={contextLimits} />
         <span className={styles.metric} data-token-total title="Cumulative input and output processed in the provider session (current run if session totals are unavailable), including cached input; may exceed the context window.">total <b>{fmtTokens(usage ? usage.input + usage.output + usage.cacheRead + usage.cacheCreation : usageTotal)}</b></span>
         {usage && <>
@@ -363,13 +390,17 @@ export function TranscriptHeader({
           <span className={styles.metric} data-token-output>output <b>{fmtTokens(usage.output)}</b></span>
         </>}
         {ring.length > 0 && <span className={styles.metric} title="Estimated fresh input + output rate between the last two usage samples" data-token-rate><span className={styles.spark}>{sparkline(ring)}</span> {fmtTokens(ring.at(-1)!)} tok/min</span>}
-        <span className={styles.spacer} />
+        {resourceAgentId ? <>
+          <div>OS resources for {resourceAgentId}</div>
+          {metricsOpen && <AgentResourceDetails resources={resources} />}
+        </> : <div>OS resources unavailable · no selected local agent.</div>}
+        </div>
+        </details>
         {(hint.above > 0 || hint.below > 0) && (
           <span className={styles.moreHint}>
             {hint.above > 0 ? `↑ ${hint.above} more` : ""}
             {hint.above > 0 && hint.below > 0 ? " · " : ""}
             {hint.below > 0 ? `↓ ${hint.below} more` : ""}
-            {" · pgup/wheel scroll"}
           </span>
         )}
       </div>

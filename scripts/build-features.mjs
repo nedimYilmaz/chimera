@@ -136,7 +136,7 @@ function head({ title, description, url, ogTitle }) {
   <meta property="og:image" content="${PAGES}assets/og-image.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
-  <meta property="og:image:alt" content="The Chimera desktop app showing agents and a conversation, rendered with fictional demo data.">
+  <meta property="og:image:alt" content="The Chimera desktop app showing agents and a conversation, showing its workspace.">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="${esc(ogTitle)}">
   <meta name="twitter:description" content="${esc(description)}">
@@ -234,11 +234,11 @@ ${JSON.stringify(jsonld, null, 2).replace(/^/gm, "  ")}
   <main id="main">
     <section class="ghero" id="top" aria-labelledby="guide-title">
       <div class="wrap">
-        <p class="status"><span class="dot" aria-hidden="true"></span>Feature guide · early access · screenshots use demo data</p>
+        <p class="status"><span class="dot" aria-hidden="true"></span>Feature guide · early access</p>
         <h1 id="guide-title">What Chimera does, area by area.</h1>
         <p class="lede">Every area starts with the problem it solves, says what changes, walks one concrete scenario and then lists its sub-features. Search or filter below, or jump from the contents list.</p>
         <div id="guide-tools" class="gtools"></div>
-        <p class="fine">${data.categories.length} areas in ${data.families.length} groups. Scenarios use a fictional “Atlas website” project. Where an area is a preview or experimental, or only works on some platforms, it says so.</p>
+        <p class="fine">${data.categories.length} areas in ${data.families.length} groups. Where an area is a preview or experimental, or only works on some platforms, it says so.</p>
       </div>
     </section>
 
@@ -265,7 +265,7 @@ ${families}
         <li>One command installs the signed desktop app and the CLI on macOS and Linux; the <a href="index.html#install">install steps</a> are on the home page.</li>
 ${flagged.map((c) => `        <li><strong>${esc(c.label)}</strong> is ${STATUS_LABEL[c.status].toLowerCase()}.${c.limits ? ` ${esc(c.limits)}` : ""}</li>`).join("\n")}
       </ul>
-      <p class="fine">Screenshots show the actual Chimera interface with fictional demo data. <a href="${REPO}/blob/main/site/assets/provenance.md">How they were made</a>.</p>
+      <p class="fine">Screenshots show the actual Chimera interface. <a href="how-made.html">How these images were made</a>.</p>
     </section>
       </div>
     </div>
@@ -308,7 +308,7 @@ ${footFams}
       </nav>
     </div>
     <div class="wrap foot__note">
-      <p>Screenshots: actual Chimera interface · demo data. <a href="${REPO}/blob/main/site/assets/provenance.md">How they were made</a>.</p>
+      <p>Screenshots: actual Chimera interface. <a href="how-made.html">How these images were made</a>.</p>
       <p>Early access software. Issues are welcome; changes from pull requests are applied in the maintainer's tree.</p>
     </div>
   </footer>
@@ -376,7 +376,7 @@ function homeGallery(data) {
         <div class="head head--wide">
           <p class="kicker">In the app</p>
           <h2 id="gallery-title">Seven more screens, as they really look.</h2>
-          <p class="sub">Captured from the actual Chimera interface with a fictional “Atlas website” project. Select a screenshot to enlarge it.</p>
+          <p class="sub">Explore the actual Chimera interface. Select a screenshot to enlarge it.</p>
         </div>
         <div class="gal__grid">
 ${items}

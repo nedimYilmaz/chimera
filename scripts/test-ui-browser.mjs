@@ -1,3 +1,4 @@
+import { probeCompactHeader } from "./probes/compact-header.mjs";
 import { probeWorkspaceScale } from "./probes/workspace-scale.mjs";
 import { probeWorkspaceRecovery } from "./probes/workspace-recovery.mjs";
 // Real Chromium rendering of actual app components through an isolated Vite
@@ -238,6 +239,11 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
   check("network guard blocks external fetch and websocket", networkGuard.fetchBlocked && networkGuard.websocketBlocked
     && networkGuard.attempts.length === 2 && networkGuard.attempts.every((attempt) => attempt.blocked), networkGuard);
 
+
+  if (process.env.CHIMERA_BROWSER_GATE_HEADER_ONLY === "1") {
+    await probeCompactHeader({ viewport, show, settleRender, waitFor, evaluate, check, screenshot, click, buttonKey, key, pointerPoint, call, sessionId, layoutAudit });
+    return;
+  }
 
   if (process.env.CHIMERA_BROWSER_GATE_RECOVERY_ONLY === "1") {
     await probeWorkspaceRecovery({ check, show, evaluate, waitFor, click, key, viewport, screenshot, settleRender, artifactDir });
@@ -835,9 +841,10 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
   await viewport(1440, 900);
   await show("resources");
   await waitFor(`document.querySelector('[data-agent-resources]')`);
-  check("ux26 r collapsed avoids fleet scans", await evaluate(`window.__UI_QA__.resources.pending() === 0`));
+  check("ux26 r selected header shares inspector sampling", await evaluate(`window.__UI_QA__.resources.pending() === 1`));
   await click('[data-agent-resources] summary');
   await waitFor(`window.__UI_QA__.resources.pending() === 1`);
+  await waitFor(`document.querySelector('[data-agent-resources] [data-load-status="loading"]')`);
   const resourceLoading = await evaluate(`!!document.querySelector('[data-load-status="loading"]') && !document.querySelector('[data-resource-tree]')`);
   await evaluate(`window.__UI_QA__.resources.settle('ok')`);
   await waitFor(`document.querySelector('[data-resource-tree]')`);
@@ -849,6 +856,7 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
   check("ux26 r stale keeps last good", await evaluate(`document.querySelector('[data-agent-resources]').textContent.includes('300 procs') && document.querySelector('[data-resource-updated]').textContent.includes('stale')`));
   await click('[data-agent-resources] [data-load-retry]');
   await waitFor(`window.__UI_QA__.resources.pending() === 1`);
+  await waitFor(`document.querySelector('[data-agent-resources] [data-load-retry]')?.disabled`);
   const resourceBusy = await evaluate(`document.querySelector('[data-agent-resources] [data-load-retry]').disabled`);
   await evaluate(`window.__UI_QA__.resources.settle('fail-open')`);
   await waitFor(`document.querySelector('[data-agent-resources]').textContent.includes('admission is fail-open')`);
@@ -889,7 +897,7 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
   await evaluate(`window.__UI_QA__.resources.settle('unsupported')`);
   await waitFor(`document.querySelector('[data-agent-resources]').textContent.includes('this daemon does not support')`);
   const unsupported = await evaluate(`!document.querySelector('[data-agent-resources] [data-load-retry]')`);
-  check("ux26 r resources section states", resourceLoading && resourceOk && resourceBusy && failOpen && lateDropped && unavailable && unsupported);
+  check("ux26 r resources section states", resourceLoading && resourceOk && resourceBusy && failOpen && lateDropped && unavailable && unsupported, { resourceLoading, resourceOk, resourceBusy, failOpen, lateDropped, unavailable, unsupported });
 
 
   // UX26-S: actual controls and browser MediaRecorder/OfflineAudioContext, synthetic
@@ -1404,6 +1412,8 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
     }
   }
 
+  await probeCompactHeader({ viewport, show, settleRender, waitFor, evaluate, check, screenshot, click, buttonKey, key, pointerPoint, call, sessionId, layoutAudit });
+
   for (const width of [390, 630, 1180]) {
     await viewport(width, 800);
     await show("metrics");
@@ -1411,11 +1421,13 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
     await click('[data-metrics-update]');
     await settleRender();
     const actionsAfter = await evaluate(`JSON.stringify([...document.querySelectorAll('[data-transcript-action]')].map(e => { const r=e.getBoundingClientRect(); return [r.x,r.y,r.width,r.height]; }))`);
+    await click("[data-transcript-metrics] summary");
+    await waitFor("document.querySelector('[data-transcript-metrics]').open");
     const metrics = await layoutAudit();
     check(`metrics ${width}px controls remain stable when usage changes`, actionsBefore === actionsAfter);
     check(`metrics ${width}px no horizontal overflow`, metrics.overflowing.length === 0 && metrics.pageWidth <= width, metrics);
-    check(`metrics ${width}px cache context and rate stay distinct`, await evaluate(`document.querySelector('[data-context-meter]').textContent.includes('109k') && document.querySelector('[data-token-cache-read]').textContent.includes('2.3M') && document.querySelector('[data-token-rate]').textContent.includes('1.8k')`));
-    check(`metrics ${width}px provider capacity stays separate from session and compaction`, await evaluate(`document.querySelector('[data-context-limits]').textContent.includes('1.1M') && document.querySelector('[data-context-limits]').textContent.includes('120k') && document.querySelector('[data-context-meter]').textContent.includes('258k')`));
+    check(`metrics ${width}px cache context and rate stay distinct`, await evaluate(`document.querySelector('[data-context-detail]').textContent.includes('109k') && document.querySelector('[data-token-cache-read]').textContent.includes('2.3M') && document.querySelector('[data-token-rate]').textContent.includes('1.8k')`));
+    check(`metrics ${width}px provider capacity stays separate from session and compaction`, await evaluate(`document.querySelector('[data-context-limits]').textContent.includes('1.1M') && document.querySelector('[data-context-limits]').textContent.includes('120k') && document.querySelector('[data-context-detail]').textContent.includes('258k')`));
     await screenshot(`metrics-${width}`);
     await show("accounts");
     await waitFor('document.querySelector("[data-accounts-rows]")');
@@ -1464,12 +1476,17 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
   })()`);
   check("actual transcript pane is at most 630px wide", paneInitial.width <= 630, paneInitial);
   check("transcript header exposes exactly one Voice toggle", paneInitial.voiceToggleCount === 1, paneInitial);
+  await click('[data-ui-qa-pane="transcript"] [data-transcript-metrics] summary');
+  await waitFor(`document.querySelector('[data-ui-qa-pane="transcript"] [data-transcript-metrics]').open`);
   const contextMeter = await evaluate(`(() => {
     const meter = document.querySelector('[data-ui-qa-pane="transcript"] [data-context-meter]');
-    return { state: meter?.getAttribute('data-context-meter'), text: meter?.textContent?.replace(/\\s+/g, ' ').trim() };
+    const detail = document.querySelector('[data-ui-qa-pane="transcript"] [data-context-detail]');
+    return { state: meter?.getAttribute('data-context-meter'), text: meter?.textContent?.replace(/\\s+/g, ' ').trim(), detail: detail?.textContent?.replace(/\\s+/g, ' ').trim() };
   })()`);
   check("transcript unknown context never renders billable usage as 100 percent",
-    contextMeter.state === "unknown" && contextMeter.text.includes("unknown") && contextMeter.text.includes("/unknown") && !contextMeter.text.includes("922k") && !contextMeter.text.includes("100%"), contextMeter);
+    contextMeter.state === "unknown" && contextMeter.text.includes("unknown") && contextMeter.detail.includes("Current prompt unknown") && contextMeter.detail.includes("effective context limit unknown") && !contextMeter.text.includes("922k") && !contextMeter.text.includes("100%"), contextMeter);
+  await key("Escape");
+  await settleRender();
   await evaluate(`document.querySelector('[aria-label="Show voice history"]').click()`);
   await waitFor(`document.querySelectorAll('[data-ui-qa-pane="transcript"] [aria-label="Voice conversation"]').length === 1`);
   await evaluate(`document.querySelector('[aria-label="Close voice history"]').click()`);
@@ -2269,7 +2286,9 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
       }
     }
   }
-}, { requiredCheckIds: process.env.CHIMERA_BROWSER_GATE_RECOVERY_ONLY === "1"
+}, { requiredCheckIds: process.env.CHIMERA_BROWSER_GATE_HEADER_ONLY === "1"
+  ? REQUIRED_CHECK_IDS.ui.filter(id => id.startsWith("ui.compact-header-") || id === "ui.network-guard-blocks-external-fetch-and-websocket")
+  : process.env.CHIMERA_BROWSER_GATE_RECOVERY_ONLY === "1"
   ? REQUIRED_CHECK_IDS.ui.filter(id => id.startsWith("ui.ux26-qa-") || id === "ui.network-guard-blocks-external-fetch-and-websocket")
   : process.env.CHIMERA_BROWSER_GATE_GROUPS_ONLY === "1"
   ? REQUIRED_CHECK_IDS.ui.filter(id => id.startsWith("ui.inspector-registry-") || id === "ui.network-guard-blocks-external-fetch-and-websocket")

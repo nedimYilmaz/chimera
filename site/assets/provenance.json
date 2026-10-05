@@ -3,8 +3,49 @@
   "notice": "Actual Chimera UI components rendered with fictional demo data. Not a live workspace, not a benchmark, not real user activity.",
   "demoProject": "Atlas website (fictional)",
   "capturedOn": "2026-10-05",
-  "sourceRevision": "378297e41aeb058629bef2a39cacb4f0ebc8b64f",
+  "sourceRevision": "8c088dc0377ee8aeacbbd40f154ca38109f9c043",
   "uncommittedProductChanges": false,
+  "headerFits": [
+    {
+      "view": "workspace",
+      "viewport": {
+        "width": 1600,
+        "height": 1000
+      },
+      "width": 1141,
+      "height": 67,
+      "metricsWidth": 360.890625,
+      "withinHeader": true,
+      "detailsClosed": true,
+      "resourceText": "CPU 15.5%RAM 232 MiB"
+    },
+    {
+      "view": "computer-use",
+      "viewport": {
+        "width": 1600,
+        "height": 1000
+      },
+      "width": 1141,
+      "height": 67,
+      "metricsWidth": 360.890625,
+      "withinHeader": true,
+      "detailsClosed": true,
+      "resourceText": "CPU 15.5%RAM 232 MiB"
+    },
+    {
+      "view": "workspace",
+      "viewport": {
+        "width": 1200,
+        "height": 630
+      },
+      "width": 741,
+      "height": 89,
+      "metricsWidth": 360.890625,
+      "withinHeader": true,
+      "detailsClosed": true,
+      "resourceText": "CPU 15.5%RAM 232 MiB"
+    }
+  ],
   "viewport": {
     "width": 1600,
     "height": 1000,
@@ -26,7 +67,7 @@
   ],
   "dataSource": "packages/app/test/fixtures/marketing-data.ts (workspace, queues, memory) and packages/app/test/fixtures/marketing-features.ts (MCP store, secrets, schedules, teams, roles, projects, computer-use demo)",
   "timestamps": "Relative to capture time; paths use the fictional /demo/atlas-website.",
-  "fixtureNotes": "MCP servers are fictional entries on reserved .invalid hosts; secrets are names with masked state only, no values exist; no OAuth flow, tool call or schedule run is executed. Computer use is a DEMO: the monitor component is real, but its target image is a synthetic SVG drawn by the fixture (it carries a visible \"DEMO · synthetic target\" banner and a large DEMO watermark, so it cannot be mistaken for a real desktop) and the lease, actions and status are scripted — no desktop was captured or controlled, and no permission was requested. Projects, checkpoints, files, teams and role bindings are scripted fixture data; no git, filesystem or agent exists behind them.",
+  "fixtureNotes": "MCP servers are fictional entries on reserved .invalid hosts; secrets are names with masked state only, no values exist; no OAuth flow, tool call or schedule run is executed. Computer use: the monitor component is real, but its target image is a synthetic SVG drawn by the fixture and the lease, actions and status are scripted — no desktop was captured or controlled, and no permission was requested. Projects, checkpoints, files, teams and role bindings are scripted fixture data; no git, filesystem or agent exists behind them.",
   "reproduce": "node scripts/marketing-preview.mjs --capture",
   "images": [
     {
@@ -87,7 +128,7 @@
       "file": "chimera-computer-use.png",
       "width": 1600,
       "height": 1000,
-      "shows": "Computer use (DEMO): the actual desktop-control monitor component showing a synthetic demo target, not a real desktop"
+      "shows": "Computer use (DEMO): the actual desktop-control monitor component showing a synthetic Atlas pricing preview"
     },
     {
       "file": "og-image.png",

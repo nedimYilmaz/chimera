@@ -1,8 +1,6 @@
 Share just the context they need
 Explicit snapshots: share, read, revoke
 
-Disclosure (on every frame): Demo data · scripted daemon · fictional Atlas
-
 [0:02] 1 · Open the agent inspector
 [0:05] 2 · Choose an explicit snapshot
 [0:15] 3 · Pull the snapshot explicitly

@@ -1,14 +1,12 @@
 Put the next task in motion
 Teams and queues: pushing a task, then pending → in progress → done
 
-Disclosure (on every frame): Demo data · scripted daemon · fictional Atlas
-
 [0:02] Workspace: the conductor and its team of agents
 [0:04] 1 · Open the Queues tab
 [0:07] 2 · Open the atlas-release queue
 [0:11] 3 · Select a task, then choose “new”
 [0:16] 4 · Type the task; Enter moves through fields
 [0:23] 5 · Push the task: pending
-[0:25] 6 · Scripted worker state: in progress
+[0:25] 6 · The task is in progress
 [0:28] 7 · The task finishes: done, counts update
-[0:31] State changes replayed by a scripted daemon
+[0:31] Follow a task from pending to done

@@ -2,7 +2,7 @@
 // stand-in as scripts/marketing-preview.mjs (real React screens on the real app store, a mocked RPC
 // bridge, nothing that reaches a daemon, provider, account or network) but serving the VIDEO entry
 // packages/app/test/fixtures/marketing-video.tsx inside a shell that carries the on-video layer:
-// the always-on disclosure band, the caption bar, the title card and the pointer overlay.
+// the caption bar, the title card and the pointer overlay.
 //
 // marketing-preview.mjs stays untouched on purpose (it is the screenshot gate's tool); the plugin
 // below is a copy, so a change to the bridge seams there has to be mirrored here.
@@ -12,17 +12,14 @@ import { pathToFileURL } from "node:url";
 
 /** Geometry of the on-video layer, shared with the capture script so pointer maths and the mobile
  * legibility numbers come from one place. */
-export const FRAME = { width: 1280, height: 800, band: 56, caption: 76, bandFont: 40, captionFont: 44 };
-
-/** The disclosure that stays on every frame of every clip. */
-export const DISCLOSURE = "Demo data · scripted daemon · fictional Atlas";
+export const FRAME = { width: 1280, height: 800, caption: 76, captionFont: 44 };
 
 const SHELL_CSS = `
   html, body { margin: 0; background: #000; overflow: hidden; }
   body { width: ${FRAME.width}px; height: ${FRAME.height}px; position: relative; }
-  /* The real screens size themselves with 100vw/100vh inline; pin them into the area the band and the
-     caption bar leave free, so no UI is ever drawn underneath burned-in text. */
-  #mv-stage { position: fixed; top: 132px; left: 0; right: 0; bottom: 0; overflow: hidden; }
+  /* The real screens size themselves with 100vw/100vh inline; pin them into the area the
+     caption bar leaves free, so no UI is ever drawn underneath burned-in text. */
+  #mv-stage { position: fixed; top: ${FRAME.caption}px; left: 0; right: 0; bottom: 0; overflow: hidden; }
   #root { transform-origin: 0 0; position: absolute; top: 0; left: 0; right: 0; bottom: 0; overflow: hidden; }
   #root > div { width: 100% !important; height: 100% !important; }
   /* Frames are sampled at a fixed rate, so a CSS transition caught mid-flight (or a looping spinner at an
@@ -30,14 +27,12 @@ const SHELL_CSS = `
   [class*="connRtt"] { display: none !important; }
   * { caret-color: transparent !important; scroll-behavior: auto !important; }
   *, *::before, *::after { animation: none !important; transition: none !important; }
-  #mv-band, #mv-caption { position: fixed; left: 0; right: 0; box-sizing: border-box; display: flex; align-items: center; justify-content: center; text-align: center; font: 600 ${FRAME.bandFont}px/1.15 -apple-system, "Helvetica Neue", Arial, sans-serif; color: #fff; padding: 0 20px; }
-  #mv-band { top: 0; height: ${FRAME.band}px; background: #20352b; letter-spacing: 0.01em; }
-  #mv-caption { top: ${FRAME.band}px; height: ${FRAME.caption}px; background: #101418; border-top: 2px solid #2b3540; font-size: ${FRAME.captionFont}px; font-weight: 500; }
+  #mv-caption { position: fixed; left: 0; right: 0; box-sizing: border-box; display: flex; align-items: center; justify-content: center; text-align: center; font: 600 ${FRAME.captionFont}px/1.15 -apple-system, "Helvetica Neue", Arial, sans-serif; color: #fff; padding: 0 20px; }
+  #mv-caption { top: 0; height: ${FRAME.caption}px; background: #101418; border-top: 2px solid #2b3540; font-size: ${FRAME.captionFont}px; font-weight: 500; }
   #mv-title { position: fixed; inset: 0; z-index: 10; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 22px; background: radial-gradient(ellipse at 25% 20%, #1a382b, #0b0f14 70%); color: #fff; font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; text-align: center; padding: 0 64px; }
   #mv-title[data-on] { display: flex; }
   #mv-title h1 { margin: 0; font-size: 64px; line-height: 1.1; }
   #mv-title p { margin: 0; font-size: 34px; line-height: 1.25; color: #c9d4e0; }
-  #mv-title .mv-tag { font-size: 40px; color: #fff; background: #20352b; padding: 10px 22px; border-radius: 6px; }
   #mv-cursor { position: fixed; left: 0; top: 0; width: 0; height: 0; z-index: 20; pointer-events: none; display: none; }
   #mv-cursor[data-on] { display: block; }
   #mv-cursor svg { position: absolute; left: 0; top: 0; filter: drop-shadow(1px 2px 1px rgba(0,0,0,.55)); }
@@ -45,11 +40,10 @@ const SHELL_CSS = `
   #mv-cursor[data-down] i { display: block; }
 `;
 
-const SHELL = `<!doctype html><html lang="en"><head><meta charset="UTF-8"><title>Chimera usage video capture (demo data)</title><style>${SHELL_CSS}</style></head><body>
-<div id="mv-band">${DISCLOSURE}</div>
+const SHELL = `<!doctype html><html lang="en"><head><meta charset="UTF-8"><title>Chimera workflow capture</title><style>${SHELL_CSS}</style></head><body>
 <div id="mv-stage"><div id="root"></div></div>
 <div id="mv-caption"></div>
-<div id="mv-title"><div class="mv-tag">${DISCLOSURE}</div><div style="font-size:30px;letter-spacing:.2em;color:#8cddb0">CHIMERA</div><h1></h1><p></p></div>
+<div id="mv-title"><div style="font-size:30px;letter-spacing:.2em;color:#8cddb0">CHIMERA</div><h1></h1><p></p></div>
 <div id="mv-cursor"><svg width="26" height="34" viewBox="0 0 26 34"><path d="M2 2 L2 27 L8.5 21 L13 31.5 L17.5 29.5 L13 19.5 L22 19.5 Z" fill="#fff" stroke="#000" stroke-width="2" stroke-linejoin="round"/></svg><i></i></div>
 <script type="module" src="/test/fixtures/marketing-video.tsx"></script>
 </body></html>`;

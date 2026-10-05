@@ -18,7 +18,7 @@
   <meta property="og:image" content="https://nedimyilmaz.github.io/chimera/assets/og-image.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
-  <meta property="og:image:alt" content="The Chimera desktop app showing agents and a conversation, rendered with fictional demo data.">
+  <meta property="og:image:alt" content="The Chimera desktop app showing agents and a conversation, showing its workspace.">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Chimera feature guide — every area, with a real scenario">
   <meta name="twitter:description" content="Searchable guide to every area of the Chimera desktop workspace: agents, projects, roles, teams, queues, schedules, memory, MCP store, secrets manager, computer use and more.">
@@ -89,11 +89,11 @@
   <main id="main">
     <section class="ghero" id="top" aria-labelledby="guide-title">
       <div class="wrap">
-        <p class="status"><span class="dot" aria-hidden="true"></span>Feature guide · early access · screenshots use demo data</p>
+        <p class="status"><span class="dot" aria-hidden="true"></span>Feature guide · early access</p>
         <h1 id="guide-title">What Chimera does, area by area.</h1>
         <p class="lede">Every area starts with the problem it solves, says what changes, walks one concrete scenario and then lists its sub-features. Search or filter below, or jump from the contents list.</p>
         <div id="guide-tools" class="gtools"></div>
-        <p class="fine">22 areas in 5 groups. Scenarios use a fictional “Atlas website” project. Where an area is a preview or experimental, or only works on some platforms, it says so.</p>
+        <p class="fine">22 areas in 5 groups. Where an area is a preview or experimental, or only works on some platforms, it says so.</p>
       </div>
     </section>
 
@@ -171,8 +171,8 @@
           <div><dt>In practice</dt><dd>The Atlas conductor is mid-turn on a CSS refactor when you notice it is editing the wrong stylesheet. You send a forced message, which asks the backend to interrupt or steer the turn. Edits it already made stay on disk, so you review them. An hour later a quota window runs out, so you hold the agent and release it once the quota is back: the aborted turn is re-queued and runs again on the same conversation.</dd></div>
         </dl>
         <figure class="shot shot--light">
-          <a href="assets/chimera-workspace.png" data-zoom><img src="assets/chimera-workspace.png" width="1600" height="1000" alt="Chimera desktop app: agent sidebar with Claude and Codex agents on the demo project Atlas website, and an agent conversation with tool calls (demo data)" loading="lazy" decoding="async"></a>
-          <figcaption>Actual Chimera interface · demo data</figcaption>
+          <a href="assets/chimera-workspace.png" data-zoom><img src="assets/chimera-workspace.png" width="1600" height="1000" alt="Chimera desktop app: agent sidebar with Claude and Codex agents on the Atlas website project, and an agent conversation with tool calls" loading="lazy" decoding="async"></a>
+          <figcaption>Agents</figcaption>
         </figure>
         <div class="groups">
           <section class="grp" aria-labelledby="agents-g1">
@@ -407,7 +407,7 @@
         </dl>
         <figure class="shot shot--light">
           <a href="assets/chimera-projects.png" data-zoom><img src="assets/chimera-projects.png" width="1600" height="1000" alt="Projects: a project bound to teams and a task queue, live sessions, checkpoints and the per-project setup/conductor-account settings." loading="lazy" decoding="async"></a>
-          <figcaption>Actual Chimera interface · demo data</figcaption>
+          <figcaption>Projects and conductors</figcaption>
         </figure>
         <div class="groups">
           <section class="grp" aria-labelledby="projects-g1">
@@ -457,7 +457,7 @@
         </dl>
         <figure class="shot shot--light">
           <a href="assets/chimera-roles.png" data-zoom><img src="assets/chimera-roles.png" width="1600" height="1000" alt="Roles: the role library beside team role bindings, with a binding's override editor showing which fields are pinned vs inherited." loading="lazy" decoding="async"></a>
-          <figcaption>Actual Chimera interface · demo data</figcaption>
+          <figcaption>Roles</figcaption>
         </figure>
         <div class="groups">
           <section class="grp" aria-labelledby="roles-g1">
@@ -500,7 +500,7 @@
         </dl>
         <figure class="shot shot--light">
           <a href="assets/chimera-teams.png" data-zoom><img src="assets/chimera-teams.png" width="1600" height="1000" alt="Teams: the 'atlas' team with its bound queue, members, role provenance badges, pinned vs inherited role settings and live workers." loading="lazy" decoding="async"></a>
-          <figcaption>Actual Chimera interface · demo data</figcaption>
+          <figcaption>Teams</figcaption>
         </figure>
         <div class="groups">
           <section class="grp" aria-labelledby="teams-g1">
@@ -542,8 +542,8 @@
           <div><dt>In practice</dt><dd>On Atlas, a tests task depends on a refactor task. You add a late dependency instead of writing run this last in a prompt. The tests task stays blocked, and an explain call names the unmet dependency.</dd></div>
         </dl>
         <figure class="shot shot--light">
-          <a href="assets/chimera-queue.png" data-zoom><img src="assets/chimera-queue.png" width="1600" height="1000" alt="Chimera team queue for the Atlas website demo: done, running, pending and blocked tasks, with the selected task's dependsOn inspector (demo data)" loading="lazy" decoding="async"></a>
-          <figcaption>Actual Chimera interface · demo data</figcaption>
+          <a href="assets/chimera-queue.png" data-zoom><img src="assets/chimera-queue.png" width="1600" height="1000" alt="Chimera team queue for the Atlas website: done, running, pending and blocked tasks, with the selected task's dependsOn inspector" loading="lazy" decoding="async"></a>
+          <figcaption>Queues</figcaption>
         </figure>
         <div class="groups">
           <section class="grp" aria-labelledby="queues-g1">
@@ -653,7 +653,7 @@
         </dl>
         <figure class="shot shot--light">
           <a href="assets/chimera-schedules.png" data-zoom><img src="assets/chimera-schedules.png" width="1600" height="1000" alt="Queues → schedules: jobs with cron/interval cadence, next run and last result, plus the selected job's run history (scheduled, manual, catch-up; ok/failed/skipped)." loading="lazy" decoding="async"></a>
-          <figcaption>Actual Chimera interface · demo data</figcaption>
+          <figcaption>Schedules</figcaption>
         </figure>
         <div class="groups">
           <section class="grp" aria-labelledby="schedules-g1">
@@ -722,8 +722,8 @@
           <div><dt>In practice</dt><dd>An Atlas agent records a decision that the site uses system fonts only. A week later another agent searches memory before touching the stylesheet, finds the decision, and follows it.</dd></div>
         </dl>
         <figure class="shot shot--light">
-          <a href="assets/chimera-memory.png" data-zoom><img src="assets/chimera-memory.png" width="1600" height="1000" alt="Chimera shared memory: notes by folder with pins and tags, and the selected note's links and backlinks (demo data)" loading="lazy" decoding="async"></a>
-          <figcaption>Actual Chimera interface · demo data</figcaption>
+          <a href="assets/chimera-memory.png" data-zoom><img src="assets/chimera-memory.png" width="1600" height="1000" alt="Chimera shared memory: notes by folder with pins and tags, and the selected note's links and backlinks" loading="lazy" decoding="async"></a>
+          <figcaption>Memory</figcaption>
         </figure>
         <div class="groups">
           <section class="grp" aria-labelledby="memory-g1">
@@ -884,7 +884,7 @@
         </dl>
         <figure class="shot shot--light">
           <a href="assets/chimera-mcp-store.png" data-zoom><img src="assets/chimera-mcp-store.png" width="1600" height="1000" alt="Settings → MCP store: built-in servers (no uninstall) beside external servers, each with a trust badge (full/untrusted) and an OAuth status chip (authorized, needs re-auth, bearer, never); hosts are reserved example domains." loading="lazy" decoding="async"></a>
-          <figcaption>Actual Chimera interface · demo data</figcaption>
+          <figcaption>MCP store</figcaption>
         </figure>
         <div class="groups">
           <section class="grp" aria-labelledby="mcp-store-g1">
@@ -954,7 +954,7 @@
         </dl>
         <figure class="shot shot--light">
           <a href="assets/chimera-secrets.png" data-zoom><img src="assets/chimera-secrets.png" width="1600" height="1000" alt="Settings → Secrets: named secrets with descriptions and per-agent grant modes; values are never shown, only names and masked state." loading="lazy" decoding="async"></a>
-          <figcaption>Actual Chimera interface · demo data</figcaption>
+          <figcaption>Secrets manager</figcaption>
         </figure>
         <p class="limits"><strong>Limits.</strong> On macOS the value is passed to the keychain command as an argument, so it is briefly visible to other local processes. A corrupt secrets file makes the daemon refuse to start rather than guess.</p>
         <div class="groups">
@@ -1011,10 +1011,10 @@
           <div><dt>In practice</dt><dd>An Atlas agent drives the macOS desktop to check how the staging page renders in your real browser window. A small preview sits at the upper right of that agent's transcript with the target window and the latest actions. When one looks wrong, you press Stop desktop control.</dd></div>
         </dl>
         <figure class="shot shot--light">
-          <a href="assets/chimera-computer-use.png" data-zoom><img src="assets/chimera-computer-use.png" width="1600" height="1000" alt="Agent transcript with the Desktop control monitor (preview + recent actions + Stop button) over a synthetic target image clearly labelled DEMO — not a real desktop." loading="lazy" decoding="async"></a>
-          <figcaption>Actual Chimera monitor component · synthetic demo target</figcaption>
+          <a href="assets/chimera-computer-use.png" data-zoom><img src="assets/chimera-computer-use.png" width="1600" height="1000" alt="Agent transcript with the Desktop control monitor (preview + recent actions + Stop button) with an Atlas pricing preview." loading="lazy" decoding="async"></a>
+          <figcaption>Computer use</figcaption>
         </figure>
-        <p class="limits"><strong>Limits.</strong> The screenshot above is a synthetic demo target, clearly labelled, not a real desktop. Desktop control and Laya are macOS only. Laya only helps rank actions: the exclusive lease and the Stop button apply the same way with or without it.</p>
+        <p class="limits"><strong>Limits.</strong> Desktop control and Laya are macOS only. Laya only helps rank actions: the exclusive lease and the Stop button apply the same way with or without it.</p>
         <div class="groups">
           <section class="grp" aria-labelledby="computer-use-g1">
             <h4 id="computer-use-g1">Three ways in</h4>
@@ -1335,7 +1335,7 @@
         <li><strong>Voice and meetings</strong> is preview. Voice is a preview. It needs the desktop app for microphone consent and is not part of the baseline workflow.</li>
         <li><strong>Federation</strong> is experimental. Federation is the most experimental surface, with little everyday use. It is configured as peers in config, not a single switch.</li>
       </ul>
-      <p class="fine">Screenshots show the actual Chimera interface with fictional demo data. <a href="https://github.com/nedimYilmaz/chimera/blob/main/site/assets/provenance.md">How they were made</a>.</p>
+      <p class="fine">Screenshots show the actual Chimera interface. <a href="how-made.html">How these images were made</a>.</p>
     </section>
       </div>
     </div>
@@ -1382,7 +1382,7 @@
       </nav>
     </div>
     <div class="wrap foot__note">
-      <p>Screenshots: actual Chimera interface · demo data. <a href="https://github.com/nedimYilmaz/chimera/blob/main/site/assets/provenance.md">How they were made</a>.</p>
+      <p>Screenshots: actual Chimera interface. <a href="how-made.html">How these images were made</a>.</p>
       <p>Early access software. Issues are welcome; changes from pull requests are applied in the maintainer's tree.</p>
     </div>
   </footer>

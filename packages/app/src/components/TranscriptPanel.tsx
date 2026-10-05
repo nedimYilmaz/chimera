@@ -721,6 +721,8 @@ export function TranscriptPanel({ agent: liveAgent, workflow }: { agent: AgentVi
     <div className={styles.transcriptLayout}>
     <Panel label={panelLabel} className={styles.pane}>
       <TranscriptHeader
+        resourceAgentId={replay.active ? undefined : currentAgentId ?? undefined}
+        metricsAttribution={isTaskMode ? `Context, tokens and OS resources: ${currentAgentId ?? "no selected agent"}. Cost covers the workflow.` : undefined}
         name={headerName}
         fullId={headerFullId}
         state={headerState}

@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>How Chimera's product images and videos were made</title>
+  <meta name="description" content="The source and capture process behind Chimera's product images and videos: actual interface components, fictional Atlas data and a local capture fixture.">
+  <link rel="canonical" href="https://nedimyilmaz.github.io/chimera/how-made.html">
+  <meta property="og:image" content="https://nedimyilmaz.github.io/chimera/assets/og-image.png">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="sec"><div class="wrap"><nav class="demo-nav" aria-label="Site"><a href="index.html">Chimera home</a><a href="features.html">Feature guide</a><a href="videos.html">Product demos</a></nav></div></header>
+  <main class="sec"><div class="wrap">
+    <p class="eyebrow">Behind the captures</p>
+    <h1>How these images and videos were made</h1>
+    <p class="sub">The interface is Chimera's actual React components and app state, rendered in a local browser. The Atlas project, people, tasks, notes and resource figures are fictional.</p>
+    <section id="images" aria-labelledby="images-title">
+      <h2 id="images-title">Product images</h2>
+      <p>The screenshots render the production screens with a local fixture that supplies their data. They show the interface without connecting to personal accounts, a live daemon or a provider. Secret entries contain names and masked states only.</p>
+      <p>The desktop monitor is a real component. Its Atlas pricing preview is a synthetic SVG drawn by the fixture; ownership, actions and status are scripted. No desktop was captured or controlled.</p>
+      <p><a href="assets/provenance.md">Screenshot capture details</a> · <a href="assets/provenance.json">Machine-readable image provenance</a></p>
+    </section>
+    <section id="videos" aria-labelledby="videos-title">
+      <h2 id="videos-title">Product videos</h2>
+      <p>The films use real clicks, keystrokes and focus changes in those components. A scripted fixture answers RPC requests and replays task states; the films do not record agents executing work.</p>
+      <p>Camera moves, pointer motion, captions and timing are editorial. Each film is silent and sampled at 15 frames per second. Durations and resource figures are not performance measurements.</p>
+      <p>Playback starts when you choose it. Native controls, English captions, static posters and text steps remain available without JavaScript. Expand the player to inspect small interface text, or use the static alternatives for reduced motion.</p>
+      <p><a href="assets/videos/provenance.md">Video capture details</a> · <a href="assets/videos/provenance.json">Machine-readable video provenance</a> · <a href="assets/videos/verification.json">Local playback verification</a></p>
+    </section>
+  </div></main>
+</body>
+</html>

@@ -131,8 +131,8 @@
       ],
       "figure": {
         "src": "assets/chimera-workspace.png",
-        "alt": "Chimera desktop app: agent sidebar with Claude and Codex agents on the demo project Atlas website, and an agent conversation with tool calls (demo data)",
-        "caption": "Actual Chimera interface · demo data"
+        "alt": "Chimera desktop app: agent sidebar with Claude and Codex agents on the Atlas website project, and an agent conversation with tool calls",
+        "caption": "Agents"
       },
       "evidence": [
         "packages/app/src/screens/AgentsScreen.tsx",
@@ -400,7 +400,7 @@
       "figure": {
         "src": "assets/chimera-projects.png",
         "alt": "Projects: a project bound to teams and a task queue, live sessions, checkpoints and the per-project setup/conductor-account settings.",
-        "caption": "Actual Chimera interface · demo data"
+        "caption": "Projects and conductors"
       },
       "evidence": [
         "packages/core/src/projects.ts",
@@ -454,7 +454,7 @@
       "figure": {
         "src": "assets/chimera-roles.png",
         "alt": "Roles: the role library beside team role bindings, with a binding's override editor showing which fields are pinned vs inherited.",
-        "caption": "Actual Chimera interface · demo data"
+        "caption": "Roles"
       },
       "evidence": [
         "packages/core/src/roles-store.ts",
@@ -508,7 +508,7 @@
       "figure": {
         "src": "assets/chimera-teams.png",
         "alt": "Teams: the 'atlas' team with its bound queue, members, role provenance badges, pinned vs inherited role settings and live workers.",
-        "caption": "Actual Chimera interface · demo data"
+        "caption": "Teams"
       },
       "evidence": [
         "packages/core/src/teams.ts",
@@ -578,8 +578,8 @@
       ],
       "figure": {
         "src": "assets/chimera-queue.png",
-        "alt": "Chimera team queue for the Atlas website demo: done, running, pending and blocked tasks, with the selected task's dependsOn inspector (demo data)",
-        "caption": "Actual Chimera interface · demo data"
+        "alt": "Chimera team queue for the Atlas website: done, running, pending and blocked tasks, with the selected task's dependsOn inspector",
+        "caption": "Queues"
       },
       "evidence": [
         "packages/core/src/queues.ts",
@@ -722,7 +722,7 @@
       "figure": {
         "src": "assets/chimera-schedules.png",
         "alt": "Queues → schedules: jobs with cron/interval cadence, next run and last result, plus the selected job's run history (scheduled, manual, catch-up; ok/failed/skipped).",
-        "caption": "Actual Chimera interface · demo data"
+        "caption": "Schedules"
       },
       "evidence": [
         "packages/core/src/jobs.ts",
@@ -795,8 +795,8 @@
       ],
       "figure": {
         "src": "assets/chimera-memory.png",
-        "alt": "Chimera shared memory: notes by folder with pins and tags, and the selected note's links and backlinks (demo data)",
-        "caption": "Actual Chimera interface · demo data"
+        "alt": "Chimera shared memory: notes by folder with pins and tags, and the selected note's links and backlinks",
+        "caption": "Memory"
       },
       "evidence": [
         "packages/app/src/screens/MemoryScreen.tsx",
@@ -1004,7 +1004,7 @@
       "figure": {
         "src": "assets/chimera-mcp-store.png",
         "alt": "Settings → MCP store: built-in servers (no uninstall) beside external servers, each with a trust badge (full/untrusted) and an OAuth status chip (authorized, needs re-auth, bearer, never); hosts are reserved example domains.",
-        "caption": "Actual Chimera interface · demo data"
+        "caption": "MCP store"
       },
       "evidence": [
         "packages/core/src/mcpstore.ts",
@@ -1079,7 +1079,7 @@
       "figure": {
         "src": "assets/chimera-secrets.png",
         "alt": "Settings → Secrets: named secrets with descriptions and per-agent grant modes; values are never shown, only names and masked state.",
-        "caption": "Actual Chimera interface · demo data"
+        "caption": "Secrets manager"
       },
       "evidence": [
         "packages/core/src/secrets.ts",
@@ -1138,11 +1138,11 @@
           ]
         }
       ],
-      "limits": "The screenshot above is a synthetic demo target, clearly labelled, not a real desktop. Desktop control and Laya are macOS only. Laya only helps rank actions: the exclusive lease and the Stop button apply the same way with or without it.",
+      "limits": "Desktop control and Laya are macOS only. Laya only helps rank actions: the exclusive lease and the Stop button apply the same way with or without it.",
       "figure": {
         "src": "assets/chimera-computer-use.png",
-        "alt": "Agent transcript with the Desktop control monitor (preview + recent actions + Stop button) over a synthetic target image clearly labelled DEMO — not a real desktop.",
-        "caption": "Actual Chimera monitor component · synthetic demo target"
+        "alt": "Agent transcript with the Desktop control monitor (preview + recent actions + Stop button) with an Atlas pricing preview.",
+        "caption": "Computer use"
       },
       "evidence": [
         "packages/core/src/computer-use.ts",

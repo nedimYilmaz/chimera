@@ -839,3 +839,42 @@
 [data-message-actions] { min-width:0; flex-shrink:0; }
 [data-message-actions] summary { cursor:pointer; list-style:none; padding:0 6px; }
 [data-message-actions] button { max-width:100%; white-space:normal; }
+
+/* Keep the always-visible chrome compact; native details owns keyboard/touch
+   disclosure without an overlay or a second transient-surface lifecycle. */
+.header { padding-block: 2px 6px; }
+.headerTop { align-items: center; gap: 6px; flex-wrap: nowrap; }
+.nameButton { flex: 1; gap: 6px; }
+.name { font-size: var(--fs-body); }
+.fullId { display: none; }
+.stateChip { flex-shrink: 0; }
+.headerActions { margin-left: 0; }
+.headerAction { min-width: 28px; min-height: 28px; }
+.chipRow { gap: 4px 6px; margin-top: 2px; }
+.chipRow > [data-transcript-action="system.model"], .chipRow > [data-transcript-static="system.model"] { max-width: min(42%, 260px); }
+.metricsDisclosure { display: contents; }
+.metricsSummary { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-height: 28px; max-width: 100%; cursor: pointer; font-variant-numeric: tabular-nums; }
+.metricsSummary::-webkit-details-marker { display: none; }
+.metricsSummary::marker { content: ""; }
+.metricsSummary:focus-visible, .metricsDetails:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.metricsLabel { color: var(--fg-soft); white-space: nowrap; }
+.metricsLabel::after { content: " ▾"; }
+.metricsDisclosure[open] .metricsLabel::after { content: " ▴"; }
+.metricsDetails { flex: 1 0 100%; box-sizing: border-box; min-width: 0; max-width: 100%; max-height: min(240px, 30vh); overflow: auto; overflow-wrap: anywhere; padding: 8px; border: 1px solid var(--line-soft); border-radius: var(--radius-panel); display: flex; flex-wrap: wrap; gap: 6px 12px; }
+.metricsDisclosure:not([open]) > .metricsDetails { display: none; }
+.metricsDetails > div, .metricsDetails > [data-context-limits] { flex-basis: 100%; }
+.detailSettings { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.resourceSummary { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.ctxTrack, .ctxTrackBusy { width: 42px; }
+@container agent-transcript (max-width: 480px) {
+  .nameButton { flex-basis: auto; }
+  .headerTop { flex-wrap: wrap; }
+  .headerActions { order: 3; }
+  .moreHint { display: none; }
+  .chipRow { gap: 4px; }
+}
+/* Native details has an internal content box: give it an explicit flex item
+   width so long account chips cannot size the disclosure beyond the pane. */
+.metricsDisclosure { display: block; min-width: 0; max-width: 100%; }
+.metricsDisclosure[open] { flex: 1 0 100%; }
+.metricsDetails { width: 100%; margin-top: 4px; }

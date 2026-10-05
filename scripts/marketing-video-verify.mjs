@@ -43,6 +43,7 @@ for (const clip of provenance.clips) for (const format of ['mp4','webm']) {
   const video = probe.streams.find(s=>s.codec_type==='video');
   assert.equal(video.codec_name,format==='mp4'?'h264':'vp8');
   assert.equal(video.width,1280); assert.equal(video.height,800);
+  assert.equal(video.r_frame_rate,'15/1');
   assert.ok(Math.abs(Number(probe.format.duration)-clip.durationSeconds)<.15);
   assert.equal(Number(probe.format.size),clip.files[format].bytes);
   assert.ok(Number(probe.format.size)<15*1024*1024);
@@ -153,6 +154,8 @@ try {
   const gallery=await evaluate(`(() => ({ count:document.querySelectorAll('video').length, reduced:matchMedia('(prefers-reduced-motion:reduce)').matches, controls:[...document.querySelectorAll('video')].every(v=>v.controls && !v.autoplay && v.preload==='none' && v.hasAttribute('playsinline') && v.querySelector('track[kind="captions"]')), alternatives:document.querySelectorAll('.demo-links').length, links:[...document.querySelectorAll('a')].map(a=>a.getAttribute('href')).filter(h=>!h.startsWith('https:')) }))()`);
   assert.equal(gallery.count,provenance.clips.length); assert.equal(gallery.alternatives,gallery.count);
   assert.ok(gallery.controls && gallery.reduced);
+  assert.ok(gallery.links.includes('how-made.html#videos'),'gallery missing linked provenance');
+  assert.ok(await evaluate(`!/(demo data|scripted daemon|capture source)/i.test(document.body.innerText)`),'gallery repeated fixture labels');
   assert.ok(!siteRequests.slice(beforeRequests).some(r=>/\.(mp4|webm)(?:$|\?)/.test(r)), 'gallery eagerly loaded videos');
   for(const link of gallery.links) assert.ok((await fetch(new URL(link,`${origin}/chimera/videos.html`))).ok,`gallery link ${link}`);
   for(const width of [1280,390]) {
