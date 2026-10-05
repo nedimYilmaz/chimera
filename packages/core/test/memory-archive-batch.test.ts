@@ -1,3 +1,4 @@
+import { pruneOverflowForTest } from "./memory-test-helpers.js";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
 // F36.FIX (QA findings 5 + 6): the pre-delete archive used to be ONE read+trim+rewrite of the whole
@@ -47,6 +48,7 @@ describe("MemoryStore eviction archive (F36.FIX)", () => {
   it("writes the archive ONCE per eviction pass, not once per evicted record", () => {
     const { dir, mem } = seeded(30, 10);
     mem.edit("n29", { text: "batch probe number twenty-nine, revised" });   // dooms 20 in one pass
+    pruneOverflowForTest(mem);
 
     expect(archiveWrites).toBe(1);
     const lines = readFileSync(join(dir, "memory-evicted.jsonl"), "utf8").split("\n").filter(Boolean);
@@ -61,6 +63,7 @@ describe("MemoryStore eviction archive (F36.FIX)", () => {
   it("an archived record is gone from search/get — the archive is not a search surface", () => {
     const { dir, mem } = seeded(30, 10);
     mem.edit("n29", { text: "batch probe number twenty-nine, revised" });
+    pruneOverflowForTest(mem);
 
     const live = new Set(mem.search({ limit: 100 }).map((s) => s.record.id));
     const archived = readFileSync(join(dir, "memory-evicted.jsonl"), "utf8")
@@ -80,6 +83,7 @@ describe("MemoryStore eviction archive (F36.FIX)", () => {
     failArchiveWrites = true;
     try {
       mem.edit("n11", { text: "batch probe number eleven, revised" });
+    pruneOverflowForTest(mem);
     } finally {
       warn.mockRestore();
     }

@@ -1,3 +1,4 @@
+import { pruneOverflowForTest } from "./memory-test-helpers.js";
 import { describe, it, expect, vi } from "vitest";
 import { existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -108,6 +109,7 @@ describe("MemoryStore eviction events and archive (F36 task 1)", () => {
     ], 10);
 
     mem.edit("n12", { text: "survivor note six, revised" });   // one write → one prune pass, overflow 3
+    pruneOverflowForTest(mem);
 
     const evicted = evictedEvents(events);
     expect(evicted.map((e) => (e.data as { id: string }).id)).toEqual(["n3", "n4", "n5"]);
@@ -123,6 +125,7 @@ describe("MemoryStore eviction events and archive (F36 task 1)", () => {
     const { events, mem } = seeded(
       Array.from({ length: 100 }, (_, i) => ({ id: `n${i}`, text: `capacity probe number ${i}` })), 10);
     mem.edit("n99", { text: "capacity probe number ninety-nine, revised" });
+    pruneOverflowForTest(mem);
 
     const evicted = evictedEvents(events);
     expect(evicted).toHaveLength(51);
@@ -137,6 +140,7 @@ describe("MemoryStore eviction events and archive (F36 task 1)", () => {
     const { dir, mem } = seeded(
       Array.from({ length: 11 }, (_, i) => ({ id: `n${i}`, text: `archive probe number ${i}` })), 10);
     mem.edit("n10", { text: "archive probe number ten, revised" });
+    pruneOverflowForTest(mem);
 
     const lines = readFileSync(join(dir, "memory-evicted.jsonl"), "utf8").split("\n").filter(Boolean);
     expect(lines).toHaveLength(1);
@@ -166,6 +170,7 @@ describe("MemoryStore eviction events and archive (F36 task 1)", () => {
     const spy = vi.spyOn(MemoryLinkIndex.prototype, "resolveAll");
     try {
       mem.edit("n12", { text: "cost probe number twelve, revised" });   // evicts 3 in ONE pass
+    pruneOverflowForTest(mem);
       expect(spy).toHaveBeenCalledTimes(1);
 
       spy.mockClear();
@@ -236,6 +241,7 @@ describe("MemoryStore capacity alarm re-arm (F36.FIX)", () => {
     const { events, mem } = seeded(
       Array.from({ length: 12 }, (_, i) => ({ id: `n${i}`, text: `flag probe number ${i}` })), 10);
     mem.edit("n11", { text: "flag probe number eleven, revised" });   // evicts 2 in one pass
+    pruneOverflowForTest(mem);
 
     const evicted = evictedEvents(events);
     expect(evicted).toHaveLength(2);

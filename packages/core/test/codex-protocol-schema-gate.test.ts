@@ -39,6 +39,50 @@ async function processIsAlive(pid: number) {
   }
 }
 
+async function readOptionalFile(file: string) {
+  try { return await readFile(file, "utf8"); }
+  catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw error;
+  }
+}
+
+async function killFixture(pidFile: string) {
+  const value = await readOptionalFile(pidFile);
+  if (value === undefined) return;
+  const pid = Number(value);
+  if (!Number.isInteger(pid) || pid <= 0) throw new Error(`Invalid fixture PID: ${value}`);
+  try {
+    // The checker creates a detached group on POSIX; never signal other fixtures.
+    process.kill(process.platform === "win32" ? pid : -pid, "SIGKILL");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+  }
+  return pid;
+}
+
+async function waitForClose(closed: Promise<unknown>, timeoutMs: number) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      closed.then(() => true),
+      new Promise<boolean>((resolvePromise) => {
+        timer = setTimeout(() => resolvePromise(false), timeoutMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function expectProcessGone(pid: number) {
+  const deadline = Date.now() + 500;
+  while (await processIsAlive(pid)) {
+    if (Date.now() >= deadline) throw new Error(`Owned fixture PID ${pid} survived cleanup`);
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 10));
+  }
+}
+
 describe("Codex protocol subset freshness gate", () => {
   let testRoot: string;
   let generatedFixture: string;
@@ -71,7 +115,7 @@ describe("Codex protocol subset freshness gate", () => {
     }
     await writeFile(expectedFile, generateCodexProtocolSubset(generatedFixture));
     await writeFile(fakeCodex, `#!/usr/bin/env node
-import { cpSync, mkdirSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, renameSync, writeFileSync } from "node:fs";
 const args = process.argv.slice(2);
 if (args[0] === "--version") {
   process.stdout.write("codex-cli 9.9.9\\n");
@@ -85,12 +129,26 @@ if (process.env.FAKE_CODEX_MODE === "fail") {
 const output = args[args.indexOf("--out") + 1];
 mkdirSync(output, { recursive: true });
 if (process.env.FAKE_CODEX_MODE === "hang") {
-  writeFileSync(process.env.FAKE_CODEX_PID_FILE, String(process.pid));
+  const block = () => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0);
+  const publishPid = () => {
+    const file = process.env.FAKE_CODEX_PID_FILE;
+    writeFileSync(file + ".pending", String(process.pid));
+    renameSync(file + ".pending", file);
+  };
+  if (process.env.FAKE_CODEX_TERM_MODE === "before-handler") {
+    // Hold the old PID-before-handler ordering open deterministically.
+    publishPid();
+    block();
+  }
   process.on("SIGTERM", () => {
     writeFileSync(process.env.FAKE_CODEX_REAPED_FILE, "terminated");
     process.exit(0);
   });
+  // Publish readiness only once TERM handling and the keepalive are installed.
   setInterval(() => {}, 1000);
+  publishPid();
+  // A registered handler cannot run while JS is blocked: exercise the 500ms KILL.
+  if (process.env.FAKE_CODEX_TERM_MODE === "blocked-handler") block();
 } else {
   cpSync(process.env.FAKE_CODEX_SCHEMA, output, { recursive: true });
 }
@@ -222,27 +280,34 @@ if (process.env.FAKE_CODEX_MODE === "hang") {
     const reapedFile = join(testRoot, "timeout.reaped");
     const output: string[] = [];
 
-    const exitCode = await runCodexProtocolCli({
-      codexCommand: fakeCodex,
-      env: {
-        ...environment,
-        FAKE_CODEX_MODE: "hang",
-        FAKE_CODEX_PID_FILE: pidFile,
-        FAKE_CODEX_REAPED_FILE: reapedFile,
-      },
-      expectedFile,
-      tempParent,
-      timeoutMs: 1_000,
-      stderr: { write: (value: string) => output.push(value) },
-      stdout: { write: () => {} },
-    });
-    const pid = Number(await waitForFile(pidFile));
+    try {
+      const exitCode = await runCodexProtocolCli({
+        codexCommand: fakeCodex,
+        env: {
+          ...environment,
+          FAKE_CODEX_MODE: "hang",
+          FAKE_CODEX_PID_FILE: pidFile,
+          FAKE_CODEX_REAPED_FILE: reapedFile,
+        },
+        expectedFile,
+        tempParent,
+        timeoutMs: 1_000,
+        stderr: { write: (value: string) => output.push(value) },
+        stdout: { write: () => {} },
+      });
+      const pid = Number(await waitForFile(pidFile));
 
-    expect(exitCode).toBe(1);
-    expect(output.join("")).toContain("Timed out after 1000ms");
-    expect(await waitForFile(reapedFile)).toBe("terminated");
-    expect(await processIsAlive(pid)).toBe(false);
-    expect(await readdir(tempParent)).toEqual([]);
+      // A handler marker is not a liveness proof (TERM may escalate to KILL).
+      expect.soft(await processIsAlive(pid)).toBe(false);
+      expect.soft(await readdir(tempParent)).toEqual([]);
+      expect(exitCode).toBe(1);
+      expect(output.join("")).toContain("Timed out after 1000ms");
+      const marker = await readOptionalFile(reapedFile);
+      if (marker !== undefined) expect(marker).toBe("terminated");
+    } finally {
+      const pid = await killFixture(pidFile);
+      if (pid !== undefined) await expectProcessGone(pid);
+    }
   });
 
   test.skipIf(process.platform === "win32")("timeout kills an inherited-pipe descendant after its group leader exits", async () => {
@@ -274,7 +339,12 @@ child.once("message", () => { writeFileSync(${JSON.stringify(leaderFile)}, Strin
     }
   });
 
-  test("SIGINT interrupts generation, reaps the child, and cleans up", async () => {
+  test.for([
+    { termMode: "cooperative", posixOnly: false },
+    { termMode: "before-handler", posixOnly: true },
+    { termMode: "blocked-handler", posixOnly: true },
+  ])("SIGINT interrupts generation, reaps the child, and cleans up ($termMode)", async ({ termMode, posixOnly }, context) => {
+    if (posixOnly && process.platform === "win32") context.skip();
     const pidFile = join(testRoot, "interrupt.pid");
     const reapedFile = join(testRoot, "interrupt.reaped");
     const runner = join(testRoot, "runner.mjs");
@@ -291,6 +361,7 @@ process.exitCode = await runCodexProtocolCli({
       env: {
         ...environment,
         FAKE_CODEX_MODE: "hang",
+        FAKE_CODEX_TERM_MODE: termMode,
         FAKE_CODEX_COMMAND: fakeCodex,
         FAKE_CODEX_EXPECTED: expectedFile,
         FAKE_CODEX_TEMP_PARENT: tempParent,
@@ -301,17 +372,50 @@ process.exitCode = await runCodexProtocolCli({
     });
     let stderr = "";
     child.stderr.on("data", (chunk) => { stderr += chunk; });
-    const ownedPid = Number(await waitForFile(pidFile));
-    child.kill("SIGINT");
-    const exitCode = await new Promise<number | null>((resolvePromise, rejectPromise) => {
-      child.once("error", rejectPromise);
-      child.once("close", resolvePromise);
+    // Install completion observers before readiness or signalling can race exit.
+    const closed = new Promise<{ code: number | null; signal?: NodeJS.Signals | null; error?: Error }>((resolvePromise) => {
+      child.once("error", (error) => resolvePromise({ code: null, error }));
+      child.once("close", (code, signal) => resolvePromise({ code, signal }));
     });
 
-    expect(exitCode).toBe(130);
-    expect(stderr).toContain("Interrupted while running");
-    expect(await waitForFile(reapedFile)).toBe("terminated");
-    expect(await processIsAlive(ownedPid)).toBe(false);
-    expect(await readdir(tempParent)).toEqual([]);
+    try {
+      const ownedPid = Number(await waitForFile(pidFile));
+      expect(child.kill("SIGINT")).toBe(true);
+      if (!await waitForClose(closed, 1_500)) throw new Error("Fixture runner did not close after interrupt");
+      const result = await closed;
+
+      // Check the actual child and temp directory even when the marker is absent.
+      expect.soft(await processIsAlive(ownedPid)).toBe(false);
+      expect.soft(await readdir(tempParent)).toEqual([]);
+      expect(result.error).toBeUndefined();
+      expect(result.signal).toBeNull();
+      expect(result.code).toBe(130);
+      expect(stderr).toContain("Interrupted while running");
+      const marker = await readOptionalFile(reapedFile);
+      if (termMode === "cooperative") {
+        // Even a ready handler may be starved past the checker's KILL deadline.
+        if (marker !== undefined) expect(marker).toBe("terminated");
+      } else {
+        expect(marker).toBeUndefined();
+      }
+    } finally {
+      let fixturePid: number | undefined;
+      let cleanupTimedOut = false;
+      try { fixturePid = await killFixture(pidFile); }
+      finally {
+        // Let the checker clean up a child still starting when readiness failed.
+        if (child.exitCode === null && child.signalCode === null) child.kill("SIGINT");
+        cleanupTimedOut = !await waitForClose(closed, 1_000);
+        if (cleanupTimedOut) {
+          if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+          child.stdout.destroy();
+          child.stderr.destroy();
+          if (!await waitForClose(closed, 500)) throw new Error("Fixture runner did not close after cleanup SIGKILL");
+        }
+        if (fixturePid !== undefined) await expectProcessGone(fixturePid);
+        if (child.pid !== undefined) await expectProcessGone(child.pid);
+        if (cleanupTimedOut) throw new Error("Fixture runner ignored cleanup SIGINT");
+      }
+    }
   });
 });

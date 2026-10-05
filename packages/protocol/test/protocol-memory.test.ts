@@ -188,8 +188,15 @@ describe("MemoryConfigSchema (MEM-4)", () => {
   it("defaults to auto + local Ollama endpoint, byte-identically for an empty config", () => {
     expect(MemoryConfigSchema.parse({})).toEqual({
       embedder: "auto", ollamaHost: "http://127.0.0.1:11434", ollamaModel: "nomic-embed-text",
-      evictionAlarmAt: 0.9,
+      maxRecords: 10_000, evictionAlarmAt: 0.9,
     });
+  });
+
+  it("bounds maxRecords to positive integers, defaulting legacy configs to 10000", () => {
+    for (const maxRecords of [1, 2000, 10_000, 100_000])
+      expect(MemoryConfigSchema.parse({ maxRecords }).maxRecords).toBe(maxRecords);
+    for (const maxRecords of [0, -1, 1.5, 100_001, Infinity, NaN, "10000", null])
+      expect(MemoryConfigSchema.safeParse({ maxRecords }).success).toBe(false);
   });
 
   it("accepts each embedder mode and rejects an unknown one / extra keys (strict)", () => {

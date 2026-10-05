@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import {
-  MemoryRecordSchema,
+  MemoryRecordSchema, MemoryMaxRecordsSchema, DEFAULT_MEMORY_MAX_RECORDS,
   type MemoryGetResult, type MemoryGraphEdge, type MemoryGraphNode,
   type MemoryGraphParams, type MemoryGraphResult, type MemoryIndexResult, type MemoryKind,
   type MemoryRecord, type MemorySearchMode, type MemoryStatsResult,
@@ -82,7 +82,8 @@ function jaccard(a: Set<string>, b: Set<string>): number {
 // something the store's bound will not allow, and the message says exactly how to make room.
 export class PinCapError extends Error { code = "conflict" as const; name = "PinCapError"; }
 
-const MAX_MEMORY_RECORDS = 2000;   // accepted bound: lowest-VALUE records evicted on save (F36 memoryValue)
+export class MemoryCapacityError extends Error { code = "conflict" as const; name = "MemoryCapacityError"; }
+
 const MAX_TOP_TAGS = 50;           // MEM-1 stats: cap the topTags list (folksonomy has ~60 distinct tags today)
 
 // F35: bound the supersession walk. The WRITE path cannot create a cycle (a successor is always
@@ -248,8 +249,7 @@ export class MemoryStore {
   private file: string;
   private archiveFile: string;   // F36: memory-evicted.jsonl — the pre-delete archive, never loaded at boot
 
-  // F36: capacity alarm state. maxRecords/alarmAt default to the production constant/0.9 so only
-  // tests that need to exercise capacity without 2000 real adds pass an override; pressureArmed
+  // F36: capacity alarm state. maxRecords/alarmAt follow the config defaults; pressureArmed
   // starts true so a store that boots already over threshold (e.g. alarmAt lowered after the
   // fact) still alarms once on its first save() rather than staying silent forever.
   private maxRecords: number;
@@ -261,7 +261,8 @@ export class MemoryStore {
   // exact behavior); present ⇒ derived accelerator, maintained on add/edit/delete/prune below.
   constructor(dir: string, private events?: EventLog, private ranker: Ranker = new LexicalRanker(), private index?: MemoryVectorIndex,
               opts: { alarmAt?: number; maxRecords?: number } = {}) {
-    this.maxRecords = opts.maxRecords ?? MAX_MEMORY_RECORDS;
+    this.maxRecords = MemoryMaxRecordsSchema.parse(opts.maxRecords ?? DEFAULT_MEMORY_MAX_RECORDS);
+    this.entities.setCapacity(this.maxRecords);
     this.alarmAt = opts.alarmAt ?? 0.9;
     mkdirSync(dir, { recursive: true });
     this.file = join(dir, "memory.json");
@@ -406,10 +407,11 @@ export class MemoryStore {
   // instant the config lands, and applyConfig() must stay synchronous and side-effect-light.
   setCapacity(opts: { alarmAt?: number; maxRecords?: number }): void {
     const alarmAt = opts.alarmAt ?? this.alarmAt;
-    const maxRecords = opts.maxRecords ?? this.maxRecords;
+    const maxRecords = MemoryMaxRecordsSchema.parse(opts.maxRecords ?? this.maxRecords);
     if (alarmAt === this.alarmAt && maxRecords === this.maxRecords) return;
     this.alarmAt = alarmAt;
     this.maxRecords = maxRecords;
+    this.entities.setCapacity(maxRecords);
     this.pressureArmed = true;
     this.evictedSinceAlarm = 0;
   }
@@ -437,9 +439,11 @@ export class MemoryStore {
     }
   }
 
-  private save(): void {
+  private save(evictOverflow = false): void {
     this.checkPressure();
-    this.prune();
+    // A reduced cap (including on restart) must never turn an edit/delete into bulk loss.
+    // Only an add from at/below capacity may evict; over-cap additions are refused up front.
+    if (evictOverflow) this.prune();
     const tmp = `${this.file}.tmp`;                // write-to-temp-then-rename: no torn writes on power loss
     writeFileSync(tmp, JSON.stringify({ records: [...this.records.values()] }, null, 2));
     renameSync(tmp, this.file);
@@ -534,6 +538,9 @@ export class MemoryStore {
   }
 
   add(input: MemoryAddInput): MemoryRecord {
+    if (this.records.size > this.maxRecords) {
+      throw new MemoryCapacityError(`memory holds ${this.records.size} records above memory.maxRecords=${this.maxRecords}; raise the limit or explicitly delete notes before adding`);
+    }
     // F35: validated up front — a bad supersedes id must not be masked by a duplicate refusal,
     // and the resolved target is what decides whether that refusal applies at all (below).
     // F34: the scope this write lands in — engine.ts stamps it from the caller's project binding,
@@ -614,7 +621,7 @@ export class MemoryStore {
     }
     this.links.set(record);
     this.index?.enqueue(toIndexable(record));   // MEM-4: register for (lazy) embedding
-    this.save();
+    this.save(true);
     this.events?.append({ agentId: `memory:${record.id}`, kind: "memory_added",
       data: { id: record.id, kind: record.kind, tags: record.tags, author: record.author } });
     return record;

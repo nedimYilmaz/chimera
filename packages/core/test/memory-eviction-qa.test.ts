@@ -1,3 +1,4 @@
+import { pruneOverflowForTest } from "./memory-test-helpers.js";
 import { describe, it, expect } from "vitest";
 import { copyFileSync, existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
@@ -51,6 +52,7 @@ describe("F36 QA: pins under maximal adversarial pressure", () => {
 
     // One write -> one prune pass with overflow = size - 1. The pin is the sole survivor.
     mem.edit("P", { text: "the oldest note in the store, revised" });
+    pruneOverflowForTest(mem);
     expect(mem.stats().total).toBe(1);
     expect(mem.get("P").record.pinned).toBe(true);
   });
@@ -81,6 +83,7 @@ describe("F36 QA: the archive is a restorable backup, not just a log line", () =
       { alarmAt: 0, maxRecords: 10 },
     );
     mem.edit("k9", { text: "keeper note nine, revised" });
+    pruneOverflowForTest(mem);
 
     const lines = readFileSync(join(dir, "memory-evicted.jsonl"), "utf8").split("\n").filter(Boolean);
     expect(lines).toHaveLength(1);
@@ -114,7 +117,7 @@ describe("F36 QA: the real pre-F36 store", () => {
     const st = mem.stats();
     expect(st.total).toBe(1641);
     expect(st.capacity.pinned).toBe(0);
-    expect(st.capacity.alarming).toBe(false);            // 1641/2000 = 0.82 is below the 0.9 alarm
+    expect(st.capacity.alarming).toBe(false);            // 1641/10000 = 0.164 is below the 0.9 alarm
     expect(st.byScope.reduce((n, x) => n + x.count, 0)).toBe(st.total);
     expect(st.byScope).toEqual([{ scope: null, count: 1641 }]);   // every record is scope null
     for (const hit of mem.search({ limit: 1641 })) expect(hit.record.pinned).toBe(false);

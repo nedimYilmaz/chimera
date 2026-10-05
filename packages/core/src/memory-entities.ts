@@ -1,4 +1,4 @@
-import type { MemoryRecord } from "@chimera/protocol";
+import { DEFAULT_MEMORY_MAX_RECORDS, type MemoryRecord } from "@chimera/protocol";
 
 // F33 (docs/superpowers/research/harness-2026-09/plans/F33-entity-linking-rrf-signal.md):
 // a deterministic, model-free identifier harvester + a lazily-cached per-record entity index
@@ -11,7 +11,6 @@ export const MAX_ENTITIES_PER_RECORD = 48;  // over-harvest cap; first-seen orde
 export const MAX_ENTITIES_PER_QUERY = 16;   // a query is short; longer is pasted noise
 export const ENTITY_ORDER_MAX = 50;         // beyond rank 50 an RRF contribution is <1/111 — noise
 const MIN_ENTITY_LEN = 4;          // drops "e.g", "a/b"
-const MAX_CACHE_ENTRIES = 4000;    // 2x MAX_MEMORY_RECORDS (memory.ts) before a full cache clear
 
 // Repo path: >=1 slash segment, kept only if it has >=2 slashes or a known code/doc extension
 // (checked below) — rejects "and/or", "read/write" while keeping "packages/core/src/memory.ts"
@@ -132,12 +131,21 @@ type CacheEntry = { updatedAt: number; entities: string[] };
 export class MemoryEntityIndex {
   private cache = new Map<string, CacheEntry>();
   private harvestCount = 0;
+  private maxEntries = DEFAULT_MEMORY_MAX_RECORDS;
+
+  // Follow the store bound so a warm search over 10k notes does not clear a 4k cache mid-scan.
+  setCapacity(maxEntries: number): void {
+    this.maxEntries = Math.max(1, maxEntries);
+    this.trimCache();
+  }
+
+  private trimCache(): void {
+    while (this.cache.size > this.maxEntries) this.cache.delete(this.cache.keys().next().value!);
+  }
 
   private harvestRecord(rec: MemoryRecord): string[] {
     const cached = this.cache.get(rec.id);
     if (cached && cached.updatedAt === rec.updatedAt) return cached.entities;
-
-    if (this.cache.size > MAX_CACHE_ENTRIES) this.cache.clear();
 
     const entities = harvestEntities(`${rec.title ?? ""}\n${rec.text}`);
     // tags are already curated identifiers — added verbatim (lowercased) as entities. Bare
@@ -153,6 +161,7 @@ export class MemoryEntityIndex {
 
     this.harvestCount++;
     this.cache.set(rec.id, { updatedAt: rec.updatedAt, entities });
+    this.trimCache();
     return entities;
   }
 

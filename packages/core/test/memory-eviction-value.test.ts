@@ -1,3 +1,4 @@
+import { pruneOverflowForTest } from "./memory-test-helpers.js";
 import { describe, it, expect } from "vitest";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -106,6 +107,7 @@ describe("F36 value-ranked eviction", () => {
     const mem = new MemoryStore(dir, events, undefined, undefined, { alarmAt: 0, maxRecords: 10 });
     // An edit is the smallest write that reaches save()->prune() without changing the record count.
     mem.edit("p10", { text: "pinned note number ten, revised" });
+    pruneOverflowForTest(mem);
     expect(mem.stats().total).toBe(10);
     const evicted = events.tail(null, 100).filter((e) => e.kind === "memory_evicted");
     expect(evicted).toHaveLength(1);

@@ -1,3 +1,4 @@
+import { pruneOverflowForTest } from "./memory-test-helpers.js";
 import { describe, it, expect } from "vitest";
 import { mkdtempSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -498,7 +499,7 @@ describe("F35-F: removing a mid-chain record SPLICES, it does not clear", () => 
 
   // Both eviction tests seed a chain through one store, then re-boot on the same dir under a cap
   // the loaded set already breaches — the constructor loads WITHOUT pruning, so the next add()
-  // is what prunes, and the cap chosen there decides how many victims one pass takes.
+  // is refused; the private batch primitive below independently exercises chain repair.
   const seedChainOverCap = (tag: string, maxRecords: number) => {
     const dir = mkdtempSync(join(tmpdir(), `chimera-mem-${tag}-`));
     const seed = new MemoryStore(dir);
@@ -527,8 +528,8 @@ describe("F35-F: removing a mid-chain record SPLICES, it does not clear", () => 
     // from it looks up the already-deleted B, finds nothing, and silently gives up — leaving
     // A.supersededBy dangling at the evicted C. That is the exact F35-A harm the splice would have
     // reintroduced, and it only reproduces when overflow > 1 puts both links in ONE pass.
-    const { a, b, c, m } = seedChainOverCap("splice-evict-pair", 2);
-    m.add({ author: "a1", text: "unrelated filler about quokkas and their tidy burrows" });
+    const { a, b, c, m } = seedChainOverCap("splice-evict-pair", 1);
+    pruneOverflowForTest(m);
     expect(() => m.get(b.id)).toThrow();
     expect(() => m.get(c.id)).toThrow();
     const survivor = m.get(a.id).record;

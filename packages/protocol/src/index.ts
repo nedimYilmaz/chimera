@@ -914,12 +914,18 @@ export type ModelCatalogConfig = z.infer<typeof ModelCatalogConfigSchema>;
 // ollamaHost/ollamaModel apply only to the Ollama provider (default model nomic-embed-text, 768-dim).
 export const MemoryEmbedderSchema = z.enum(["auto", "off", "transformers", "ollama"]);
 export type MemoryEmbedder = z.infer<typeof MemoryEmbedderSchema>;
+// Full snapshots and exact search stay bounded even when operators raise the default.
+export const DEFAULT_MEMORY_MAX_RECORDS = 10_000;
+export const MAX_MEMORY_CAPACITY = 100_000;
+export const MemoryMaxRecordsSchema = z.number().int().min(1).max(MAX_MEMORY_CAPACITY);
+
 export const MemoryConfigSchema = z.object({
+  maxRecords: MemoryMaxRecordsSchema.default(DEFAULT_MEMORY_MAX_RECORDS),
   embedder: MemoryEmbedderSchema.default("auto"),
   ollamaHost: z.string().default("http://127.0.0.1:11434"),
   ollamaModel: z.string().default("nomic-embed-text"),
-  // F36: the fill fraction at which the store alarms BEFORE it evicts anything. 0.9 of the 2,000
-  // cap = 1,800 records; at the measured ~37 records/day (2026-09-02) that is ~5 days of warning.
+  // F36: the fill fraction at which the store alarms BEFORE it evicts anything.
+  // The threshold follows maxRecords; capacity and alarms can both be changed live.
   // 0 disables the alarm. Eviction events are NOT configurable — a deletion is always announced.
   evictionAlarmAt: z.number().min(0).max(1).default(0.9),
 }).strict();
@@ -1506,7 +1512,7 @@ export const ChimeraConfigSchema = z.object({
   // single-binary daemon carries no native modules); an absent embedder simply degrades to lexical.
   memory: MemoryConfigSchema.default({
     embedder: "auto", ollamaHost: "http://127.0.0.1:11434", ollamaModel: "nomic-embed-text",
-    evictionAlarmAt: 0.9,
+    maxRecords: DEFAULT_MEMORY_MAX_RECORDS, evictionAlarmAt: 0.9,
   }),
   // F01: sleep/wake behaviour for scheduled jobs. Defaulted (not optional) so an old config.json
   // parses to exactly today's behaviour plus the default-on caffeinate hold. Boot-time-only.

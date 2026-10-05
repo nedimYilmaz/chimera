@@ -1487,7 +1487,7 @@ export class Engine {
             ollamaHost: memCfg.ollamaHost,
             ollamaModel: memCfg.ollamaModel,
           }));
-    this.memory = new MemoryStore(opts.home, this.events, undefined, memoryIndex, { alarmAt: memCfg.evictionAlarmAt });
+    this.memory = new MemoryStore(opts.home, this.events, undefined, memoryIndex, { alarmAt: memCfg.evictionAlarmAt, maxRecords: memCfg.maxRecords });
     // CHRONICLE-SEMANTIC: the searchable long memory over event history. Same lazy/hermetic rules as
     // the memory index above — constructed cheaply, embedder resolved on first query, never under
     // vitest (a developer's live model must not make tests nondeterministic).
@@ -4471,7 +4471,7 @@ export class Engine {
     if (changed.includes("otel")) this.otel.setConfig(cfg.otel);
     // F36.FIX: a live evictionAlarmAt change re-arms the capacity alarm — otherwise a threshold
     // lowered onto an already-full store stays silent because the old edge was already spent.
-    if (changed.includes("memory")) this.memory.setCapacity({ alarmAt: cfg.memory.evictionAlarmAt });
+    if (changed.includes("memory")) this.memory.setCapacity({ alarmAt: cfg.memory.evictionAlarmAt, maxRecords: cfg.memory.maxRecords });
     // HOT-RELOAD-BACKENDS: a new account's provider (or a changed providerOverrides baseUrl/
     // model) must be spawnable WITHOUT a daemon restart. Fire-and-forget — buildBackends is
     // async and applyConfig must stay sync (every other live-apply hook above is sync); errors

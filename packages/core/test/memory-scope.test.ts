@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { MemoryStore, SCOPE_ALL, normalizeScope } from "@chimera/core/memory";
 import { MemoryEditParams } from "@chimera/protocol";
 
-const MAX_MEMORY_RECORDS = 2000;   // memory.ts:71 — module-private, mirrored like memory-prune-eviction.test.ts:15
+const MAX_MEMORY_RECORDS = 12;   // explicit small fixture bound
 
 function rig() {
   const dir = mkdtempSync(join(tmpdir(), "chimera-mem-scope-"));
@@ -115,24 +115,23 @@ describe("MemoryStore scope (F34)", () => {
   // Pinned here: stats().byScope is computed AFTER prune and therefore always sums to the live
   // total, and the scope filter still returns (scope + global) on the post-eviction set.
   //
-  // The cap is reached by HAND-WRITING the over-cap store and then adding one record, not by 2001
-  // add() calls: prune() runs inside save(), so a loop pays 2001 full-store serializations (O(n^2)
-  // I/O, ~25s under load) to observe one eviction. Two writes buy the same event.
+  // Seed a small explicit full store once, then use ordinary adds to verify scope-blind eviction.
   it("the scope filter composes with the value-ranked cap and stats().byScope", () => {
     const dir = mkdtempSync(join(tmpdir(), "chimera-mem-scope-cap-"));
     const SCOPES = ["alpha", "beta", null];
     const base = { author: "ag", title: null, folder: null, tags: [] as string[], kind: "note", treeId: null, taskId: null };
     writeFileSync(join(dir, "memory.json"), JSON.stringify({
-      records: Array.from({ length: MAX_MEMORY_RECORDS + 1 }, (_, i) => ({
+      records: Array.from({ length: MAX_MEMORY_RECORDS }, (_, i) => ({
         ...base, id: `c${i}`, text: `capacity probe number ${i}`, scope: SCOPES[i % 3],
         createdAt: i + 1, updatedAt: i + 1,
       })),
     }));
-    const mem = new MemoryStore(dir);
-    expect(mem.stats().total).toBe(MAX_MEMORY_RECORDS + 1);   // load does not prune; save() does
+    const mem = new MemoryStore(dir, undefined, undefined, undefined, { maxRecords: MAX_MEMORY_RECORDS });
+    expect(mem.stats().total).toBe(MAX_MEMORY_RECORDS);
 
-    // One ordinary add → save() → prune() → 2002 down to the 2000 cap.
+    // Two ordinary adds evict one low-value record each, preserving the configured bound.
     mem.add({ author: "ag", text: "the write that trips the cap" });
+    mem.add({ author: "ag", text: "a second write exercises eviction across scopes" });
     const st = mem.stats();
     expect(st.total).toBe(MAX_MEMORY_RECORDS);
     // byScope is derived from the SAME post-prune map, so it can never disagree with total —

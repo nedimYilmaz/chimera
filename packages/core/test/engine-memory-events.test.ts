@@ -33,13 +33,13 @@ describe("Engine memory event wiring (F36 task 0)", () => {
 
     // The whole point of capacity is that it is answerable BEFORE anything is lost: a fresh store
     // must report a full, quiet block rather than nothing until the first eviction.
-    expect(st.capacity.limit).toBe(2000);
+    expect(st.capacity.limit).toBe(10_000);
     expect(st.capacity.total).toBe(st.total);
-    expect(st.capacity.fill).toBeCloseTo(st.total / 2000);
+    expect(st.capacity.fill).toBeCloseTo(st.total / 10_000);
     expect(st.capacity.alarmAt).toBe(0.9);
     expect(st.capacity.alarming).toBe(false);
     expect(st.capacity.pinned).toBe(0);
-    // A preview, not the whole ranking — the operator needs to see WHO goes next, not a 2,000-row list.
+    // A preview, not the whole ranking — the operator needs to see WHO goes next, not a full-store list.
     expect(st.capacity.nextToEvict.length).toBeLessThanOrEqual(5);
     expect(st.capacity.nextToEvict[0]).toMatchObject({ value: 0, inbound: 0, pinned: false });
   });

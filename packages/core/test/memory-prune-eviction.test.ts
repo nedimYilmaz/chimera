@@ -7,7 +7,7 @@ import { MemoryVectorIndex } from "../src/memory-index.js";
 import type { EmbeddingProvider } from "../src/memory-embed.js";
 
 // MEM-4: overflow eviction must also drop the evicted record's VECTOR from the derived index
-// (memory.ts prune(): `this.index?.drop(id)`). The store caps at MAX_MEMORY_RECORDS (2000) and
+// (memory.ts prune(): `this.index?.drop(id)`). The fixture uses a small explicit capacity and
 // evicts the lowest-VALUE records on save (F36); without the drop, the sidecar would leak vectors
 // for records that no longer exist. Every record in these fixtures is an unpinned, unlinked note
 // (value 0), so the insertion-order tie-break makes the value prune identical to the old FIFO
@@ -15,7 +15,7 @@ import type { EmbeddingProvider } from "../src/memory-embed.js";
 // The embedder is never resolved here (a fresh add on a never-searched store does not
 // probe), so this stays fully network-free — we only assert the synchronous drop bookkeeping.
 
-const MAX_MEMORY_RECORDS = 2000;
+const MAX_MEMORY_RECORDS = 10;
 
 const fakeProvider: EmbeddingProvider = {
   id: "fake", model: "fake-concepts", dim: 1,
@@ -25,12 +25,12 @@ const fakeProvider: EmbeddingProvider = {
 function makeStore() {
   const dir = mkdtempSync(join(tmpdir(), "chimera-mem4-prune-"));
   const index = new MemoryVectorIndex(join(dir, "memory-index"), async () => fakeProvider);
-  const store = new MemoryStore(dir, undefined, undefined, index);
+  const store = new MemoryStore(dir, undefined, undefined, index, { maxRecords: MAX_MEMORY_RECORDS });
   return { dir, index, store };
 }
 
 describe("MEM-4 prune eviction drops the evicted vector", () => {
-  // 2000 real adds each rewrite the growing JSON snapshot (O(n^2) I/O) — genuine work, generous timeout.
+  // The vector-drop contract needs only a small bounded store.
   it("calls index.drop for the oldest record once the cap is exceeded", { timeout: 30000 }, () => {
     const { store, index } = makeStore();
     const dropSpy = vi.spyOn(index, "drop");

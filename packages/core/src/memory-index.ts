@@ -98,9 +98,9 @@ export class MemoryVectorIndex {
   // a pair survives if EITHER side nominates the other as a top-k neighbor, so a popular note doesn't
   // lose its edge just because it has more than k close neighbors of its own. Vectors are stored
   // L2-normalized (class comment), so cosine == dot. This is O(n²·dim) — a stricter cost than
-  // queryOrder's O(n·dim) per-query scan — but the same "ANN is a liability at this size" call
-  // (§6.3) applies at the ≤2000-record cap, and unlike a query embed this only runs when the app
-  // opts into semantic graph edges, not on every search keystroke.
+  // queryOrder's O(n·dim) per-query scan. Unlike a query embed this only runs when the app
+  // opts into semantic graph edges, not on every search keystroke. Larger configured capacities
+  // should use filtered subsets: the historical ≤2000-record cost assumption no longer holds.
   neighborPairs(ids: string[], k = 3, minScore = 0.6): Array<{ a: string; b: string; score: number }> {
     const embedded = ids.filter((id) => this.vectors.has(id));
     const topK = new Map<string, Array<{ id: string; score: number }>>();

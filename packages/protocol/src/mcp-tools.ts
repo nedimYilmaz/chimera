@@ -898,7 +898,7 @@ const MCP_TOOL_TABLE_BASE = [
 
   {
     name: "memory_edit",
-    description: "Edit an existing shared-memory note by id (text/title/folder/tags/kind/pinned). Returns the updated record. Pass title/folder null to clear them. Set pinned:true to make a note the LAST thing evicted when the 2,000-note store fills (capped per project).",
+    description: "Edit an existing shared-memory note by id (text/title/folder/tags/kind/pinned). Returns the updated record. Pass title/folder null to clear them. Set pinned:true to make a note the LAST thing evicted when the store reaches its configured capacity (capped per project).",
     inputSchema: {
       id: z.string(),
       text: z.string().optional(),

@@ -32,7 +32,7 @@ function engineAt(home: string): Engine {
 
 describe("Engine memory capacity wiring (F36 QA)", () => {
   it("QA-6: one add at the cap logs memory_pressure, then memory_evicted, then memory_added", async () => {
-    const home = fullEngineHome(2000);
+    const home = fullEngineHome(10_000);
     const e = engineAt(home);
     const rec = (await e.handle("memory.add", {
       author: "agent-1", text: "the straw that broke the bounded store",
@@ -42,7 +42,7 @@ describe("Engine memory capacity wiring (F36 QA)", () => {
     expect(kinds).toEqual(["memory_pressure", "memory_evicted", "memory_added"]);
 
     const pressure = e.events.tail(null, 200).find((ev) => ev.kind === "memory_pressure")!;
-    expect(pressure.data).toMatchObject({ limit: 2000, threshold: 0.9 });
+    expect(pressure.data).toMatchObject({ limit: 10_000, threshold: 0.9 });
     const evicted = e.events.tail("memory:seed0", 10).filter((ev) => ev.kind === "memory_evicted");
     expect(evicted).toHaveLength(1);   // the cheapest, oldest seed - addressed by its own record id
     expect(evicted[0]!.data).toMatchObject({ id: "seed0", value: 0, inbound: 0, pinned: false });
