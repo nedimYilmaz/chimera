@@ -3,8 +3,8 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 // AGENT-GROUPS Phase 1: Nedim's "no backend effect" requirement, made executable — groups are
-// a purely visual/list-placement concept (core/src/groups.ts's header, PLAN's own "no MCP tool,
-// no scheduling change"). This asserts the claim structurally: nothing under backends/,
+// a purely visual/list-placement concept (core/src/groups.ts's header,
+// no scheduling change). This asserts the claim structurally: nothing under backends/,
 // scheduler.ts, broker.ts, or jobs.ts ever reads AgentSpec.groups/AgentRecord.groups. A future
 // change that makes groups load-bearing for execution/scheduling fails THIS test immediately,
 // rather than surfacing as a silent behavior change an operator has to notice on their own.

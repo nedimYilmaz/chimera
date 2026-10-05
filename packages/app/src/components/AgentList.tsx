@@ -786,7 +786,7 @@ export function AgentList() {
   const pins = useSystemLocal((s) => s.pins);
   // AGENT-GROUPS Phase 1: the registry (group.list) + which box is currently focused (view-
   // only, see UiState.activeGroupId's own doc comment) — loaded once on mount, refreshed
-  // after any create/rename/delete via commands.groups.ts.
+  // after local or external CRUD and reconnect via commands.groups.ts.
   const groupRegistry = useStore((s) => s.groups.items);
   const activeGroupId = useStore((s) => s.activeGroupId);
   useEffect(() => { void groupsCmd.loadGroups(); }, []);

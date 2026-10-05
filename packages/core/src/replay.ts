@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { ATTENTION_EVENT_KINDS, type NormalizedEvent } from "@chimera/protocol";
+import { ATTENTION_EVENT_KINDS, ForkLineageSchema, type NormalizedEvent } from "@chimera/protocol";
 import type { AgentRecord } from "./supervisor.js";
 
 // R2 (self-healing supervision): this file is the shared, reusable fold-from-log primitive —
@@ -50,6 +50,11 @@ function applyEventToRecord(record: AgentRecord, e: NormalizedEvent): void {
   // to mirror supervisor.noteAttention — markSeen cannot clear a shadow, so a stamp here would
   // strand it permanently unseen.
   if (record.shadow !== true && ATTENTION_EVENT_KINDS.has(e.kind)) record.attentionAt = e.ts;
+  // A branch registration can land between snapshots; preserve its identity on recovery.
+  if (e.kind === "agent_started" || e.kind === "status") {
+    const lineage = ForkLineageSchema.safeParse(e.data["forkLineage"]);
+    if (lineage.success) record.forkLineage = lineage.data;
+  }
   switch (e.kind) {
     case "agent_started":
       record.state = "running";   // only ever fires from a live spawned/resumed handle

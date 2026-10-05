@@ -1,0 +1,10 @@
+Find the relationships behind the work
+Projects: List and Canvas
+
+Disclosure (on every frame): Demo data · scripted daemon · fictional Atlas
+
+[0:02] 1 · Open the Atlas project
+[0:04] 2 · Switch from List to Canvas
+[0:09] 3 · Select an existing agent
+[0:14] 4 · Filter the included entities
+[0:19] 5 · Return to the accessible List

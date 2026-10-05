@@ -83,6 +83,7 @@ fn main() {
             pty::term_write,
             pty::term_close,
             pty::term_resize,
+            meeting_speech::local_speech_status,
             meeting_speech::meeting_speech_start,
             meeting_speech::meeting_speech_append,
             meeting_speech::meeting_speech_finish,

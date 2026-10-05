@@ -1,0 +1,11 @@
+.panel { min-width: 0; max-width: 100%; padding: 8px; border: 1px solid var(--border); overflow-wrap: anywhere; }
+.actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 6px 0; }
+.files { max-height: 220px; overflow: auto; margin: 6px 0; padding: 0; list-style: none; }
+.files li { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 3px; }
+.files button { min-width: 0; overflow-wrap: anywhere; text-align: left; }
+.selected { outline: 1px solid var(--border); }
+.panel pre, .editor pre { max-height: 260px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.editor { min-width: 0; max-width: 100%; margin-top: 8px; }
+.editor label { display: block; }
+.editor textarea, .panel textarea { display: block; box-sizing: border-box; width: 100%; max-width: 100%; font: inherit; }
+.error { color: var(--danger, #e88); }

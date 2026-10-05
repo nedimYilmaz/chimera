@@ -1,3 +1,10 @@
+/* The card lives in the detail pane, which can be narrow even on a wide
+   viewport. Query this form rather than the window or the split master. */
+.form {
+  container: team-form / inline-size;
+  min-width: 0;
+}
+
 /* Create-team form, values 1:1 from the mock's showTeamForm block (s_teams
    614-641): 620 card, 110px labels, input-bg fields, active border
    --field-active vs idle --field-idle. */
@@ -16,6 +23,9 @@
 
 .pair > .field {
   flex: 1;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
 }
 
 .field {
@@ -90,6 +100,7 @@
 }
 
 .roleAdvancedBtn {
+  white-space: nowrap;
   flex-shrink: 0;
   background: none;
   border: none;
@@ -109,6 +120,7 @@
 }
 
 .footer {
+  flex-wrap: wrap;
   padding: 8px 16px 12px;
   display: flex;
   gap: 12px;
@@ -139,4 +151,22 @@
   padding: 2px 10px;
   color: var(--muted);
   cursor: pointer;
+}
+
+@container team-form (max-width: 580px) {
+  .pair {
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .field {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+  }
+
+  .label,
+  .labelActive {
+    width: auto;
+  }
 }

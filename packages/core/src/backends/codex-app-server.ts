@@ -21,6 +21,7 @@ const meetingTurnRules = "Wait silently until the operator addresses you or the 
 const wireInput = (input: CodexInput): UserInput[] => typeof input === "string" ? [{ type: "text", text: input, text_elements: [] }] : input.map((part) => part.type === "text" ? { ...part, text_elements: [] } : { type: "localImage", path: part.path });
 
 export class CodexAppServer implements CodexLike {
+  get processPid(): number | null { return this.closed ? null : this.rpc.processPid; }
   isTurnActive(): boolean { return this.active; }
   async command(text: string): Promise<string> {
     const command = parseCodexCommand(text);

@@ -8,3 +8,4 @@ export const roles: Array<Record<string, unknown>>;
 export const voiceMessages: Array<Record<string, unknown>>;
 export function rejectSchedules(): void;
 export function rpcFixture(method: string, params?: Record<string, unknown>): unknown;
+export const resources: { snapshot(mode?: string): import("@chimera/protocol").AgentResourcesResponse };

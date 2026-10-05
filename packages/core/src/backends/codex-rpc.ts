@@ -15,6 +15,7 @@ export class CodexRpcError extends Error {
 }
 
 export class CodexRpc {
+  get processPid(): number | null { return this.exited ? null : this.child.pid ?? null; }
   private nextId = 0;
   private pending = new Map<number, { resolve: (value: any) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
   private child: ChildProcessWithoutNullStreams;

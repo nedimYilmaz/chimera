@@ -342,7 +342,7 @@ setInterval(() => {}, 1000);
     ["failed check", { checks: suiteResult("ui", "failed").checks }],
     ["skipped check", { checks: suiteResult("ui", "skipped").checks }],
     ["oversized detail", { checks: [{ ...suiteResult("ui", "passed").checks[0], error: "x".repeat(300_000) }] }],
-    ["too many checks", { checks: Array.from({ length: 513 }, (_, i) => ({ id: `ui.p${i}`, status: "passed", durationMs: 0 })) }],
+    ["too many checks", { checks: [suiteResult("ui", "passed").checks[0], ...Array.from({ length: 1024 }, (_, i) => ({ id: `ui.p${i}`, status: "passed", durationMs: 0 }))] }],
   ])("rejects suite report: %s", async (_name, patch) => {
     const script = join(testRoot, "invalid.mjs");
     await writeFile(script, `console.log(${JSON.stringify(RESULT_PREFIX + JSON.stringify({ ...suiteResult("ui", "passed"), ...patch }))});`);
@@ -498,6 +498,16 @@ setInterval(() => {}, 1000);
     expect(new Set(result.checks.map((check: any) => check.id)).size).toBe(result.checks.length);
   });
 
+  test("reporter accepts the real inventory above 512 while retaining a finite accumulation limit", () => {
+    expect(REQUIRED_CHECK_IDS.ui.length).toBeGreaterThan(512);
+    const reporter = createSuiteReporter("ui");
+    for (const id of REQUIRED_CHECK_IDS.ui) reporter.check(id, true, undefined, 0, id);
+    expect(validateSuiteResult(reporter.finish(), "ui", REQUIRED_CHECK_IDS.ui).status).toBe("passed");
+    for (let i = REQUIRED_CHECK_IDS.ui.length; i < 1024; i++) reporter.check(`budget-${i}`, true);
+    expect(() => reporter.check("over-budget", true)).toThrow("excessive");
+    expect(reporter.finish().checks).toHaveLength(1024);
+  });
+
   test.each(["ui", "meeting"] as const)("%s inventory supports additions and requires every declared check", (suite) => {
     const addedId = `${suite}.new-required-probe`;
     const required = [...REQUIRED_CHECK_IDS[suite], addedId];
@@ -518,4 +528,9 @@ setInterval(() => {}, 1000);
     expect(() => validateSuiteResult(suiteResult("ui", "passed"), "ui", required)).toThrow("required check declaration");
   });
 
+});
+
+test("refuses fake microphone opt-in unless Chromium reports the owned fake-device launch", async () => {
+  const cdp = { call: async () => ({ arguments: ["--headless=new"] }), onEvent: () => {} };
+  await expect(installLoopbackGuard(cdp, "session", "http://127.0.0.1:43123", { fakeMicrophone: true })).rejects.toThrow("fake-device launch");
 });

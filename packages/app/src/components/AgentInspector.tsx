@@ -1,3 +1,6 @@
+import { ForkLineageChip } from "./ForkAgentOverlay";
+import { ContextLinks } from "./ContextLinks";
+import { AgentResources } from "./AgentResources";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { Subscription } from "@chimera/protocol";
 import { fmtClock } from "../state/selectors";
@@ -105,6 +108,8 @@ export function AgentInspector({
   return (
     <div className={styles.card} data-agent-inspector>
       {agentId && <AgentNotes key={agentId} agentId={agentId} />}
+      {agentId && <ContextLinks key={`context-${agentId}`} agentId={agentId} />}
+      {agentId && <AgentResources key={`resources-${agentId}`} agentId={agentId} />}
       <Row label="spawned by">
         <span>
           <span className={styles.owner}>◆ {owner ?? "—"}</span>
@@ -115,6 +120,7 @@ export function AgentInspector({
           </span>
         </span>
       </Row>
+      <ForkLineageChip lineage={record["forkLineage"] as import("@chimera/protocol").ForkLineage | undefined} />
       <Row label="prompt">
         <span className={styles.prompt}>{prompt ? `"${prompt}"` : "—"}</span>
       </Row>

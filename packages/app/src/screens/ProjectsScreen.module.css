@@ -519,3 +519,8 @@
   color: var(--warn);
   font-size: var(--fs-tiny);
 }
+
+.canvasToggle { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 8px 14px; min-width: 0; flex-shrink: 0; }
+.canvasToggle button { font: inherit; color: var(--soft); background: var(--panel); border: 1px solid var(--line); padding: 4px 10px; border-radius: 4px; }
+.canvasToggle button[aria-pressed="true"] { border-color: var(--accent); }
+.canvasToggle span { color: var(--faint); font-size: var(--fs-tiny); }

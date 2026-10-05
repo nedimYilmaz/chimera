@@ -1,0 +1,11 @@
+.root { min-width:0; margin:8px 0; border-top:1px solid var(--line); padding:8px 0; }
+.root summary { cursor:pointer; overflow-wrap:anywhere; }
+.content, .form { min-width:0; padding:12px; display:flex; flex-direction:column; gap:10px; overflow-wrap:anywhere; }
+.form { max-height:65vh; overflow:auto; }
+.form label { display:flex; flex-direction:column; gap:6px; }
+.form input, .form select { min-width:0; width:100%; box-sizing:border-box; }
+.form .check { flex-direction:row; align-items:flex-start; }
+.check input { width:auto; }
+.entry { padding:8px 0; border-bottom:1px solid var(--line); min-width:0; }
+.actions { display:flex; gap:8px; flex-wrap:wrap; margin:8px 0; }
+.preview { white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word; min-width:0; max-height:220px; overflow:auto; padding:10px; border:1px solid var(--line); font:inherit; }

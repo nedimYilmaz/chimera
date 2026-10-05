@@ -100,6 +100,8 @@ export function rpcFixture(method, params = {}) {
     case "agent.status": return { ...agentRecords[0], spec: { prompt: "Synthetic browser task" } };
     case "team.list": return teams;
     case "team.status": return teamDetail;
+    case "issues.sourceList":
+    case "issues.linkList": return [];
     case "queue.list": return queues;
     case "queue.status": return queueDetails[params.queue] ?? queueDetails["quality-queue"];
     case "role.list": return roles;
@@ -119,3 +121,15 @@ export function rpcFixture(method, params = {}) {
     default: return [];
   }
 }
+
+// UX26-R media contract: synthetic snapshots only; 300-process tree, stale,
+// unavailable Windows, capped admission and fail-open. No real PIDs or secrets.
+export const resources = {
+  snapshot(mode = "ok") {
+    const procs = Array.from({ length: 300 }, (_, i) => ({ pid: i + 100, ppid: i ? 100 : 1, name: i ? "synthetic-tool-with-a-long-name" : "synthetic-agent", role: i ? "tool" : "agent", cpuPct: 0.1, rssBytes: 1024 ** 2, elapsedSec: 60 }));
+    return {
+      sample: { agentId, sampledAt: Date.now() - (mode === "stale" ? 15000 : 0), state: mode === "unavailable" ? "unavailable" : mode === "stale" ? "stale" : "ok", ...(mode === "unavailable" ? { reason: "platform" } : mode === "stale" ? { reason: "sampling" } : {}), rootPid: mode === "unavailable" ? null : 100, procs: mode === "unavailable" ? [] : procs, totals: { cpuPct: mode === "unavailable" ? null : 30, rssBytes: mode === "unavailable" ? null : 300 * 1024 ** 2, procCount: mode === "unavailable" ? 0 : 300 }, truncated: mode === "stale" },
+      admission: { cap: 6, ceiling: 8, healthy: mode !== "fail-open", cpuPressure: true, memPressure: false, load1: 8, cores: 8, freeMemGb: 3, explain: "load 8/8 cores, 3 GB free", running: 6 },
+    };
+  },
+};

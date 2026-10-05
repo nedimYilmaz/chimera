@@ -277,6 +277,7 @@ const shutdown = async () => {
   // F49: revokes every live grant and closes the loopback socket. Ordered here rather than left to
   // process exit, because a grant outliving the daemon that authorises it is the one state this
   // listener must never reach.
+  await engine.operatorWeb.close().catch((err) => logError("operator-web", "close failed", err));
   await engine.mcpListener.close().catch((err) => logError("mcp-listener", "close failed", err));
   snapshotScheduler.flush();                       // final truth: suspended-but-resumable
   configWatcher.stop();

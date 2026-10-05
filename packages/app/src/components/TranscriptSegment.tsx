@@ -1,3 +1,4 @@
+import { openConversationFork } from "../state/conversationFork";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import type { AgentView, TranscriptItem, UiState } from "@chimera/ui-state";
 import type { NormalizedEvent } from "@chimera/protocol";
@@ -410,7 +411,15 @@ function Block({
       if (!entry || !childInfo) return [];
       return [{ ownerName, childName: entry.childName, childInfo, excerpt: entry.excerpt, onClick: onMentionClick }];
     });
-    return <ToolStrip block={block} blockKey={blockKey} hint={firstToolStrip} onOpen={() => onOpenDetail(block.startIndex)} spawnLines={spawnLines} />;
+    return <>
+      <ToolStrip block={block} blockKey={blockKey} hint={firstToolStrip} onOpen={() => onOpenDetail(block.startIndex)} spawnLines={spawnLines} />
+      {block.items.map((item, index) => item.role === "tool" && (item.images?.length || item.imageOutputWarnings?.length) ? (
+        <div key={`${item.toolId ?? index}-images`} className={styles.outputImages} data-output-images>
+          {item.images?.map((image, i) => <ImageChip key={i} image={image} name={`${item.toolName} image ${i + 1}`} outputPreview />)}
+          {item.imageOutputWarnings?.length ? <span className={styles.faint} data-image-output-warning>Some image output was omitted ({item.imageOutputWarnings.join(", ")}).</span> : null}
+        </div>
+      ) : null)}
+    </>;
   }
   const item = block.item;
   if (item.role === "system") {
@@ -541,6 +550,10 @@ function Block({
       <div className={styles.messageBody}>
         <div className={styles.headAssistant}>
           {displayName(agent)}
+          <details data-message-actions data-completed-seq={item.completedSeq ?? item.seq}>
+            <summary aria-label="Message actions">…</summary>
+            <button type="button" disabled={item.streaming || !item.seq || !!agent.shadow} title={item.streaming || !item.seq ? "Wait for a recorded completed message" : agent.shadow ? "Select the local parent conversation" : "Create a separate branch from this completed message"} onClick={e => { e.currentTarget.focus(); openConversationFork(agent.agentId, item.completedSeq ?? item.seq); }}>Branch conversation</button>
+          </details>
           <span className={styles.spacer} />
           {block.kind === "single" ? (
             <button

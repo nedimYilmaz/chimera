@@ -43,7 +43,7 @@ describe("Codex exec session measurements", () => {
     const { home, path } = fixture(); writeFileSync(path, row(108917, 2297445));
     const { factory } = fakeCodex([[{ type: "thread.started", thread_id: id }, { type: "turn.completed", thread_id: id, usage: usage(2406861, 2293760) }]]);
     const events: BackendEvent[] = [];
-    const spec = cxSpec({ resume: id, compactionThreshold: 500000 });
+    const spec = cxSpec({ resume: id, contextWindow: 500000, compactionThreshold: 500000 });
     spec.env.CODEX_HOME = home;
     new CodexAgentBackend({ codexFactory: factory }).spawn(spec, event => {
       events.push(event);
@@ -53,7 +53,9 @@ describe("Codex exec session measurements", () => {
     const result = events.find(e => e.kind === "result")!;
     expect(result.data.contextUsage).toMatchObject({ input_tokens: 109416 });
     expect(result.data.billableUsage).toMatchObject({ input_tokens: 109416 });
-    expect(events.some(e => e.kind === "usage" && e.data.effectiveContextLimit === 258400)).toBe(true);
+    expect(events.some(e => e.kind === "usage" && e.data.effectiveContextLimit === 258400
+      && (e.data.contextLimits as any)?.requestedWindow === 500000
+      && (e.data.contextLimits as any)?.sessionWindow === 258400)).toBe(true);
   });
   it("reads partial appended records once and clears occupancy when compaction completes", async () => {
     const { home, path } = fixture(); writeFileSync(path, row());

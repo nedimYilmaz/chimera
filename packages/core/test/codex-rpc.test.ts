@@ -20,6 +20,14 @@ function mockChild() {
 }
 
 describe("CodexRpc JSONL frame guard", () => {
+  it("exposes only the exact owned live child PID and clears it on exit", () => {
+    const mock = mockChild();
+    Object.assign(mock.child, { pid: 123 });
+    const rpc = new CodexRpc("codex", [], {}, mock.factory);
+    expect(rpc.processPid).toBe(123);
+    mock.child.emit("exit", 0, null);
+    expect(rpc.processPid).toBeNull();
+  });
   // CONTEXT-OVERFLOW: both directions share MAX_FRAME_BYTES so classifyFailure's CONTEXT_OVERFLOW
   // signal in failover.ts matches either failure the same way.
   it("fails an inbound frame over the ceiling with the exact classifiable phrase, no outbound suffix", async () => {

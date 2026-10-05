@@ -1,3 +1,19 @@
+import { CanvasRpc } from "./rpc/canvas-rpc.js";
+import { CanvasStore } from "./canvas-store.js";
+import { ConversationForks } from "./fork.js";
+import { ForkRpc } from "./rpc/fork-rpc.js";
+import { OperatorWeb } from "./operator-web.js";
+import { operatorWebEngine } from "./operator-web-engine.js";
+import { OperatorWebRpc } from "./rpc/operator-web-rpc.js";
+import { ContextLinkStore } from "./context-links.js";
+import { ContextLinksRpc } from "./rpc/context-links-rpc.js";
+import { GitOpsRpc } from "./rpc/gitops-rpc.js";
+import { GitOpsError } from "./gitops.js";
+import { leaseKeyForPath } from "./worktree-lease.js";
+import { LocalStt } from "./stt.js";
+import { SttRpc } from "./rpc/stt-rpc.js";
+import { IssuesBoard } from "./issues-board.js";
+import { IssuesRpc } from "./rpc/issues-rpc.js";
 import { McpStoreMonitorParams } from "@chimera/protocol";
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
@@ -9,7 +25,6 @@ import {
   PROTOCOL_VERSION, AgentBulkParamsSchema, AgentReleaseParamsSchema, AccountUncoolParamsSchema,
   AgentRenameParamsSchema, AgentReconfigureParamsSchema,
   SecretSetParams, SecretNameParams, SecretGrantParams, SecretRevokeParams, SecretForAgentParams, SecretReadParams, AgentFindParamsSchema, QuestionAnswerSchema, QuestionOptionSchema, QuestionDefaultSchema,
-  GroupCreateParamsSchema, GroupUpdateParamsSchema, GroupDeleteParamsSchema, AgentSetGroupsParamsSchema,
   AgentMarkSeenParamsSchema, isAgentUnseen,
   QueueSpecSchema,
   isPeerMethod, parseAgentAddress, formatAgentAddress, assertFederationSafeSpec,
@@ -69,7 +84,7 @@ import { CooldownTracker, QuotaTracker, type CrashLoopPolicy } from "./failover.
 import { QuotaPoller } from "./quota-poll.js";
 import { AgentSupervisor, agentRecency, resolveAgentSpec, UnknownAgentError, type AgentRecord } from "./supervisor.js";
 import { GuardrailError } from "./errors.js";
-import { resolveWorkdirPath } from "./workdir.js";
+import { resolveWorkdirPath, worktreePath } from "./workdir.js";
 import { AgentArchiveStore } from "./agent-archive.js";
 import { TeamManager } from "./teams.js";
 import { RoleStore } from "./roles-store.js";
@@ -123,6 +138,7 @@ import { TeamRpc } from "./rpc/team-rpc.js";
 import { RoleRpc } from "./rpc/role-rpc.js";
 import { WorkflowRpc } from "./rpc/workflow-rpc.js";
 import { ArtifactRpc } from "./rpc/artifact-rpc.js";
+import { ResourcesRpc } from "./rpc/resources-rpc.js";
 import { HealthRpc } from "./rpc/health-rpc.js";
 import { ShadowRpc } from "./rpc/shadow-rpc.js";
 import { SubRpc } from "./rpc/sub-rpc.js";
@@ -640,9 +656,15 @@ export class Engine {
   private readonly roleRpc: RoleRpc;
   private readonly roles: RoleStore;
   private readonly workflowRpc: WorkflowRpc;
+  private readonly canvasRpc: CanvasRpc;
+  private readonly forkRpc: ForkRpc;
+  private readonly contextLinksRpc: ContextLinksRpc;
+  private readonly issuesRpc: IssuesRpc;
   private readonly artifactRpc: ArtifactRpc;
   // R2 (self-healing supervision): health.status/replay.agentsAsOf RPC family.
   private readonly healthRpc: HealthRpc;
+  private readonly gitOpsRpc: GitOpsRpc;
+  private readonly resourcesRpc: ResourcesRpc;
   // SHADOW-WORKFLOW-VISIBILITY: shadow.workflowInspect RPC family.
   private readonly shadowRpc: ShadowRpc;
   readonly memory: MemoryStore;
@@ -699,6 +721,7 @@ export class Engine {
   // and the daemon closes it on shutdown. Always constructed, even when disabled — a disabled
   // listener binds nothing and grant() answers null, so there is no "off" object to branch on.
   readonly mcpListener: LoopbackMcpListener;
+  readonly operatorWeb: OperatorWeb;
   readonly mcpImports: McpImportScanner;
   // MCP-OAUTH slice 2: the oauth-kind mcpstore start/finish seam — pendingMcpOAuth is its own
   // PendingOAuthStore instance (never shared with accounts' this.pendingOAuth above: different
@@ -784,6 +807,7 @@ export class Engine {
   private readonly hookRpc: HookRpc;
   // VOICE S2: voice.session.*/voice.conversation.* RPC family, a thin dispatcher onto an
   // in-memory registry (packages/core/src/rpc/voice-rpc.ts) — no audio/STT/TTS wiring yet.
+  private readonly sttRpc: SttRpc;
   private readonly voiceRpc: VoiceRpc;
   private readonly nativeVoiceRpc: NativeVoiceRpc;
   private readonly voiceRoomRpc: VoiceRoomRpc;
@@ -1513,6 +1537,18 @@ export class Engine {
     // FEATURE-11: constructed after teams/queues/scheduler/supervisor/workflows/artifacts
     // (all above) — every dependency any of the three modules touches is guaranteed assigned
     // by this point.
+    const issuesBoard = new IssuesBoard({ home: opts.home, queues: this.queues, accepted: taskId => this.reviews.get(taskId).decision?.status === "accepted" });
+    this.issuesRpc = new IssuesRpc({
+      board: issuesBoard, queues: this.queues, projectExists: id => this.projects.has(id),
+      scope: caller => {
+        const record = this.supervisor.status(caller);
+        const project = record.projectId ? this.projects.get(record.projectId) : null;
+        const queue = record.membership ? this.teams.get(record.membership.team).queue : null;
+        const projectQueues = project ? [project.queue, ...project.teams.map(t => this.teams.get(t).queue)].filter((q): q is string => q !== null) : [];
+        return { projectId: record.projectId ?? null, queue, conductor: record.spec.conductor, projectQueues };
+      },
+      origin: (queue, caller) => this.resolveTaskOriginConductor(queue, caller), tick: () => this.scheduler.tick(),
+    });
     this.teamRpc = new TeamRpc({ teams: this.teams, queues: this.queues, scheduler: this.scheduler, supervisor: this.supervisor, roles: this.roles });
     this.roleRpc = new RoleRpc({ roles: this.roles, teams: this.teams });
     // FEATURE WORKFLOW-RUN-P1: workflow.run needs queues/teams/projects/supervisor/
@@ -1520,6 +1556,29 @@ export class Engine {
     this.workflowRpc = new WorkflowRpc({
       workflows: this.workflows, queues: this.queues, teams: this.teams, projects: this.projects,
       supervisor: this.supervisor, scheduler: this.scheduler, home: opts.home,
+    });
+    this.forkRpc = new ForkRpc(new ConversationForks({
+      agent: id => this.supervisor.status(id), backend: provider => this.backendsRef.get(provider),
+      accountProvider: account => this.registry.get(account).provider, events: this.events,
+      spawn: this.supervisor.spawn.bind(this.supervisor), redact: text => this.supervisor.redactForPeer(text),
+      changed: record => { this.events.append({ agentId: record.agentId, kind: "status", data: { forkLineage: record.forkLineage } }); },
+    }));
+    const contextLinkStore = new ContextLinkStore(opts.home, {
+      agent: id => this.supervisor.status(id), summary: id => this.supervisor.result(id).text,
+      artifact: id => this.artifacts.get(id), artifactText: (id, max) => this.artifacts.readContent(id, max),
+      redact: (_id, text) => this.supervisor.redactForPeer(text),
+      audit: input => { this.auditLedger.append(input); },
+      changed: link => { this.events.append({ agentId: link.toAgentId, kind: "context_link_changed", data: { id: link.id } }); },
+    });
+    this.contextLinksRpc = new ContextLinksRpc(contextLinkStore, async (agentId, linkId) => { await this.supervisor.send(agentId, `Context snapshot available: ${linkId}`, "contextlink"); });
+    this.canvasRpc = new CanvasRpc({
+      store: new CanvasStore(opts.home),
+      projectQueues: id => { const p = this.projects.get(id); return [p.queue, ...p.teams.map(t => this.teams.get(t).queue)].filter((q): q is string => q !== null); },
+      agents: () => this.supervisor.list().filter(a => !a.shadow).map(a => ({ ...a, spec: { ...a.spec, title: a.displayLabel } })),
+      tasks: () => { const links = new Map(issuesBoard.linkList().map(l => [l.taskId, l])); return this.queues.allTasks().map(t => ({ ...t, issueLink: links.get(t.taskId) })); },
+      artifacts: () => this.artifacts.list(),
+      links: callerAgentId => contextLinkStore.list({}, callerAgentId ? { agentId: callerAgentId } : { operator: true }).links,
+      callerQueue: id => { const a = this.supervisor.status(id); return a.membership ? this.teams.get(a.membership.team).queue : null; },
     });
     this.artifactRpc = new ArtifactRpc({ artifacts: this.artifacts, scheduler: this.scheduler, queues: this.queues,
       agentWorkdir: agentId => {
@@ -1529,6 +1588,41 @@ export class Engine {
     });
     // R2 (self-healing supervision): reads state.json directly (via replayAgentsAsOfFromStateFile),
     // same "home"-scoped file access pattern reattach.ts's boot glue already uses.
+    this.gitOpsRpc = new GitOpsRpc({
+      resolve: (target, caller) => {
+        const agentId = "agentId" in target ? target.agentId : this.queues.getTask(target.taskId).agentId;
+        if (!agentId) throw new GitOpsError("unsupported", "task has no current worktree agent; select a provenance agent");
+        const record = this.supervisor.status(agentId);
+        if (record.shadow || record.spec.isolation !== "worktree") throw new GitOpsError("unsupported", "only local isolated worktrees are eligible");
+        if (caller) {
+          let id: string | null = agentId;
+          const seen = new Set<string>();
+          while (id && id !== caller && !seen.has(id)) { seen.add(id); id = this.supervisor.status(id).parentId; }
+          if (id !== caller) throw new GitOpsError("access_denied", "only your own or descendant worktrees are visible");
+        }
+        const spec = { ...record.spec, agentId };
+        if (!existsSync(worktreePath(spec))) throw new GitOpsError("unsupported", "isolated worktree is gone");
+        const root = realpathSync(resolveWorkdirPath(spec));
+        if (root !== resolve(worktreePath(spec))) throw new GitOpsError("unsupported", "symlinked worktree roots are not eligible");
+        if (!leaseKeyForPath(root)) throw new GitOpsError("unsupported", "worktree is gone; main checkout is never a fallback");
+        return root;
+      },
+      writeReason: (root, caller) => {
+        const layout = leaseKeyForPath(root)!;
+        const owner = this.worktreeLeases.ownerOf(layout.key);
+        if (caller) {
+          const ctx = this.supervisor.worktreeWriteContext(caller);
+          if (!ctx?.caller || realpathSync(ctx.caller.dir) !== root || owner?.lease.ownerAgentId !== caller) return "your own authorized worktree lease is required";
+          const permissions = this.supervisor.status(caller).spec.permissionProfile;
+          if (permissions === "readOnly") return "restricted permissions: use the operator review actions";
+        } else if (owner) return `worktree lease held by ${owner.lease.ownerAgentId}; explicitly release or hand off before editing`;
+        return null;
+      },
+    });
+    this.resourcesRpc = new ResourcesRpc({ supervisor: this.supervisor, admission: () => ({
+      ...this.dynamicCap.effectiveCap(this.registry.maxTotal(), this.cfg.caps.dynamicCap),
+      running: this.supervisor.list().filter(a => a.state === "running" && !a.shadow).length,
+    }) });
     this.healthRpc = new HealthRpc({ supervisor: this.supervisor, events: this.events, home: opts.home });
     this.shadowRpc = new ShadowRpc({ supervisor: this.supervisor });
     // PLAN-HOOKS.md §2 (HOOK-2): agent-facing event subscriptions — persisted state (not
@@ -1556,6 +1650,8 @@ export class Engine {
         this.applyConfig(config, changed);
       },
     });
+    this.operatorWeb = new OperatorWeb({ ...operatorWebEngine(this), home: opts.home, bundleDir: resolve(dirname(fileURLToPath(import.meta.url)), "../../app/dist") });
+    this.sttRpc = new SttRpc(new LocalStt({ home: opts.home }));
     this.voiceRpc = new VoiceRpc();
     const voiceIdentity = (id: string) => {
       const r = this.supervisor.status(id);
@@ -1591,6 +1687,26 @@ export class Engine {
       current: (id) => this.supervisor.currentNativeVoice(id),
     });
     this.contractHandlers = {
+      "group.list": () => ({ groups: this.groupStore.list() }),
+      "group.create": (p) => {
+        const group = this.groupStore.create({ ...p, now: Date.now() });
+        this.events.append({ agentId: "group:registry", kind: "group_registry_changed", data: { operation: "create", id: group.id } });
+        return group;
+      },
+      "group.update": (p) => {
+        const group = this.groupStore.update(p.id, p);
+        this.events.append({ agentId: "group:registry", kind: "group_registry_changed", data: { operation: "update", id: group.id } });
+        return group;
+      },
+      "group.delete": (p) => {
+        const existed = this.groupStore.get(p.id) !== undefined;
+        this.groupStore.delete(p.id);
+        if (existed) this.events.append({ agentId: "group:registry", kind: "group_registry_changed", data: { operation: "delete", id: p.id } });
+        return { ok: true };
+      },
+      "agent.setGroups": async (p) => { await this.supervisor.setAgentGroups(p.agentId, p.groups); return { ok: true }; },
+      "agent.addGroups": async (p) => { await this.supervisor.changeAgentGroups(p.agentId, p.groups, "add"); return { ok: true }; },
+      "agent.removeGroups": async (p) => { await this.supervisor.changeAgentGroups(p.agentId, p.groups, "remove"); return { ok: true }; },
       "queue.create": (p) => {
         if (p.spec.workflow !== null) this.workflows.get(p.spec.workflow);   // UnknownWorkflowError BEFORE anything persists
         return this.queues.create(p.spec);
@@ -1921,11 +2037,19 @@ export class Engine {
       ...this.teamRpc.handlers,
       ...this.roleRpc.handlers,
       ...this.workflowRpc.handlers,
+      ...this.forkRpc.handlers,
+      ...this.canvasRpc.handlers,
+      ...this.contextLinksRpc.handlers,
+      ...this.issuesRpc.handlers,
       ...this.artifactRpc.handlers,
       ...this.healthRpc.handlers,
+      ...this.gitOpsRpc.handlers,
+      ...this.resourcesRpc.handlers,
       ...this.shadowRpc.handlers,
       ...this.subRpc.handlers,
       ...this.hookRpc.handlers,
+      ...this.sttRpc.handlers,
+      ...new OperatorWebRpc(this.operatorWeb).handlers,
       ...this.voiceRpc.handlers,
       ...this.nativeVoiceRpc.handlers,
       ...this.voiceRoomRpc.handlers,
@@ -2175,8 +2299,15 @@ export class Engine {
     return this.modelCatalogService;
   }
 
-  async handle(method: string, params: unknown): Promise<unknown> {
+  async handle(method: string, params: unknown, route?: { trustedLocalClient: true }): Promise<unknown> {
     try {
+      // Listener/session administration belongs to the local socket route, never an
+      // agent tool or authenticated browser session. New management methods fail closed.
+      const agentIdentified = params && typeof params === "object"
+        && ["callerAgentId", "agentId", "actorAgentId", "authorAgentId", "principal"].some(k => k in params);
+      if (method.startsWith("operatorweb.") && method !== "operatorweb.operatorStatus" && (!route?.trustedLocalClient || agentIdentified)) {
+        throw rpcError("forbidden", "Operator panel management requires a trusted local client");
+      }
       // Prevent re-enable/rekey while uninstall awaits a connecting child or Keychain.
       if (method.startsWith("mcpstore.") && params && typeof params === "object" && "name" in params
         && typeof params.name === "string" && this.mcpRemoving.has(params.name)) {
@@ -2234,7 +2365,13 @@ export class Engine {
       if (isContractMethod(method)) {
         const spec = RPC_CONTRACT[method];
         const req = spec.request.parse(params);
-        const result = await this.contractHandlers[method](req as never);
+        const result = method.startsWith("canvas.") && route?.trustedLocalClient
+          ? await this.canvasRpc.operator(method, req as never)
+          : method.startsWith("contextlink.") && route?.trustedLocalClient
+          ? await this.contextLinksRpc.operator(method, req)
+          : (method === "agent.fork" || method === "agent.forkCapabilities") && route?.trustedLocalClient
+            ? await this.forkRpc.operator(method, req as never)
+            : await this.contractHandlers[method](req as never);
         return spec.response.parse(result);
       }
       switch (method) {
@@ -2856,31 +2993,7 @@ export class Engine {
           await this.supervisor.renameAgent(agentId, displayLabel, { byOperator: !self });
           return { ok: true };
         }
-        // AGENT-GROUPS Phase 1: the registry CRUD lives entirely on GroupStore — no
-        // supervisor/AgentRecord involvement (a group is a named container, not per-agent
-        // state). agent.setGroups below is the one call that touches a record.
-        case "group.list": {
-          return { groups: this.groupStore.list() };
-        }
-        case "group.create": {
-          const { name, color } = GroupCreateParamsSchema.parse(params);
-          return this.groupStore.create({ name, color, now: Date.now() });
-        }
-        case "group.update": {
-          const { id, name, color } = GroupUpdateParamsSchema.parse(params);
-          return this.groupStore.update(id, { name, color });
-        }
-        case "group.delete": {
-          const { id } = GroupDeleteParamsSchema.parse(params);
-          this.groupStore.delete(id);
-          return { ok: true };
-        }
-        case "agent.setGroups": {
-          const { agentId, groups } = AgentSetGroupsParamsSchema.parse(params);
-          await this.supervisor.setAgentGroups(agentId, groups);
-          return { ok: true };
-        }
-        // F47 (fleet seen-state): operator-only, like setGroups/purgeTerminal/killMany — no MCP
+        // F47 (fleet seen-state): operator-only, like purgeTerminal/killMany — no MCP
         // tool. An agent that could mark itself seen would erase the very signal the operator
         // triages by.
         case "agent.markSeen": {
@@ -4277,6 +4390,7 @@ export class Engine {
       parentId: (r["parentId"] as string | null | undefined) ?? null,
       // CROSS-PROVIDER-HANDOFF: same omit-when-absent convention as sessionRole/jobName —
       // only a handoff's two participants ever carry either field.
+      ...(r["forkLineage"] !== undefined ? { forkLineage: r["forkLineage"] as import("@chimera/protocol").ForkLineage } : {}),
       ...(r["handoffFrom"] !== undefined ? { handoffFrom: r["handoffFrom"] as string } : {}),
       ...(r["handoffTo"] !== undefined ? { handoffTo: r["handoffTo"] as string } : {}),
       costUsd: Number(r["costUsd"] ?? 0),

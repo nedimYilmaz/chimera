@@ -27,7 +27,7 @@ describe("changing settings on a live agent", () => {
 
     const res = await e.handle("agent.reconfigure", {
       agentId: a.agentId,
-      patch: { maxTurns: 200, turnLimitPolicy: "soft", effort: "high" },
+      patch: { maxTurns: 200, turnLimitPolicy: "soft", effort: "high", contextWindow: 500000 },
     }) as { ok: boolean; respawned: boolean; applied: string[] };
 
     expect(res.respawned).toBe(true);
@@ -35,6 +35,9 @@ describe("changing settings on a live agent", () => {
     expect(spec.maxTurns).toBe(200);
     expect(spec.turnLimitPolicy).toBe("soft");
     expect(spec.effort).toBe("high");
+    expect(spec.contextWindow).toBe(500000);
+    await e.handle("agent.reconfigure", { agentId: a.agentId, patch: { contextWindow: null } });
+    expect(e.supervisor.status(a.agentId).spec.contextWindow).toBeNull();
     if (sessionBefore) expect(e.supervisor.status(a.agentId).spec.resume).toBe(sessionBefore);
   });
 

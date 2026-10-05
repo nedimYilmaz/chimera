@@ -1,3 +1,12 @@
+import * as canvas from "./canvas.js";
+import { GroupCreateParamsSchema, GroupUpdateParamsSchema, GroupDeleteParamsSchema, GroupListResultSchema, AgentGroupSchema, AgentSetGroupsParamsSchema, AgentChangeGroupsParamsSchema } from "./agent-groups.js";
+import * as fork from "./fork.js";
+import { OperatorWebSettingsSchema, OperatorWebStatusSchema, OperatorWebPairStartSchema, OperatorWebPairCodeSchema, OperatorWebSessionSchema } from "./operator-web.js";
+import { ContextLinkCreateSchema, ContextLinkListSchema, ContextLinkTargetSchema, ContextLinkViewSchema, ContextLinkListResponseSchema } from "./context-links.js";
+import * as gitops from "./gitops.js";
+import { SttPreferencesSchema, SttStatusSchema, SttInstallSchema, SttTranscribeSchema, SttTranscriptSchema, SttCancelSchema } from "./stt.js";
+import { IssueSourceSchema, IssueBoardLinkSchema, IssueSourceListRequestSchema, IssueSourceUpsertRequestSchema, IssueSourceRemoveRequestSchema, IssueSyncRequestSchema, IssueSyncResultSchema, IssueLinkListRequestSchema, IssuePostCommentRequestSchema, IssuePostCommentResultSchema } from "./issues.js";
+import { AgentResourcesRequestSchema, AgentResourcesResponseSchema, HostAdmissionSchema } from "./resources.js";
 import { MeetingPlanInputSchema, MeetingPlanSchema } from "./meeting-plan.js";
 // FEATURE-8: the Chimera Contract Compiler seam. RPC_CONTRACT is the single source of truth
 // for a (growing) subset of the daemon's RPC surface — one entry per method, its request zod
@@ -318,6 +327,7 @@ const RoleUpdateRequestSchema = z.object({
     idleTimeoutMs: z.number().int().positive().optional(),
     maxTurnDurationMs: z.number().int().positive().optional(),
     compactionThreshold: z.number().int().positive().nullable().optional(),
+    contextWindow: z.number().int().positive().nullable().optional(),
     inherit: z.object({
       settingSources: z.array(z.enum(["user", "project", "local"])),
     }).optional(),
@@ -747,6 +757,41 @@ const WorktreeExplainWriteRequestSchema = z.object({
 }).strict();
 
 export const RPC_CONTRACT = {
+  "canvas.get": defineRpc(canvas.CanvasGetSchema, canvas.CanvasGetResponseSchema),
+  "canvas.saveLayout": defineRpc(canvas.CanvasSaveLayoutSchema, canvas.CanvasSaveResponseSchema),
+  "group.list": defineRpc(z.object({}).strict(), GroupListResultSchema),
+  "group.create": defineRpc(GroupCreateParamsSchema, AgentGroupSchema),
+  "group.update": defineRpc(GroupUpdateParamsSchema, AgentGroupSchema),
+  "group.delete": defineRpc(GroupDeleteParamsSchema, z.object({ ok: z.literal(true) }).strict()),
+  "agent.setGroups": defineRpc(AgentSetGroupsParamsSchema, z.object({ ok: z.literal(true) }).strict()),
+  "agent.addGroups": defineRpc(AgentChangeGroupsParamsSchema, z.object({ ok: z.literal(true) }).strict()),
+  "agent.removeGroups": defineRpc(AgentChangeGroupsParamsSchema, z.object({ ok: z.literal(true) }).strict()),
+  "agent.forkCapabilities": defineRpc(fork.ForkCapabilitiesRequestSchema, fork.ForkCapabilitiesSchema),
+  "agent.fork": defineRpc(fork.ForkRequestSchema, fork.ForkResponseSchema),
+  "operatorweb.operatorStatus": defineRpc(z.object({}).strict(), z.object({ enabled: z.boolean(), bundleAvailable: z.boolean(), limitation: z.string() }).strict()),
+  "operatorweb.status": defineRpc(z.object({}).strict(), OperatorWebStatusSchema),
+  "operatorweb.enable": defineRpc(z.object({}).strict(), OperatorWebStatusSchema),
+  "operatorweb.disable": defineRpc(z.object({}).strict(), OperatorWebStatusSchema),
+  "operatorweb.pairStart": defineRpc(OperatorWebPairStartSchema, OperatorWebPairCodeSchema),
+  "operatorweb.sessionList": defineRpc(z.object({}).strict(), z.array(OperatorWebSessionSchema)),
+  "operatorweb.sessionRevoke": defineRpc(z.object({ id: z.string().min(1).nullable() }).strict(), z.object({ revoked: z.number() }).strict()),
+  "operatorweb.settingsSet": defineRpc(OperatorWebSettingsSchema, OperatorWebStatusSchema),
+  "contextlink.create": defineRpc(ContextLinkCreateSchema, ContextLinkViewSchema),
+  "contextlink.list": defineRpc(ContextLinkListSchema, ContextLinkListResponseSchema),
+  "contextlink.get": defineRpc(ContextLinkTargetSchema, ContextLinkViewSchema),
+  "contextlink.revoke": defineRpc(ContextLinkTargetSchema, ContextLinkViewSchema),
+  "worktree.gitStatus": defineRpc(gitops.GitStatusRequestSchema, gitops.GitStatusSchema),
+  "worktree.gitDiff": defineRpc(gitops.GitDiffRequestSchema, gitops.GitDiffSchema),
+  "worktree.fileRead": defineRpc(gitops.FileReadRequestSchema, gitops.FileReadSchema),
+  "worktree.fileWrite": defineRpc(gitops.FileWriteRequestSchema, gitops.FileWriteSchema),
+  "worktree.gitStage": defineRpc(gitops.GitStageRequestSchema, gitops.GitStageSchema),
+  "worktree.gitCommit": defineRpc(gitops.GitCommitRequestSchema, gitops.GitCommitSchema),
+  "issues.sourceList": defineRpc(IssueSourceListRequestSchema, z.array(IssueSourceSchema)),
+  "issues.sourceUpsert": defineRpc(IssueSourceUpsertRequestSchema, IssueSourceSchema),
+  "issues.sourceRemove": defineRpc(IssueSourceRemoveRequestSchema, z.object({ removed: z.boolean() }).strict()),
+  "issues.sync": defineRpc(IssueSyncRequestSchema, IssueSyncResultSchema),
+  "issues.linkList": defineRpc(IssueLinkListRequestSchema, z.array(IssueBoardLinkSchema)),
+  "issues.postComment": defineRpc(IssuePostCommentRequestSchema, IssuePostCommentResultSchema),
   "queue.create": defineRpc(QueueCreateRequestSchema, QueueSpecSchema),
   "queue.list": defineRpc(z.object({}).strict(), z.array(QueueSpecSchema)),
   "queue.update": defineRpc(QueueUpdateRequestSchema, QueueSpecSchema),
@@ -828,6 +873,8 @@ export const RPC_CONTRACT = {
   "terminal.read": defineRpc(TerminalReadRequestSchema, TerminalReadResponseSchema),
   "terminal.write": defineRpc(TerminalWriteRequestSchema, TerminalWriteResponseSchema),
   "terminal.tabState": defineRpc(TerminalTabStateRequestSchema, TerminalTabStateResponseSchema),
+  "agent.resources": defineRpc(AgentResourcesRequestSchema, AgentResourcesResponseSchema),
+  "host.admission": defineRpc(z.object({}).strict(), HostAdmissionSchema),
   "health.status": defineRpc(HealthStatusRequestSchema, z.array(AgentHealthSchema)),
   // Same "no AgentRecordSchema yet" loose-record convention as team.status's `agents` field.
   "replay.agentsAsOf": defineRpc(ReplayAgentsAsOfRequestSchema, z.array(z.record(z.string(), z.unknown()))),
@@ -844,6 +891,13 @@ export const RPC_CONTRACT = {
   "hook.setEnabled": defineRpc(HookSetEnabledRequestSchema, HookRuleSchema),
   "hook.delete": defineRpc(HookNameRequestSchema, z.object({ deleted: z.literal(true) }).strict()),
   // VOICE S2: mic session lifecycle + conversation-mode toggle — see VoiceSessionRecordSchema above.
+  "stt.configure": defineRpc(SttPreferencesSchema, SttPreferencesSchema),
+  "stt.status": defineRpc(z.object({}).strict(), SttStatusSchema),
+  "stt.install": defineRpc(SttInstallSchema, SttStatusSchema),
+  "stt.installCancel": defineRpc(z.object({}).strict(), z.object({ cancelled: z.boolean() }).strict()),
+  "stt.uninstall": defineRpc(z.object({}).strict(), z.object({ removed: z.boolean() }).strict()),
+  "stt.transcribe": defineRpc(SttTranscribeSchema, SttTranscriptSchema),
+  "stt.transcribeCancel": defineRpc(SttCancelSchema, z.object({ cancelled: z.boolean() }).strict()),
   "voice.session.start": defineRpc(VoiceSessionStartRequestSchema, VoiceSessionRecordSchema),
   "voice.session.stop": defineRpc(VoiceSessionStopRequestSchema, VoiceSessionStopResponseSchema),
   "voice.conversation.set": defineRpc(VoiceConversationSetRequestSchema, VoiceConversationSetResponseSchema),

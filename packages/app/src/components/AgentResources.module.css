@@ -1,0 +1,9 @@
+.root { min-width: 0; margin: 8px 0; font-size: var(--fs-meta); overflow-wrap: anywhere; }
+.root summary { cursor: pointer; color: var(--fg-soft); }
+.content { display: grid; gap: 6px; padding: 8px; min-width: 0; border: 1px solid var(--line-soft); border-radius: var(--radius-panel); }
+.note { color: var(--muted); font-size: 11px; }
+.tree { height: 196px; overflow: auto; min-width: 0; contain: layout; }
+.process { position: absolute; height: 28px; left: 0; right: 0; display: flex; gap: 8px; align-items: center; font-size: 11px; }
+.processName { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.process > span:last-child { flex-shrink: 0; }
+@media (max-width: 600px) { .process { gap: 4px; font-size: 10px; } }

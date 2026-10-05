@@ -927,3 +927,20 @@ describe("a client that stops reading cannot exhaust the daemon's memory", () =>
     await server.close();
   });
 });
+it("context links require the trusted local operator route; omission on engine/peer routes grants no authority", async () => {
+  const home = makeEngineHome(), socketPath = join(home, "daemon.sock");
+  const engine = new Engine({ home, backends: new Map([["claude", new FakeAgentBackend([])]]) });
+  const agent = await engine.handle("agent.spawn", { spec: { prompt: "context fixture", cwd: "/tmp", isolation: "none" } }) as { agentId: string };
+  const params = { from: { kind: "note-snapshot", ref: agent.agentId }, toAgentId: agent.agentId, text: "operator-only fixture" };
+  await expect(engine.handle("contextlink.create", params)).rejects.toMatchObject({ code: "forbidden" });
+  await expect(engine.handle("contextlink.create", { ...params, callerAgentId: agent.agentId })).rejects.toMatchObject({ code: "forbidden" });
+  const server = await startRpcServer({ socketPath, engine }); const client = rpcClient(socketPath);
+  try {
+    const frame = await client.request("contextlink.create", params);
+    expect(frame).toMatchObject({ ok: true, result: { createdBy: "operator", semantics: "snapshot" } });
+    const id = (frame as { result: { id: string } }).result.id;
+    expect(await client.request("contextlink.get", { id })).toMatchObject({ ok: true, result: { snapshot: { text: "operator-only fixture" } } });
+    expect(await client.request("contextlink.get", { id, operator: true })).toMatchObject({ ok: false, error: { code: "protocol" } });
+    await expect(engine.handlePeer("unknown-peer", "contextlink.get", { id })).rejects.toMatchObject({ code: "peer-auth" });
+  } finally { client.end(); await server.close(); }
+});

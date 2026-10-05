@@ -52,11 +52,7 @@
   color: var(--danger);
 }
 
-/* In-app lightbox: a scrim-backed FIXED overlay centered on the viewport, click
-   anywhere to dismiss. Must be `fixed` (not `absolute`) — an absolute overlay
-   resolves to the tiny `.wrap` chip box, so the "full size" image stayed chip-
-   sized. Fixed lets it fill the window and show the image genuinely large,
-   right in place (no external OS viewer). */
+/* The existing viewer's portal host gives OverlayCard a viewport-sized pane. */
 .lightbox {
   position: fixed;
   inset: 0;
@@ -75,3 +71,10 @@
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-card);
 }
+
+.output { max-width: 100%; min-width: 0; }
+.output .chip { max-width: 100%; }
+.output .thumb { width: 240px; height: auto; max-height: 220px; max-width: 100%; object-fit: contain; }
+.fullImage { display: flex; justify-content: center; padding: 12px; min-width: 0; }
+.fullImage .img { max-width: 100%; max-height: 75vh; object-fit: contain; }
+.failure { display: inline-block; padding: 8px; line-height: 1.4; color: var(--faint); }

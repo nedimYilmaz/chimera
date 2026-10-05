@@ -1,4 +1,8 @@
-import { existsSync } from "node:fs";
+import type { BackendEvent } from "../src/backend.js";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { EventLog } from "@chimera/core/events";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
@@ -98,6 +102,34 @@ describe("Codex app-server", () => {
       expect(mock.messages.some(m => m.method?.startsWith("thread/realtime/"))).toBe(false);
     } finally { client.close(); }
   });
+  it("preserves generated image app-server frames through persistence and transcript replay", async () => {
+    // Shape captured from installed CLI 0.160.0 thread/items/list for a real native
+    // generation; fixture replaces only pixels, identifiers, prompt and local path.
+    const item = JSON.parse(readFileSync(new URL("./fixtures/codex-image-generation.json", import.meta.url), "utf8"));
+    const mock = server(); const dir = mkdtempSync(join(tmpdir(), "chimera-image-events-"));
+    const log = new EventLog(dir); let state = initialState;
+    const backend = new CodexAgentBackend({ appServerProcess: mock.factory, validateModel: async () => {} });
+    const handle = backend.spawn(cxSpec({ persistent: true, providerOptions: { codexTransport: "app-server" } }), e => {
+      const event = log.append({ ...e, agentId: "image-owner" });
+      state = reduce(state, { type: "event", event });
+    }, async () => false);
+    try {
+      await vi.waitFor(() => expect(mock.messages.some(m => m.method === "turn/start")).toBe(true));
+      for (const method of ["item/started", "item/completed"]) mock.send({ method, params: { threadId: "thread-a", turnId: "turn-a", item } });
+      await vi.waitFor(() => expect(state.agents["image-owner"]!.transcript.some(row => row.role === "tool" && row.images?.length)).toBe(true));
+      mock.complete();
+      log.flushDurable();
+      const persisted = new EventLog(dir).tail("image-owner", 100);
+      const history = reduce(initialState, { type: "backfillHistory", agentId: "image-owner", events: persisted });
+      const rows = history.agents["image-owner"]!.transcript.filter(row => row.role === "tool");
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ status: "done", toolId: item.id, images: [{ mediaType: "image/png", data: item.result }] });
+      const json = readFileSync(join(dir, "events/events.jsonl"), "utf8");
+      expect(json.split(item.result)).toHaveLength(2); // Exactly one normalized attachment, no raw duplicate.
+      expect(history.agents["other-owner"]).toBeUndefined();
+    } finally { await handle.kill(); log.flushDurable(); rmSync(dir, { recursive: true, force: true }); }
+  });
+
   it("projects idle voice work, live MCP/command progress and edit/search starts into the real transcript", async () => {
     const mock = server(); let state = initialState; let seq = 0;
     const backend = new CodexAgentBackend({ appServerProcess: mock.factory, validateModel: async () => {} });
@@ -723,17 +755,30 @@ it("native force-send preserves ordered images until the receiving turn complete
   } finally { await handle.kill(); }
 });
 
+it("refuses an unsupported context window before an app-server model request", async () => {
+  const mock = server();
+  const events: BackendEvent[] = [];
+  const backend = new CodexAgentBackend({ appServerProcess: mock.factory, validateModel: async () => ({ source: "codex", maxWindow: 872000 }) });
+  const handle = backend.spawn(cxSpec({ contextWindow: 872001, providerOptions: { codexTransport: "app-server" } }), e => events.push(e), async () => true);
+  try {
+    await vi.waitFor(() => expect(events.some(e => e.kind === "error" && String(e.data.message).includes("exceeds"))).toBe(true));
+    expect(mock.messages.some(m => m.method === "turn/start")).toBe(false);
+  } finally { await handle.kill(); }
+});
+
 it("separates live Codex session windows from dynamic catalog capacity and compaction", async () => {
   const mock = server();
   const events: any[] = [];
-  const backend = new CodexAgentBackend({ appServerProcess: mock.factory, validateModel: async () => ({ source: "codex", defaultWindow: 345678, maxWindow: 1234567 }) });
-  const handle = backend.spawn(cxSpec({ persistent: true, compactionThreshold: 120000, providerOptions: { codexTransport: "app-server" } }), e => events.push(e), async () => true);
+  const process = vi.fn(mock.factory);
+  const backend = new CodexAgentBackend({ appServerProcess: process, validateModel: async () => ({ source: "codex", defaultWindow: 345678, maxWindow: 1234567 }) });
+  const handle = backend.spawn(cxSpec({ persistent: true, contextWindow: 500000, compactionThreshold: 120000, providerOptions: { codexTransport: "app-server" } }), e => events.push(e), async () => true);
   try {
     await vi.waitFor(() => expect(mock.messages.some(m => m.method === "turn/start")).toBe(true));
-    for (const window of [258400, 654321]) {
+    expect(process.mock.calls[0]?.[1]).toContain("model_context_window=500000");
+    for (const window of [475000, 258400]) {
       mock.send({ method: "thread/tokenUsage/updated", params: { threadId: "thread-a", tokenUsage: { modelContextWindow: window, last: { inputTokens: 1000, cachedInputTokens: 500, outputTokens: 20 } } } });
       await vi.waitFor(() => expect(events.filter(e => e.kind === "usage").at(-1).data).toMatchObject({
-        effectiveContextLimit: 120000, contextLimits: { source: "codex", defaultWindow: 345678, maxWindow: 1234567, sessionWindow: window, compactAt: 120000 },
+        effectiveContextLimit: 120000, contextLimits: { source: "codex", defaultWindow: 345678, maxWindow: 1234567, requestedWindow: 500000, sessionWindow: window, compactAt: 120000 },
       }));
     }
   } finally { await handle.kill(); }

@@ -41,7 +41,7 @@ export type QueueUpdateInput = { retryLimit?: number; workflow?: string | null; 
 // PLAN-HOOKS.md §3.3 (HOOK-4): `cause` is engine-internal only, stamped by HookEngine's `push`
 // action — never forwarded by engine.ts's queue.push RPC handler literal (mirrors parentTaskId's
 // own convention above), so a caller can never fabricate a fake causation chain.
-export type TaskPush = { prompt: string; tags?: string[]; priority?: number; role?: string | null; overrides?: Record<string, unknown>; dependsOn?: string[]; pushedBy?: string | null; originConductorId?: string | null; workflow?: string | null; parentTaskId?: string; cause?: HookCause | null };
+export type TaskPush = { taskId?: string; prompt: string; tags?: string[]; priority?: number; role?: string | null; overrides?: Record<string, unknown>; dependsOn?: string[]; pushedBy?: string | null; originConductorId?: string | null; workflow?: string | null; parentTaskId?: string; cause?: HookCause | null };
 
 export class UnknownDependencyError extends Error { code = "protocol" as const; name = "UnknownDependencyError"; }
 // RETRY-BACKOFF: queue.requeue is the only way out of "dead_letter" — thrown when called on a
@@ -347,6 +347,8 @@ export class QueueStore {
 
   push(queueName: string, input: TaskPush): TaskRecord {
     this.get(queueName);
+    // Reserved deterministic IDs are an internal import seam, never a public push option.
+    if (input.taskId !== undefined && !/^gh-[a-f0-9]{64}$/.test(input.taskId)) throw new UnknownTaskError("invalid import task identity");
     const dependsOn = input.dependsOn ?? [];
     // DEP1: every dependency must reference an EXISTING task in the SAME queue. This
     // also makes cycles structurally impossible (a task can only depend on tasks that
@@ -355,6 +357,16 @@ export class QueueStore {
       const dep = this.tasks.get(depId);
       if (!dep || dep.queue !== queueName)
         throw new UnknownDependencyError(`unknown dependency "${depId}" in queue "${queueName}"`);
+    }
+    if (input.taskId && this.tasks.has(input.taskId)) {
+      const existing = this.task(input.taskId);
+      const expected = { queue: queueName, prompt: input.prompt, tags: input.tags ?? [], role: input.role ?? null,
+        overrides: input.overrides ?? {}, priority: input.priority ?? 0, dependsOn,
+        pushedBy: input.pushedBy ?? null, originConductorId: input.originConductorId ?? null,
+        workflowOverride: input.workflow ?? null, parentTaskId: input.parentTaskId ?? null, cause: input.cause ?? null };
+      const actual = Object.fromEntries(Object.keys(expected).map(k => [k, existing[k as keyof TaskRecord]]));
+      if (!deepEqual(actual, expected)) throw new UnknownTaskError("import identity belongs to a different task or queue");
+      return existing;
     }
     // Initial state from the deps' current states: any already-failed dep → the new
     // task is dead on arrival (cascade at creation); not-all-done → blocked; else the
@@ -366,7 +378,7 @@ export class QueueStore {
     // "defaulted to createdAt semantics" contract, made literal at the only stamp site.
     const now = Date.now();
     const task = TaskRecordSchema.parse({
-      taskId: randomUUID(), queue: queueName, prompt: input.prompt,
+      taskId: input.taskId ?? randomUUID(), queue: queueName, prompt: input.prompt,
       tags: input.tags ?? [],
       role: input.role ?? null, overrides: input.overrides ?? {},
       priority: input.priority ?? 0, orderKey: this.orderCounter++, createdAt: now,
@@ -377,7 +389,8 @@ export class QueueStore {
       cause: input.cause ?? null,
     });
     this.tasks.set(task.taskId, task);
-    this.save();
+    // The issue reservation must never outlive an unflushed task after a power loss.
+    if (input.taskId) this.saveDurable(); else this.save();
     this.emitTask(task, {}, null);
     return task;
   }

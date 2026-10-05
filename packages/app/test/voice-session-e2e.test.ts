@@ -49,25 +49,28 @@ afterEach(() => {
 });
 
 describe("push-to-talk mock end-to-end", () => {
-  it("hold -> transcribe (mock) -> send -> voice_tts_chunk -> synthesized text out", async () => {
+  it("hold -> insert draft without agent RPC -> independent spoken reply remains available", async () => {
     const { rpcCalls, spoken } = installMockWindow("hello world");
     vi.resetModules();
 
     const { installVoiceEventBridge } = await import("../src/voice/voiceEvents");
-    const { startPushToTalk, stopPushToTalkAndSend } = await import("../src/voice/session");
+    const { startPushToTalk, stopPushToTalkAndInsert } = await import("../src/voice/session");
     const { voiceLocal } = await import("../src/voice/store");
 
     installVoiceEventBridge();
 
     await startPushToTalk("agent-1");
     expect(voiceLocal.getState().status).toBe("listening");
-    expect(voiceLocal.getState().sessionId).toBe("sess-1");
-    expect(rpcCalls[0]).toEqual({ method: "voice.session.start", params: { agentId: "agent-1" } });
+    expect(voiceLocal.getState().sessionId).toMatch(/^dictation:/);
+    expect(rpcCalls).toEqual([]);
+    const localPush = (globalThis as any).window.__CHIMERA_PUSH__;
+    localPush.event({ ts: 0, seq: 0, engineId: "local", agentId: "agent-1", kind: "voice_tts_chunk", data: { text: "do not interrupt capture", final: true } });
+    await Promise.resolve(); expect(spoken).toEqual([]); expect(voiceLocal.getState().status).toBe("listening");
 
     const sent: string[] = [];
-    await stopPushToTalkAndSend((text) => sent.push(text));
+    await stopPushToTalkAndInsert((text) => sent.push(text));
     expect(sent).toEqual(["hello world"]);
-    expect(rpcCalls[1]).toEqual({ method: "voice.session.stop", params: { sessionId: "sess-1" } });
+    expect(rpcCalls).toEqual([]);
     expect(voiceLocal.getState().status).toBe("idle");
 
     // Simulate the daemon's TTS reply arriving over the event stream (S4's future emitter —
@@ -86,12 +89,12 @@ describe("push-to-talk mock end-to-end", () => {
     installMockWindow("");
     vi.resetModules();
 
-    const { startPushToTalk, stopPushToTalkAndSend } = await import("../src/voice/session");
+    const { startPushToTalk, stopPushToTalkAndInsert } = await import("../src/voice/session");
     const { voiceLocal } = await import("../src/voice/store");
 
     await startPushToTalk("agent-1");
     const sent: string[] = [];
-    await stopPushToTalkAndSend((text) => sent.push(text));
+    await stopPushToTalkAndInsert((text) => sent.push(text));
 
     expect(sent).toEqual([]);
     expect(voiceLocal.getState().status).toBe("error");
@@ -104,6 +107,7 @@ describe("push-to-talk mock end-to-end", () => {
     vi.useFakeTimers();
 
     vi.doMock("../src/voice/registry", () => ({
+      getDefaultTtsEngine: () => ({ stopSpeaking() {} }),
       getDefaultSttEngine: () => ({
         meta: { id: "hung-stt", label: "Hung STT", isLocal: true, healthy: true },
         transcribe: () => new Promise<string>(() => {}), // never resolves
@@ -111,15 +115,15 @@ describe("push-to-talk mock end-to-end", () => {
     }));
 
     try {
-      const { startPushToTalk, stopPushToTalkAndSend, isPushToTalkBusy } = await import("../src/voice/session");
+      const { startPushToTalk, stopPushToTalkAndInsert, isPushToTalkBusy } = await import("../src/voice/session");
       const { voiceLocal } = await import("../src/voice/store");
 
       await startPushToTalk("agent-1");
       const sent: string[] = [];
-      const donePromise = stopPushToTalkAndSend((text) => sent.push(text));
+      const donePromise = stopPushToTalkAndInsert((text) => sent.push(text));
       expect(voiceLocal.getState().status).toBe("transcribing");
 
-      await vi.advanceTimersByTimeAsync(15_000);
+      await vi.advanceTimersByTimeAsync(28_000);
       await donePromise;
 
       expect(sent).toEqual([]);
@@ -133,7 +137,7 @@ describe("push-to-talk mock end-to-end", () => {
     }
   });
 
-  it("mic-leak-on-session-start-fail: stops the just-opened capture when voice.session.start rejects", async () => {
+  it("a failed microphone start cancels capture without touching an agent session", async () => {
     const rpcCalls: RpcCall[] = [];
     (globalThis as unknown as { window: unknown }).window = {
       __CHIMERA_MOCK__: {
@@ -147,8 +151,9 @@ describe("push-to-talk mock end-to-end", () => {
     vi.resetModules();
 
     const stop = vi.fn().mockResolvedValue(new Blob());
+    const cancel = vi.fn();
     vi.doMock("../src/voice/audioCapture", () => ({
-      createAudioCapture: () => ({ start: () => Promise.resolve(), stop }),
+      createAudioCapture: () => ({ start: () => Promise.reject(new Error("microphone unavailable")), stop, cancel }),
     }));
 
     try {
@@ -157,10 +162,10 @@ describe("push-to-talk mock end-to-end", () => {
 
       await startPushToTalk("agent-1");
 
-      // the capture already opened the mic before the RPC failed — it must be released, not leaked.
-      expect(stop).toHaveBeenCalledTimes(1);
+      expect(cancel).toHaveBeenCalledOnce();
+      expect(rpcCalls).toEqual([]);
       expect(voiceLocal.getState().status).toBe("error");
-      expect(voiceLocal.getState().errorMessage).toBe("daemon unreachable");
+      expect(voiceLocal.getState().errorMessage).toBe("microphone unavailable");
     } finally {
       vi.doUnmock("../src/voice/audioCapture");
     }
@@ -178,12 +183,12 @@ describe("push-to-talk mock end-to-end", () => {
     }));
 
     try {
-      const { startPushToTalk, stopPushToTalkAndSend, isPushToTalkBusy, cancelPushToTalk } = await import("../src/voice/session");
+      const { startPushToTalk, stopPushToTalkAndInsert, isPushToTalkBusy, cancelPushToTalk } = await import("../src/voice/session");
       const { voiceLocal } = await import("../src/voice/store");
 
       await startPushToTalk("agent-1");
       const sent: string[] = [];
-      await stopPushToTalkAndSend((text) => sent.push(text));
+      await stopPushToTalkAndInsert((text) => sent.push(text));
 
       expect(sent).toEqual([]);
       expect(voiceLocal.getState().status).toBe("error");
@@ -191,7 +196,7 @@ describe("push-to-talk mock end-to-end", () => {
       // the control must be usable again — not permanently stuck as "busy", and the session
       // must have been told to stop even though the local capture teardown failed.
       expect(isPushToTalkBusy()).toBe(false);
-      expect(rpcCalls.some((c) => c.method === "voice.session.stop")).toBe(true);
+      expect(rpcCalls).toEqual([]);
       // cancelPushToTalk (mouseleave) requires status === "listening" in the UI — it must never
       // be needed here because this call already resolved the state on its own.
       cancelPushToTalk();

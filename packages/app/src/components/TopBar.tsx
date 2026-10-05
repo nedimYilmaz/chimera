@@ -1,8 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { attentionInbox, isOnboardingGated, type TabId, type UiState } from "@chimera/ui-state";
 import { appStore } from "../state/store";
+import { useKeyboardPreferences } from "../state/keyboardPreferences";
 import { useStore } from "../state/useStore";
-import { registerActionHandler } from "../keymap";
+import { actionChord, registerActionHandler, resolveChord } from "../keymap";
 import { APP_TABS, type AppTab } from "../keymap/rows.tabs";
 import { unseenTotal } from "../state/selectors.projects";
 import { splitTabs, type TabSplit } from "../state/selectors.tabs";
@@ -13,7 +14,7 @@ import styles from "./TopBar.module.css";
 // shadow copy (position:absolute, visibility:hidden) rather than the live
 // nav: once a slot collapses into the overflow list it un-mounts from the
 // live nav and would stop being measurable, breaking the "widening restores
-// tabs" continuity. The shadow copy always renders all nine slots so their
+// tabs" continuity. The shadow copy always renders every APP_TABS slot so their
 // natural widths stay available every recompute. .bar's own 28px gap (×2, one
 // each side of .tabs) and .tabs's own 22px inter-tab gap aren't captured by
 // getBoundingClientRect, so both are folded in as constants below — an
@@ -40,6 +41,56 @@ function measuredWidth(el: { getBoundingClientRect?: () => { width: number } } |
 
 function tabClassName(slot: AppTab, activeTab: TabId, locked: boolean): string {
   return slot.tab === null || locked ? styles.tabInert : slot.tab === activeTab ? styles.tabActive : styles.tab;
+}
+
+/** The slot's single-keystroke digit, or null when the real dispatcher does not map it to this tab.
+ * Asked of `resolveChord` (what `handleHotkey` runs on keydown) rather than read off `APP_TABS.num`,
+ * so the printed digit can never outlive the binding it advertises. Digit rows are NOT
+ * rebindable — keyboard preferences only add/rewrite the leader sequence — which is why a rebind
+ * leaves the digit live and shows up as an ADDITIONAL key in `tabKeys`. */
+function tabDigit(slot: AppTab): string | null {
+  if (slot.tab === null || slot.num === null) return null;
+  const digit = String(slot.num);
+  return resolveChord(digit, slot.tab)?.action === `tab.${slot.tab}` ? digit : null;
+}
+
+/** Every key that reaches the slot right now: the digit plus the live (possibly user-rebound)
+ * leader sequence, minus an unbound desktop row.  Deduped because a digit row's desktop chord is
+ * the digit itself until the user rebinds it. */
+function tabKeys(slot: AppTab): string[] {
+  if (slot.tab === null) return [];
+  const live = actionChord(`tab.${slot.tab}`);
+  const keys = [tabDigit(slot), live === "unbound" ? null : live].filter((k): k is string => k !== null);
+  return [...new Set(keys)];
+}
+
+/** Tooltip + aria-keyshortcuts shared by the strip and the overflow rows. The leading digit is a
+ * KEY, not a count ("0 roles" reads like "zero roles"), so it is named as a shortcut here, drawn
+ * as a keycap in tabLabel, and hidden from the accessible name.  aria-keyshortcuts exposes only the
+ * digit — deliberate scope, not a spec limit (it can carry modifier combos): a leader sequence is
+ * two keystrokes in time, which the attribute cannot express, so the tooltip and Help list it. */
+function tabShortcutProps(slot: AppTab, locked: boolean): { title: string | undefined; "aria-keyshortcuts": string | undefined } {
+  const keys = tabKeys(slot);
+  const digit = tabDigit(slot);
+  return {
+    title: locked ? "connect a provider to unlock" : keys.length > 0 ? `${slot.label} — press ${keys.join(" or ")}` : slot.title,
+    "aria-keyshortcuts": !locked && digit !== null ? digit : undefined,
+  };
+}
+
+/** One slot's content for all three render sites (strip, overflow row, measure copy) so they
+ * cannot drift apart — the measure copy only predicts the live widths while they stay identical.
+ * A plain function, not a component: the label text must stay a direct child of its button/row. */
+function tabLabel(slot: AppTab, badge: number, inboxBlocking: number) {
+  const digit = tabDigit(slot);
+  return (
+    <>
+      {digit !== null && <kbd className={styles.tabNumber} aria-hidden="true">{digit}</kbd>}
+      {digit !== null && " "}
+      {slot.label}
+      <TabBadges slot={slot} badge={badge} inboxBlocking={inboxBlocking} />
+    </>
+  );
 }
 
 function TabBadges({ slot, badge, inboxBlocking }: { slot: AppTab; badge: number; inboxBlocking: number }) {
@@ -81,6 +132,8 @@ export function TopBar() {
   // ONBOARDING-GATE R2: zero CONFIRMED accounts — every slot but "agents" is
   // locked (visible, dimmed, inert) until the first provider lands.
   const gated = useStore((s: UiState) => isOnboardingGated(s));
+  // Subscribed only so a shortcut rebind re-renders the tooltips; tabKeys reads the live value itself.
+  useKeyboardPreferences();
 
   // TOPBAR-OVERFLOW: which slots fit the strip right now, computed off real
   // measurements (see the module doc comment). Defaults to "everything
@@ -180,7 +233,7 @@ export function TopBar() {
       registerActionHandler("tab.slo", () => gatedDispatch("slo")),
       // ROLES-TAB S5: the tenth slot rides the same registry path (chord 0 + click).
       registerActionHandler("tab.roles", () => gatedDispatch("roles")),
-    registerActionHandler("tab.runs", () => gatedDispatch("runs")),
+      registerActionHandler("tab.runs", () => gatedDispatch("runs")),
       registerActionHandler("tab.next", () => gatedDispatch(cycleTab(appStore.getState().activeTab, 1))),
       registerActionHandler("tab.prev", () => gatedDispatch(cycleTab(appStore.getState().activeTab, -1))),
     ];
@@ -217,16 +270,14 @@ export function TopBar() {
                 type="button"
                 key={slot.label}
                 className={tabClassName(slot, activeTab, locked)}
-                title={locked ? "connect a provider to unlock" : slot.title}
+                {...tabShortcutProps(slot, locked)}
                 onClick={slot.tab === null || locked ? undefined : () => selectTab(slot.tab!)}
                 disabled={slot.tab === null || locked}
                 aria-current={slot.tab === activeTab ? "page" : undefined}
                 data-tab-locked={locked ? "" : undefined}
                 data-topbar-tab={slot.tab ?? slot.label}
               >
-                <span className={styles.tabNumber}>{slot.num} </span>
-                {slot.label}
-                <TabBadges slot={slot} badge={badge} inboxBlocking={inboxBlocking} />
+                {tabLabel(slot, badge, inboxBlocking)}
               </button>
             );
           })}
@@ -257,16 +308,14 @@ export function TopBar() {
                       type="button"
                       key={slot.label}
                       className={locked ? styles.overflowRowInert : styles.overflowRow}
-                      title={locked ? "connect a provider to unlock" : slot.title}
+                      {...tabShortcutProps(slot, locked)}
                       onClick={slot.tab === null || locked ? undefined : () => selectTab(slot.tab!)}
                       disabled={slot.tab === null || locked}
                       aria-current={slot.tab === activeTab ? "page" : undefined}
                       data-tab-locked={locked ? "" : undefined}
                       data-topbar-overflow-tab={slot.tab ?? slot.label}
                     >
-                      <span className={styles.tabNumber}>{slot.num} </span>
-                      {slot.label}
-                      <TabBadges slot={slot} badge={badge} inboxBlocking={inboxBlocking} />
+                      {tabLabel(slot, badge, inboxBlocking)}
                     </button>
                   );
                 })}
@@ -292,9 +341,7 @@ export function TopBar() {
             className={styles.tab}
             data-topbar-measure={slot.num}
           >
-            <span className={styles.tabNumber}>{slot.num} </span>
-            {slot.label}
-            <TabBadges slot={slot} badge={badge} inboxBlocking={inboxBlocking} />
+            {tabLabel(slot, badge, inboxBlocking)}
           </div>
         ))}
       </div>

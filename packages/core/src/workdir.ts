@@ -355,7 +355,7 @@ export function removeWorktree(mainRepo: string, workdir: string, branch: string
   } catch { /* unmerged commits: keep the branch, the work in it is not ours to destroy */ }
 }
 
-export function ensureWorkdir(spec: Pick<ResolvedAgentSpec, "isolation" | "cwd" | "agentId" | "workdirKey">): WorkdirInfo {
+export function ensureWorkdir(spec: Pick<ResolvedAgentSpec, "isolation" | "cwd" | "agentId" | "workdirKey">, options: { baseSha?: string } = {}): WorkdirInfo {
   if (spec.isolation !== "worktree") return { workdir: spec.cwd, branch: null, baseSha: null, mainRepo: null, created: false };
   const wt = worktreePath(spec);
   const branch = branchNameFor(worktreeKey(spec));
@@ -368,9 +368,10 @@ export function ensureWorkdir(spec: Pick<ResolvedAgentSpec, "isolation" | "cwd" 
   // second `git worktree add` on the same path would fail and turn the failover into
   // a hard "failed" state. The worktree from the prior attempt is ours — resume in it.
   if (existsSync(wt)) return { workdir: wt, branch, baseSha: currentHead(spec.cwd, fail), mainRepo: spec.cwd, created: false };
-  const baseSha = currentHead(spec.cwd, fail);
+  const baseSha = options.baseSha ?? currentHead(spec.cwd, fail);
+  if (!/^[a-f0-9]{40,64}$/.test(baseSha)) return fail(new Error("invalid worktree base SHA"));
   try {
-    execGitWorktreeAdd(["-C", spec.cwd, "worktree", "add", "-b", branch, wt]);
+    execGitWorktreeAdd(["-C", spec.cwd, "worktree", "add", "-b", branch, wt, baseSha]);
   } catch (e) {
     // The branch may already exist from a prior attempt whose worktree was removed
     // (e.g. cleaned up after a merge) — reuse it instead of failing the retry.

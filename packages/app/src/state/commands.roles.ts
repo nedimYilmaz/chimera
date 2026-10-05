@@ -8,6 +8,12 @@
 import type { UiStore } from "@chimera/ui-state";
 import { buildRemoveTeamRolePatch } from "@chimera/ui-state";
 import type { RequestFn } from "./commands.coord";
+import { createLoadStatus, runLoad, type LoadStatus } from "./loadStatus";
+
+/** Library load state (loading / failed / stale / unsupported) — module singleton like the other
+ * `*Local` stores so RolesScreen and the commands agree on it without a reducer field (see
+ * loadStatus.ts for why this must not ride `connectAndLoad`). */
+export const rolesStatus: LoadStatus = createLoadStatus();
 
 const isUnknownMethod = (e: unknown): boolean => {
   if (typeof e !== "object" || e === null) return false;
@@ -22,7 +28,7 @@ const errMessage = (err: unknown): string => {
 
 export type RolesCommands = ReturnType<typeof createRolesCommands>;
 
-export function createRolesCommands(store: UiStore, request: RequestFn) {
+export function createRolesCommands(store: UiStore, request: RequestFn, status: LoadStatus = rolesStatus) {
   const guarded = async (fn: () => Promise<void>): Promise<void> => {
     try {
       await fn();
@@ -33,16 +39,21 @@ export function createRolesCommands(store: UiStore, request: RequestFn) {
 
   /** §6: role.list is newer than team.* — an older daemon degrades the
    * session section to "available: false" (an upgrade-daemon notice, S5's
-   * job) instead of erroring, same tryPhase2 shape commands.coord.ts uses. */
-  const loadRoles = async (): Promise<void> => {
-    try {
-      const items = await request<Array<Record<string, unknown>>>("role.list", {});
-      store.dispatch({ type: "roles", available: true, items });
-    } catch (err) {
-      if (isUnknownMethod(err)) store.dispatch({ type: "roles", available: false, items: [] });
-      // other errors: transient — keep the previous pane contents
-    }
-  };
+   * job) instead of erroring, same tryPhase2 shape commands.coord.ts uses.
+   *
+   * Any OTHER failure is transient: the last good rows stay in the store and the failure is
+   * recorded in `status` so the pane can say "couldn't load / stale" with a retry instead of
+   * showing an empty library as fact.  Deliberately no toast (`commandError`): the pane owns it. */
+  const loadRoles = (): Promise<void> =>
+    runLoad(
+      status,
+      () => request<Array<Record<string, unknown>>>("role.list", {}),
+      (items) => store.dispatch({ type: "roles", available: true, items }),
+      {
+        isUnsupported: isUnknownMethod,
+        onUnsupported: () => store.dispatch({ type: "roles", available: false, items: [] }),
+      },
+    );
 
   return {
     loadRoles,

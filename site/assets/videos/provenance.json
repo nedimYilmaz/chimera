@@ -1,0 +1,697 @@
+{
+  "notice": "These videos film the real Chimera UI against a SCRIPTED FIXTURE daemon with fictional 'Atlas website' data. They are not a live workspace, not a recording of agents working, and not a performance measurement.",
+  "productBaseRevision": "3a6898e7783bc92d5cbc71e929fb2204a2fcd96a",
+  "productBaseTree": "de4190fe28a50d4dc9ab60430d20b20a5a91e98f",
+  "capturedAt": "2026-10-05T16:12:44.095Z",
+  "sourceRevision": "f9c0bc83cf6c094c30b39aaf329f773992dbe7a9",
+  "sourceRevisionMeaning": "Collection assembly/capture pipeline revision; each clip carries its own exact captureSourceRevision.",
+  "captureSourceRevisions": [
+    "80e27ddb0f45c17c59cf209d06a28530260f66ef",
+    "f9c0bc83cf6c094c30b39aaf329f773992dbe7a9",
+    "1073f95dcebfabecf9f2006aa3646860858caa57"
+  ],
+  "sourceTreeDirty": false,
+  "finalRecapture": "Captured using unchanged product source from the accepted QA base; fixture/capture source revision is recorded separately.",
+  "capturedWith": {
+    "browser": "Chrome/154.0.8037.93",
+    "ffmpeg": "ffmpeg version 9.0.2-https://www.martin-riedl.de Copyright (c) 2000-2026 the FFmpeg developers",
+    "webmEncoder": "libvpx (VP8)",
+    "mp4Encoder": "AVFoundation H.264 via scripts/marketing-video-mp4.swift (macOS)",
+    "ffprobe": "Final verification requires FFprobe; verification.json records its version and stream/container results. Capture probes use ffmpeg and AVAssetReader."
+  },
+  "timeline": {
+    "fps": 15,
+    "viewport": "1280x800",
+    "clockFrozenAt": "2026-01-12T09:30:00.000Z",
+    "note": "Video time is frame index / fps. Pointer glides, typing cadence and holds are scripted, so durations say nothing about live latency."
+  },
+  "onVideoDisclosure": "Demo data · scripted daemon · fictional Atlas",
+  "fixtureVsReal": {
+    "real": [
+      "The production React components: TopBar, Queues, Memory, agent inspector/ContextLinks/Resources, Projects/Canvas, ComputerUseMonitor and Footer on the production app store/reducer",
+      "Every click, keystroke and focus change is a real input event dispatched into that UI through the browser's DevTools protocol",
+      "Queue and memory screens refetch through their own coordination-event refresh path"
+    ],
+    "scripted": [
+      "The daemon: a scripted fixture answers every RPC; nothing is spawned, scheduled or executed",
+      "Task state changes (pending, in progress, done) are replayed by the script; no worker ran the task",
+      "All data is fictional: the Atlas website demo project, /demo paths and invented note text",
+      "Visual treatment: disclosure/captions/cursor overlay, production animations settled; deterministic eased camera, kinetic titles/captions and pointer/click overlays; measured fixture RTT hidden",
+      "Timing: the film is sampled at a fixed 15 frames per second, so durations here are not response times"
+    ]
+  },
+  "readability": {
+    "note": "Text size in CSS px when the 1280px-wide video fills the given player width. The UI body text is not legible at phone width; the disclosure band and the captions are the readable layer, and the text steps carry the same content.",
+    "disclosureBandPx": {
+      "390": 12.2,
+      "768": 24,
+      "1280": 40
+    },
+    "captionPx": {
+      "390": 13.4,
+      "768": 26.4,
+      "1280": 44
+    },
+    "uiBodyPx": {
+      "390": 4,
+      "768": 7.8,
+      "1280": 13
+    }
+  },
+  "reproduce": "node scripts/marketing-video.mjs --capture",
+  "determinism": "Compare two captures with: node scripts/marketing-video-verify.mjs --compare <dirA> <dirB> (decoded start/middle/end hashes; also reports full-sequence equality; container bytes are not promised identical).",
+  "clips": [
+    {
+      "id": "team-queue-lifecycle",
+      "title": "Put the next task in motion",
+      "scenario": "team/queue lifecycle on the Atlas release queue",
+      "durationSeconds": 36.733,
+      "frames": 551,
+      "uniqueFrames": 207,
+      "uiFontPx": 13,
+      "motion": [
+        {
+          "atSeconds": 9,
+          "scale": 1.35,
+          "x": -448.0000000000001,
+          "y": -122.30000000000001
+        },
+        {
+          "atSeconds": 14.066666666666666,
+          "x": 0,
+          "y": 0,
+          "scale": 1
+        },
+        {
+          "atSeconds": 28.533333333333335,
+          "scale": 1.55,
+          "x": -685.25,
+          "y": -189.89999999999998
+        }
+      ],
+      "files": {
+        "webm": {
+          "file": "chimera-team-queue-lifecycle.webm",
+          "bytes": 4203233
+        },
+        "mp4": {
+          "file": "chimera-team-queue-lifecycle.mp4",
+          "bytes": 5293830
+        },
+        "poster": "chimera-team-queue-lifecycle.poster.jpg",
+        "captions": "chimera-team-queue-lifecycle.vtt",
+        "steps": "chimera-team-queue-lifecycle.steps.txt"
+      },
+      "steps": [
+        {
+          "atSeconds": 2.6,
+          "text": "Workspace: the conductor and its team of agents"
+        },
+        {
+          "atSeconds": 4.533,
+          "text": "1 · Open the Queues tab"
+        },
+        {
+          "atSeconds": 7.533,
+          "text": "2 · Open the atlas-release queue"
+        },
+        {
+          "atSeconds": 11.667,
+          "text": "3 · Select a task, then choose “new”"
+        },
+        {
+          "atSeconds": 16.867,
+          "text": "4 · Type the task; Enter moves through fields"
+        },
+        {
+          "atSeconds": 23.067,
+          "text": "5 · Push the task: pending"
+        },
+        {
+          "atSeconds": 25.6,
+          "text": "6 · Scripted worker state: in progress"
+        },
+        {
+          "atSeconds": 28.267,
+          "text": "7 · The task finishes: done, counts update"
+        },
+        {
+          "atSeconds": 31.867,
+          "text": "State changes replayed by a scripted daemon"
+        }
+      ],
+      "probes": {
+        "webm": {
+          "tool": "ffmpeg -i banner (ffprobe is not installed)",
+          "durationSeconds": 36.73,
+          "codec": "vp8",
+          "pixelFormat": "yuv420p",
+          "width": 1280,
+          "height": 800,
+          "fps": 15
+        },
+        "mp4": {
+          "decoder": "AVAssetReader",
+          "codec": "avc1",
+          "width": 1280,
+          "height": 800,
+          "durationSeconds": 36.734,
+          "decodedFrames": 551
+        }
+      },
+      "hashes": {
+        "contentHash": "614618d00f02d013d047fe2f83cb4843a39ba91f3007de07b8d3b0d71810e864",
+        "webmDecodedHash": "fe91b4a79ec7b4429a28acf2a6d14fcb67b4272b31526df69469de6220946c42",
+        "webmSampledFrames": [
+          {
+            "index": 0,
+            "sha256": "d894ff4d91792f5f83849cd261e13a11face1e69f16f1fce5747e4f80baf7261"
+          },
+          {
+            "index": 275,
+            "sha256": "6e30d58349b47214187af61c524e8e32c24a76426858fa1446effd82f0279862"
+          },
+          {
+            "index": 550,
+            "sha256": "c380fc88f77a34215318c166857cf0673451b99a446f9a68c92e460bedb00c39"
+          }
+        ],
+        "mp4DecodedHash": "8cb24e525a36363a393b35acc694c090afaea70c228430c8eecb1526b894b9de"
+      },
+      "captureSourceRevision": "80e27ddb0f45c17c59cf209d06a28530260f66ef",
+      "capturedAt": "2026-10-05T15:55:10.138Z"
+    },
+    {
+      "id": "memory-search-link",
+      "captureSourceRevision": "f9c0bc83cf6c094c30b39aaf329f773992dbe7a9",
+      "capturedAt": "2026-10-05T16:11:43.489Z",
+      "title": "Search → open → follow a linked note",
+      "scenario": "memory search, open a note, follow a [[link]] and see the backlink",
+      "durationSeconds": 27.133,
+      "frames": 407,
+      "uniqueFrames": 162,
+      "uiFontPx": 13,
+      "motion": [
+        {
+          "atSeconds": 17.2,
+          "scale": 1.55,
+          "x": -636.025390625,
+          "y": 0
+        },
+        {
+          "atSeconds": 20.8,
+          "x": 0,
+          "y": 0,
+          "scale": 1
+        },
+        {
+          "atSeconds": 21.866666666666667,
+          "scale": 1.45,
+          "x": -576,
+          "y": -300.59999999999997
+        }
+      ],
+      "files": {
+        "webm": {
+          "file": "chimera-memory-search-link.webm",
+          "bytes": 3557456
+        },
+        "mp4": {
+          "file": "chimera-memory-search-link.mp4",
+          "bytes": 4020917
+        },
+        "poster": "chimera-memory-search-link.poster.jpg",
+        "captions": "chimera-memory-search-link.vtt",
+        "steps": "chimera-memory-search-link.steps.txt"
+      },
+      "steps": [
+        {
+          "atSeconds": 2.6,
+          "text": "Agents keep shared notes in Memory"
+        },
+        {
+          "atSeconds": 4.667,
+          "text": "1 · Open the Memory tab"
+        },
+        {
+          "atSeconds": 9,
+          "text": "2 · Search the notes for “webp”"
+        },
+        {
+          "atSeconds": 12.867,
+          "text": "3 · Open a note and read its links"
+        },
+        {
+          "atSeconds": 15.667,
+          "text": "4 · Follow the link to the connected note"
+        },
+        {
+          "atSeconds": 20.533,
+          "text": "The note links back: backlinks are listed too"
+        }
+      ],
+      "probes": {
+        "webm": {
+          "tool": "ffmpeg -i banner (ffprobe is not installed)",
+          "durationSeconds": 27.13,
+          "codec": "vp8",
+          "pixelFormat": "yuv420p",
+          "width": 1280,
+          "height": 800,
+          "fps": 15
+        },
+        "mp4": {
+          "decoder": "AVAssetReader",
+          "codec": "avc1",
+          "width": 1280,
+          "height": 800,
+          "durationSeconds": 27.134,
+          "decodedFrames": 407
+        }
+      },
+      "hashes": {
+        "contentHash": "a59846ba181885695011ee39098f1f5fa3246988694ddb784d682cc984cd9e94",
+        "webmDecodedHash": "e64762ad2ee54bae374464a29a10b72645771500a83d246ea968da2e0220dcb1",
+        "webmSampledFrames": [
+          {
+            "index": 0,
+            "sha256": "92ceb29c8c3e7739fb764650a632a63c286915737187a18b086dff4257f48ea2"
+          },
+          {
+            "index": 203,
+            "sha256": "6fffe1e3a68bc5ebe8a5c2a6d32590e15f41d4aabb1a90e16dc2411f3c622e02"
+          },
+          {
+            "index": 406,
+            "sha256": "b8e44782ee5fcd829cecbc07ee63401119a3149fdd9c8f06250a732cec109d89"
+          }
+        ],
+        "mp4DecodedHash": "456b7a34f470147ed7c9b58697205042014748ff2a451c332da99f285368f4ea"
+      }
+    },
+    {
+      "id": "context-handoff",
+      "captureSourceRevision": "1073f95dcebfabecf9f2006aa3646860858caa57",
+      "capturedAt": "2026-10-05T16:03:42.657Z",
+      "title": "Share just the context they need",
+      "scenario": "explicit context snapshot and revocation; scripted RPC only",
+      "durationSeconds": 28.333,
+      "frames": 425,
+      "uniqueFrames": 205,
+      "uiFontPx": null,
+      "motion": [
+        {
+          "atSeconds": 6.533333333333333,
+          "scale": 1.25,
+          "x": -320,
+          "y": -167
+        },
+        {
+          "atSeconds": 12.133333333333333,
+          "x": 0,
+          "y": 0,
+          "scale": 1
+        },
+        {
+          "atSeconds": 17.066666666666666,
+          "scale": 1.45,
+          "x": -576,
+          "y": -300.59999999999997
+        },
+        {
+          "atSeconds": 21.066666666666666,
+          "x": 0,
+          "y": 0,
+          "scale": 1
+        },
+        {
+          "atSeconds": 22.666666666666668,
+          "scale": 1.4,
+          "x": -511.9999999999999,
+          "y": 0
+        }
+      ],
+      "files": {
+        "webm": {
+          "file": "chimera-context-handoff.webm",
+          "bytes": 3456266
+        },
+        "mp4": {
+          "file": "chimera-context-handoff.mp4",
+          "bytes": 4332758
+        },
+        "poster": "chimera-context-handoff.poster.jpg",
+        "captions": "chimera-context-handoff.vtt",
+        "steps": "chimera-context-handoff.steps.txt"
+      },
+      "steps": [
+        {
+          "atSeconds": 2,
+          "text": "1 · Open the agent inspector"
+        },
+        {
+          "atSeconds": 5.333,
+          "text": "2 · Choose an explicit snapshot"
+        },
+        {
+          "atSeconds": 15.467,
+          "text": "3 · Pull the snapshot explicitly"
+        },
+        {
+          "atSeconds": 20.8,
+          "text": "4 · Revoke future reads"
+        }
+      ],
+      "probes": {
+        "webm": {
+          "tool": "ffmpeg -i banner (ffprobe is not installed)",
+          "durationSeconds": 28.33,
+          "codec": "vp8",
+          "pixelFormat": "yuv420p",
+          "width": 1280,
+          "height": 800,
+          "fps": 15
+        },
+        "mp4": {
+          "decoder": "AVAssetReader",
+          "codec": "avc1",
+          "width": 1280,
+          "height": 800,
+          "durationSeconds": 28.334,
+          "decodedFrames": 425
+        }
+      },
+      "hashes": {
+        "contentHash": "c69089b61bbaa75d5f1f13c6777fbbac5fdd359633130a39d3c638ae08fd007f",
+        "webmDecodedHash": "ceebbcd96472a07207ce7586c6a2b6e4e796da7b84f78ce2a240fe312b691c3e",
+        "webmSampledFrames": [
+          {
+            "index": 0,
+            "sha256": "ed5f1eed442c90446fd4f12b6ecf8e0007dcfca73bfc6be7e859cf03a6f93c37"
+          },
+          {
+            "index": 212,
+            "sha256": "69537b0f42dc0649ecdc6817f4c1ec7713a360fb139c256e713f2631c05d3e7d"
+          },
+          {
+            "index": 424,
+            "sha256": "23457de0067899894a883aa58777d87d6b43b73946c5c2f93b8008c82dd36915"
+          }
+        ],
+        "mp4DecodedHash": "62ea3b26ca56900c36207135b043bb8575b0605d8d362d0e903a6b95d9d17ac7"
+      }
+    },
+    {
+      "id": "resource-diagnostics",
+      "captureSourceRevision": "f9c0bc83cf6c094c30b39aaf329f773992dbe7a9",
+      "capturedAt": "2026-10-05T16:12:44.013Z",
+      "title": "See why new agents are waiting",
+      "scenario": "read-only resource attribution and capped admission; fictional metrics",
+      "durationSeconds": 22.533,
+      "frames": 338,
+      "uniqueFrames": 112,
+      "uiFontPx": null,
+      "motion": [
+        {
+          "atSeconds": 6.533333333333333,
+          "scale": 1.6,
+          "x": -725.6000000000001,
+          "y": -400.80000000000007
+        },
+        {
+          "atSeconds": 14.8,
+          "x": 0,
+          "y": 0,
+          "scale": 1
+        },
+        {
+          "atSeconds": 15.866666666666667,
+          "scale": 1.85,
+          "x": -629.1000000000001,
+          "y": -531.8000000000001
+        }
+      ],
+      "files": {
+        "webm": {
+          "file": "chimera-resource-diagnostics.webm",
+          "bytes": 2460041
+        },
+        "mp4": {
+          "file": "chimera-resource-diagnostics.mp4",
+          "bytes": 2795876
+        },
+        "poster": "chimera-resource-diagnostics.poster.jpg",
+        "captions": "chimera-resource-diagnostics.vtt",
+        "steps": "chimera-resource-diagnostics.steps.txt"
+      },
+      "steps": [
+        {
+          "atSeconds": 2,
+          "text": "1 · Open the agent inspector"
+        },
+        {
+          "atSeconds": 4.933,
+          "text": "2 · Inspect OS memory and CPU"
+        },
+        {
+          "atSeconds": 11.267,
+          "text": "RSS is separate from token context"
+        },
+        {
+          "atSeconds": 14.533,
+          "text": "3 · At capacity: new agents wait"
+        }
+      ],
+      "probes": {
+        "webm": {
+          "tool": "ffmpeg -i banner (ffprobe is not installed)",
+          "durationSeconds": 22.53,
+          "codec": "vp8",
+          "pixelFormat": "yuv420p",
+          "width": 1280,
+          "height": 800,
+          "fps": 15
+        },
+        "mp4": {
+          "decoder": "AVAssetReader",
+          "codec": "avc1",
+          "width": 1280,
+          "height": 800,
+          "durationSeconds": 22.534,
+          "decodedFrames": 338
+        }
+      },
+      "hashes": {
+        "contentHash": "2b071d838983fdce94411ca5fb3ce09cc0f0b478758f8b4c99cb943343378756",
+        "webmDecodedHash": "ee981c0049df6a0e174334bdeb1bba11fdece01a37ed7c0d823876bd56a86abe",
+        "webmSampledFrames": [
+          {
+            "index": 0,
+            "sha256": "ef8ecec2d6a36932bb97e8c717fe0659bc679da8a7f370ce6214c498c96219d4"
+          },
+          {
+            "index": 169,
+            "sha256": "7b59608bc65cae531fa9a6a7eca237a666d3c3af8c76a9fc055e78d2ce9142ae"
+          },
+          {
+            "index": 337,
+            "sha256": "b8e44782ee5fcd829cecbc07ee63401119a3149fdd9c8f06250a732cec109d89"
+          }
+        ],
+        "mp4DecodedHash": "7f5593127533943db9b7d1c2e353468e58845ee6c7cdca0e2b222ca3402ecaf7"
+      }
+    },
+    {
+      "id": "project-canvas",
+      "title": "Find the relationships behind the work",
+      "scenario": "existing project entities in Canvas; synthetic relationship metadata",
+      "durationSeconds": 25,
+      "frames": 375,
+      "uniqueFrames": 142,
+      "uiFontPx": null,
+      "motion": [
+        {
+          "atSeconds": 6.066666666666666,
+          "scale": 1.15,
+          "x": -191.9999999999999,
+          "y": -100.19999999999995
+        },
+        {
+          "atSeconds": 14.066666666666666,
+          "x": 0,
+          "y": 0,
+          "scale": 1
+        }
+      ],
+      "files": {
+        "webm": {
+          "file": "chimera-project-canvas.webm",
+          "bytes": 2103930
+        },
+        "mp4": {
+          "file": "chimera-project-canvas.mp4",
+          "bytes": 2345641
+        },
+        "poster": "chimera-project-canvas.poster.jpg",
+        "captions": "chimera-project-canvas.vtt",
+        "steps": "chimera-project-canvas.steps.txt"
+      },
+      "steps": [
+        {
+          "atSeconds": 2,
+          "text": "1 · Open the Atlas project"
+        },
+        {
+          "atSeconds": 4.8,
+          "text": "2 · Switch from List to Canvas"
+        },
+        {
+          "atSeconds": 9.733,
+          "text": "3 · Select an existing agent"
+        },
+        {
+          "atSeconds": 14.733,
+          "text": "4 · Filter the included entities"
+        },
+        {
+          "atSeconds": 19.2,
+          "text": "5 · Return to the accessible List"
+        }
+      ],
+      "probes": {
+        "webm": {
+          "tool": "ffmpeg -i banner (ffprobe is not installed)",
+          "durationSeconds": 25,
+          "codec": "vp8",
+          "pixelFormat": "yuv420p",
+          "width": 1280,
+          "height": 800,
+          "fps": 15
+        },
+        "mp4": {
+          "decoder": "AVAssetReader",
+          "codec": "avc1",
+          "width": 1280,
+          "height": 800,
+          "durationSeconds": 25,
+          "decodedFrames": 375
+        }
+      },
+      "hashes": {
+        "contentHash": "753e5f4dd5a1fbaee35463c0f970d99f5efc2eb26824d1acb1aed25f6b2d0425",
+        "webmDecodedHash": "1379eae7f10756f731920d1fb3defc2b78794dab3e0695b40d470ac5013f3af6",
+        "webmSampledFrames": [
+          {
+            "index": 0,
+            "sha256": "8d4bc2beb2f9afa6685a1488ae6d88872815403b308085fa98c24df411b624b1"
+          },
+          {
+            "index": 187,
+            "sha256": "fa0aa9aad8dcaa45c4389d74a1c6dfb0b2ee1c06bb825a95805f4db18e4d64e9"
+          },
+          {
+            "index": 374,
+            "sha256": "1a89db847ecccaf879571a671b19bf6c835e12e6b318a49ad383a950a24ca082"
+          }
+        ],
+        "mp4DecodedHash": "7df06cf07889f392ee64eb7f5c615280f7fa113add097b2f5fb46c0ac1af99b7"
+      },
+      "captureSourceRevision": "80e27ddb0f45c17c59cf209d06a28530260f66ef",
+      "capturedAt": "2026-10-05T15:55:10.138Z"
+    },
+    {
+      "id": "desktop-preview",
+      "captureSourceRevision": "1073f95dcebfabecf9f2006aa3646860858caa57",
+      "capturedAt": "2026-10-05T16:05:47.949Z",
+      "title": "Keep desktop control in view",
+      "scenario": "real desktop monitor with visibly labelled synthetic target; no real desktop control",
+      "durationSeconds": 23.8,
+      "frames": 357,
+      "uniqueFrames": 103,
+      "uiFontPx": null,
+      "motion": [
+        {
+          "atSeconds": 7.533333333333333,
+          "scale": 1.55,
+          "x": -704,
+          "y": -338.70000000000005
+        },
+        {
+          "atSeconds": 18.133333333333333,
+          "x": 0,
+          "y": 0,
+          "scale": 1
+        }
+      ],
+      "files": {
+        "webm": {
+          "file": "chimera-desktop-preview.webm",
+          "bytes": 2438673
+        },
+        "mp4": {
+          "file": "chimera-desktop-preview.mp4",
+          "bytes": 3015741
+        },
+        "poster": "chimera-desktop-preview.poster.jpg",
+        "captions": "chimera-desktop-preview.vtt",
+        "steps": "chimera-desktop-preview.steps.txt"
+      },
+      "steps": [
+        {
+          "atSeconds": 2,
+          "text": "1 · See the desktop control owner"
+        },
+        {
+          "atSeconds": 6.333,
+          "text": "2 · Expand the desktop preview"
+        },
+        {
+          "atSeconds": 12.667,
+          "text": "Synthetic target · action history is scripted"
+        },
+        {
+          "atSeconds": 16.933,
+          "text": "3 · Collapse to keep the workspace clear"
+        }
+      ],
+      "probes": {
+        "webm": {
+          "tool": "ffmpeg -i banner (ffprobe is not installed)",
+          "durationSeconds": 23.8,
+          "codec": "vp8",
+          "pixelFormat": "yuv420p",
+          "width": 1280,
+          "height": 800,
+          "fps": 15
+        },
+        "mp4": {
+          "decoder": "AVAssetReader",
+          "codec": "avc1",
+          "width": 1280,
+          "height": 800,
+          "durationSeconds": 23.8,
+          "decodedFrames": 357
+        }
+      },
+      "hashes": {
+        "contentHash": "c4963669bff3a1d329bc31504ff03db7bb408fb7a6ad4cc31fe2570974685e44",
+        "webmDecodedHash": "4e2ea52c434d036ef3980a62f799937cb0ad533b2e06f0e403b377244bce62d5",
+        "webmSampledFrames": [
+          {
+            "index": 0,
+            "sha256": "80229fe68dc7967e787ce25b2bcbdc03b990bdcd97d6557ce6bf73b73e3a1c0d"
+          },
+          {
+            "index": 178,
+            "sha256": "6b3c2b09797a19c77e72c9b858a2cfea7c252a4bddbbd3484b6ed1397675c770"
+          },
+          {
+            "index": 356,
+            "sha256": "a4af951f6d7d8e9ec26ac86ed1c1ebc5df62f27c5711637f99c3745cdb38ffbd"
+          }
+        ],
+        "mp4DecodedHash": "598e33ee0bae1d12948e877d3256bf74afb0cc4479ad0bf2658c14f407067098"
+      }
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+Search → open → follow a linked note
+Memory: search the shared notes, open a hit, follow its link
+
+Disclosure (on every frame): Demo data · scripted daemon · fictional Atlas
+
+[0:02] Agents keep shared notes in Memory
+[0:04] 1 · Open the Memory tab
+[0:09] 2 · Search the notes for “webp”
+[0:12] 3 · Open a note and read its links
+[0:15] 4 · Follow the link to the connected note
+[0:20] The note links back: backlinks are listed too

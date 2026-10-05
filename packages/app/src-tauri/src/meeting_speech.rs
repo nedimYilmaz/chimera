@@ -200,3 +200,21 @@ mod tests {
         assert_eq!(serde_json::to_value(event).unwrap()["utteranceId"], "22:3");
     }
 }
+
+#[tauri::command]
+pub fn local_speech_status() -> Vec<String> {
+    #[cfg(target_os = "macos")]
+    {
+        extern "C" { fn chimera_local_speech_locales(callback: extern "C" fn(*const std::ffi::c_char, *mut std::ffi::c_void), context: *mut std::ffi::c_void); }
+        extern "C" fn receive(json: *const std::ffi::c_char, context: *mut std::ffi::c_void) {
+            if json.is_null() || context.is_null() { return; }
+            unsafe { *(context as *mut Vec<String>) = serde_json::from_slice(std::ffi::CStr::from_ptr(json).to_bytes()).unwrap_or_default(); }
+        }
+        let mut locales: Vec<String> = Vec::new();
+        // Swift synchronously copies the capability JSON during this call.
+        unsafe { chimera_local_speech_locales(receive, &mut locales as *mut _ as *mut std::ffi::c_void); }
+        locales
+    }
+    #[cfg(not(target_os = "macos"))]
+    { Vec::new() }
+}

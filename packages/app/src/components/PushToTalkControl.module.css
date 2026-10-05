@@ -4,7 +4,9 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  flex-shrink: 0;
+  flex-shrink: 1;
+  min-width: 22px;
+  max-width: min(180px, 28vw);
   background: var(--raised);
   border: none;
   border-radius: var(--radius-chip);

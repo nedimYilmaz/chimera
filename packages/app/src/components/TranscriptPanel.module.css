@@ -825,3 +825,17 @@
 }
 
 .system, .toolStrip, .inlineTextSpan, .taskRow { overflow-wrap: anywhere; min-width: 0; }
+
+.outputImages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-width: 100%;
+  min-width: 0;
+  margin: 6px 0 12px;
+  overflow-wrap: anywhere;
+}
+
+[data-message-actions] { min-width:0; flex-shrink:0; }
+[data-message-actions] summary { cursor:pointer; list-style:none; padding:0 6px; }
+[data-message-actions] button { max-width:100%; white-space:normal; }

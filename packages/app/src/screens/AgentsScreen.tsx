@@ -1,3 +1,5 @@
+import { conversationForkOwnsEscape } from "../state/conversationFork";
+import { contextShareOwnsEscape } from "../state/contextLinks";
 import { WorkspaceTools } from "../components/WorkspaceTools";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { budgetResumeEffect, budgetSpendSplit, isMcpTool, unseenAgentIds, type UiState } from "@chimera/ui-state";
@@ -414,6 +416,7 @@ function AgentsWorkspace({ fleetView, setFleetView, focus }: { fleetView: Inspec
         return;
       }
       if (ev.key === "Escape") {
+        if (contextShareOwnsEscape() || conversationForkOwnsEscape()) return;
         if (escChain()) {
           ev.preventDefault();
           ev.stopImmediatePropagation();

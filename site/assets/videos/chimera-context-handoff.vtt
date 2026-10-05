@@ -1,0 +1,17 @@
+WEBVTT
+
+1
+00:00:02.000 --> 00:00:05.333
+1 · Open the agent inspector
+
+2
+00:00:05.333 --> 00:00:15.467
+2 · Choose an explicit snapshot
+
+3
+00:00:15.467 --> 00:00:20.800
+3 · Pull the snapshot explicitly
+
+4
+00:00:20.800 --> 00:00:28.333
+4 · Revoke future reads

@@ -19,10 +19,11 @@ describe("voice engine registry", () => {
     vi.resetModules();
     const { listEngines, DEFAULT_TTS_ENGINE_ID, DEFAULT_STT_ENGINE_ID } = await import("../src/voice/registry");
     const engines = listEngines();
-    expect(engines.length).toBeGreaterThanOrEqual(2);
+    expect(engines.length).toBeGreaterThanOrEqual(1);
     for (const e of engines) expect(e.isLocal).toBe(true);
     expect(engines.some((e) => e.id === DEFAULT_TTS_ENGINE_ID)).toBe(true);
-    expect(engines.some((e) => e.id === DEFAULT_STT_ENGINE_ID)).toBe(true);
+    expect(DEFAULT_STT_ENGINE_ID).toBeNull();
+    expect(engines.some(e => e.id === "mock-stt")).toBe(false);
   });
 
   it("system-tts reports healthy when window.speechSynthesis exists", async () => {
@@ -43,13 +44,13 @@ describe("voice engine registry", () => {
     (globalThis as unknown as { window: unknown }).window = { __CHIMERA_MOCK__: { rpc: async () => ({}) } };
     vi.resetModules();
     const { getDefaultSttEngine } = await import("../src/voice/registry");
-    expect(getDefaultSttEngine().meta.healthy).toBe(true);
+    expect(getDefaultSttEngine()?.meta.healthy).toBe(true);
   });
 
   it("mock-stt reports unhealthy in a real (non-mock) window — no local STT ships until S7", async () => {
     (globalThis as unknown as { window: unknown }).window = {};
     vi.resetModules();
     const { getDefaultSttEngine } = await import("../src/voice/registry");
-    expect(getDefaultSttEngine().meta.healthy).toBe(false);
+    expect(getDefaultSttEngine()).toBeUndefined();
   });
 });

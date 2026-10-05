@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, it, expect, vi } from "vitest";
 import { AgentSpecSchema } from "@chimera/protocol";
 import { ClaudeAgentBackend } from "@chimera/core/backends/claude";
@@ -44,6 +45,18 @@ const toolUse = (id: string): Msg => ({
 const userWith = (content: unknown): Msg => ({ type: "user", message: { role: "user", content } });
 
 describe("ClaudeAgentBackend tool_result output (WD Stage 1)", () => {
+  it("preserves Claude base64 image results and removes raw duplicate carriers", async () => {
+    const fixture = JSON.parse(readFileSync(new URL("./fixtures/codex-image-generation.json", import.meta.url), "utf8"));
+    const evs = await run([INIT, toolUse("image-result"), userWith([{ type: "tool_result", tool_use_id: "image-result", content: [
+      { type: "image", source: { type: "base64", media_type: "image/png", data: fixture.result } },
+      { type: "image", source: { type: "base64", media_type: "image/svg+xml", data: "AAAA" } },
+    ] }]), RESULT]);
+    const result = evs.find(e => e.kind === "tool_result")!;
+    expect(result.data).toMatchObject({ toolId: "image-result", images: [{ mediaType: "image/png", data: fixture.result }], imageOutputWarnings: ["invalid-or-unsupported"] });
+    expect(JSON.stringify(result.raw)).not.toContain(fixture.result);
+    expect(JSON.stringify(result.raw)).not.toContain("AAAA");
+  });
+
   it("carries a string tool_result block's text as data.result with its tool_use_id as data.toolId", async () => {
     const evs = await run([
       INIT, toolUse("tu1"),

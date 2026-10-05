@@ -92,6 +92,8 @@ export interface ChimeraEngineAccessor {
 export type RemoteControlHandleResult = Pick<import("@chimera/protocol").RemoteControlStatus, "sessionUrl" | "connectUrl" | "connectionStatus" | "serverName" | "environmentId"> | undefined;
 
 export interface AgentHandle {
+  /** Exact owned child PID; absent for in-process/SDK transports that hide it. */
+  readonly processPid?: number | null;
   command?(text: string): Promise<string>;
   isTurnActive?(): boolean;
   validateSlash?(text: string): Promise<void>;
@@ -142,10 +144,13 @@ export interface BackendCapabilities {
   // claude/codex/generic/fake capability literals stay untouched — absent means false. S3 sets
   // it explicitly per backend.
   supportsVoiceRealtime?: boolean;
+  supportsConversationFork?: boolean;
 }
 
 export interface AgentBackend {
   readonly provider: string;
   readonly capabilities: BackendCapabilities;
+  // Only advertise after proving a bounded fork can resume from another worktree.
+  forkConversation?(input: { sessionId: string; boundaryId: string; cwd: string }): Promise<{ sessionId: string; discard: () => Promise<void> }>;
   spawn(spec: ResolvedAgentSpec, sink: EventSink, decidePermission: PermissionDecider, decideDialog?: DialogDecider): AgentHandle;
 }

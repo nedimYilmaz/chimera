@@ -34,43 +34,25 @@ it("deduplicates pending microphone starts and closes a capture that arrives aft
   expect(voice.isPushToTalkBusy()).toBe(false);
 });
 
-it("closes a session whose start RPC completes after the owned gesture was cancelled", async () => {
-  let finishStart!: (record: { sessionId: string; agentId: string; state: string; startedAt: number }) => void;
-  const rpc = vi.fn((method: string, params: { agentId?: string; sessionId?: string }) => {
-    if (method === "voice.session.start") {
-      return new Promise(resolve => { finishStart = resolve; });
-    }
-    return Promise.resolve({ stopped: params.sessionId });
-  });
+it("keeps dictation local even when the daemon speech lifecycle is unavailable", async () => {
+  const rpc = vi.fn(async () => { throw Error("daemon unavailable"); });
   vi.stubGlobal("window", { __CHIMERA_MOCK__: { rpc } });
   const stop = vi.fn(async () => new Blob());
-  vi.doMock("../src/voice/audioCapture", () => ({
-    createAudioCapture: () => ({ start: () => Promise.resolve(), stop }),
-  }));
-  const voice = await import("../src/voice/session");
-
-  const pending = voice.startPushToTalk("first-agent");
-  await vi.waitFor(() => expect(rpc).toHaveBeenCalledWith("voice.session.start", { agentId: "first-agent" }));
-  voice.cancelPushToTalk();
-  finishStart({ sessionId: "late-session", agentId: "first-agent", state: "listening", startedAt: 0 });
-  await pending;
-
-  expect(stop).toHaveBeenCalledTimes(1);
-  expect(rpc).toHaveBeenCalledWith("voice.session.stop", { sessionId: "late-session" });
-  expect(voice.isPushToTalkBusy()).toBe(false);
-  const { voiceLocal } = await import("../src/voice/store");
-  expect(voiceLocal.getState().status).toBe("idle");
+  vi.doMock("../src/voice/audioCapture", () => ({ createAudioCapture: () => ({ start: async () => {}, stop }) }));
+  const voice = await import("../src/voice/session"); await voice.startPushToTalk("agent");
+  const { voiceLocal } = await import("../src/voice/store"); expect(voiceLocal.getState().status).toBe("listening");
+  voice.cancelPushToTalk(); expect(stop).toHaveBeenCalledOnce(); expect(rpc).not.toHaveBeenCalled();
 });
 
 it("never sends a late transcript after cancellation or target change", async () => {
   setupRpc();
   let finish!: (text: string) => void;
   const transcribe = vi.fn(() => new Promise<string>(resolve => { finish = resolve; }));
-  vi.doMock("../src/voice/registry", () => ({ getDefaultSttEngine: () => ({ meta: { id: "test", healthy: true }, transcribe }) }));
+  vi.doMock("../src/voice/registry", () => ({ getDefaultTtsEngine: () => ({ stopSpeaking() {} }), getDefaultSttEngine: () => ({ meta: { id: "test", healthy: true }, transcribe }) }));
   const voice = await import("../src/voice/session");
   await voice.startPushToTalk("first-agent");
   const send = vi.fn();
-  const pending = voice.stopPushToTalkAndSend(send);
+  const pending = voice.stopPushToTalkAndInsert(send);
   await vi.waitFor(() => expect(transcribe).toHaveBeenCalled());
   voice.cancelPushToTalk();
   finish("a task that no longer belongs to the selected agent");
@@ -99,4 +81,19 @@ it("releases the microphone immediately and rejects if a recorder never emits st
   const assertion = expect(pending).rejects.toThrow("did not stop");
   expect(stop).toHaveBeenCalled();
   await vi.advanceTimersByTimeAsync(5000); await assertion;
+});
+
+it("rejects unavailable local engines before requesting any microphone permission", async () => {
+  setupRpc(); const create = vi.fn();
+  vi.doMock("../src/voice/audioCapture", () => ({ createAudioCapture: create }));
+  vi.doMock("../src/voice/registry", () => ({ getDefaultSttEngine: () => undefined }));
+  const voice = await import("../src/voice/session"); await voice.startPushToTalk("agent");
+  expect(create).not.toHaveBeenCalled(); const { voiceLocal } = await import("../src/voice/store"); expect(voiceLocal.getState().errorMessage).toContain("Set up local speech");
+});
+
+it("exits recording immediately on a device/capture failure", async () => {
+  setupRpc(); let fail!: (error: Error) => void; const stop = vi.fn(async () => new Blob());
+  vi.doMock("../src/voice/audioCapture", () => ({ createAudioCapture: (callback: (error: Error) => void) => { fail = callback; return { start: async () => {}, stop }; } }));
+  const voice = await import("../src/voice/session"); await voice.startPushToTalk("agent"); fail(new Error("microphone device disconnected"));
+  const { voiceLocal } = await import("../src/voice/store"); expect(voiceLocal.getState().status).toBe("error"); expect(voiceLocal.getState().errorMessage).toContain("disconnected"); expect(voice.isPushToTalkBusy()).toBe(false); expect(stop).toHaveBeenCalledOnce();
 });

@@ -5,3 +5,6 @@
   --surface: var(--panel);
   --warning: var(--warn);
 }
+
+/* Status text is a full message, not the transcript role label column. */
+.transcript > [data-load-status] > span { width: auto; min-width: 0; }

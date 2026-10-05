@@ -7,6 +7,7 @@ import type {
 import { ensureWorkdir } from "../workdir.js";
 import { chimeraHome } from "../paths.js";
 import { boundToolResultText, toolResultText } from "./tool-result.js";
+import { toolResultImageFields, withoutRawImages } from "./tool-result-images.js";
 import { findProvider } from "../providers/catalog.js";
 import { InterruptibleTurnLoop } from "../backend-kit.js";
 import { TurnController } from "../turn-controller.js";
@@ -129,8 +130,9 @@ function mergeTurnInputs(inputs: CodexLoopInput[]): CodexLoopInput {
 export function normalizeCodexEvent(ev: CodexThreadEvent, deltas?: Map<string, string>, effectiveModel?: string, effort?: string): BackendEvent | BackendEvent[] | null {
   const result = normalizeCodexEventContent(ev, deltas, effectiveModel, effort);
   const id = (ev["item"] as CodexItem | undefined)?.["id"];
-  if (typeof id === "string") for (const event of Array.isArray(result) ? result : result ? [result] : []) {
-    if (event.kind === "tool_call" || event.kind === "tool_result") {
+  for (const event of Array.isArray(result) ? result : result ? [result] : []) {
+    event.raw = withoutRawImages(event.raw);
+    if (typeof id === "string" && (event.kind === "tool_call" || event.kind === "tool_result")) {
       event.data = { ...event.data, toolId: id, toolUseId: id };
     }
   }
@@ -225,7 +227,7 @@ function normalizeCodexEventContent(ev: CodexThreadEvent, deltas?: Map<string, s
             const text = toolResultText((item["result"] as { content?: unknown } | undefined)?.content);
             const errMsg = (item["error"] as { message?: unknown } | undefined)?.message;
             const result = text !== "" ? text : typeof errMsg === "string" && errMsg !== "" ? boundToolResultText(errMsg) : undefined;
-            return { kind: "tool_result", data: { toolName, status: item["status"], ...(result !== undefined ? { result } : {}) }, raw: ev };
+            return { kind: "tool_result", data: { toolName, status: item["status"], ...(result !== undefined ? { result } : {}), ...toolResultImageFields((item["result"] as { content?: unknown } | undefined)?.content) }, raw: ev };
           }
           return null;
         }
@@ -241,11 +243,24 @@ function normalizeCodexEventContent(ev: CodexThreadEvent, deltas?: Map<string, s
                 { kind: "tool_result", data: { toolName: "web_search" }, raw: ev },
               ]
             : null;
+        case "imageGeneration": {
+          const toolName = "image_generation";
+          if (started) return { kind: "tool_call", data: { toolName, input: {} }, raw: ev };
+          if (!completed) return null;
+          const imageFields = toolResultImageFields([{ type: "image", data: item["result"] }]);
+          return [
+            ...(item["nativeLifecycle"] === true ? [] : [{ kind: "tool_call" as const, data: { toolName, input: {} }, raw: ev }]),
+            { kind: "tool_result", data: { toolName, status: item["status"],
+              ...(item["failure"] || item["status"] === "failed" ? { isError: true, result: "Image generation failed" } : {}),
+              ...(item["status"] === "completed" && !item["failure"] ? imageFields : {}),
+            }, raw: ev },
+          ];
+        }
         case "dynamicToolCall":
         case "imageView": {
           const toolName = item.type === "imageView" ? "view_image" : String(item["tool"] ?? "dynamic_tool");
           if (started) return { kind: "tool_call", data: { toolName, input: item["arguments"] ?? { path: item["path"] } }, raw: ev };
-          return completed ? { kind: "tool_result", data: { toolName, status: item["status"], result: toolResultText(item["contentItems"]) }, raw: ev } : null;
+          return completed ? { kind: "tool_result", data: { toolName, status: item["status"], result: toolResultText(item["contentItems"]), ...toolResultImageFields(item["contentItems"]) }, raw: ev } : null;
         }
         case "todo_list":
           return completed ? { kind: "status", data: { todos: item["items"] }, raw: ev } : null;
@@ -353,6 +368,9 @@ export function assertCodexToolDeferral(
 }
 
 export function buildCodexOptions(spec: ResolvedAgentSpec): CodexFactoryOptions {
+  if (spec.contextWindow != null && (!Number.isSafeInteger(spec.contextWindow) || spec.contextWindow <= 0)) {
+    throw new Error("Codex contextWindow must be a positive safe integer");
+  }
   // The SDK does NOT inherit process.env when env is provided (verified JSDoc on CodexOptions.env
   // in @openai/codex-sdk: "the SDK will not inherit variables from process.env") — merge it explicitly.
   const env: Record<string, string> = {};
@@ -461,7 +479,8 @@ export function buildCodexOptions(spec: ResolvedAgentSpec): CodexFactoryOptions 
     };
   }
   // COMPACTION-THRESHOLD-CONFIG: codex's auto-compaction is entirely native/in-binary (see the
-  // CODEX-COMPACTION-GAP writeup above) — the only knob chimera has is the CLI's own documented
+  // CODEX-COMPACTION-GAP writeup above). The compaction target is separate from the nominal
+  // model_context_window override; never derive one from the other. The CLI's documented
   // `-c model_auto_compact_token_limit=<tokens>` config override, threaded here exactly like
   // mcp_servers above. Unset ⇒ omitted entirely, so codex keeps its own default/native trigger.
   const configOverrides: Record<string, unknown> = {
@@ -477,6 +496,7 @@ export function buildCodexOptions(spec: ResolvedAgentSpec): CodexFactoryOptions 
     model_verbosity: CODEX_MODEL_VERBOSITY,
     model_reasoning_summary: CODEX_MODEL_REASONING_SUMMARY,
     ...(Object.keys(mcpServers).length > 0 ? { mcp_servers: mcpServers } : {}),
+    ...(spec.contextWindow != null ? { model_context_window: spec.contextWindow } : {}),
     ...(spec.compactionThreshold !== undefined ? { model_auto_compact_token_limit: spec.compactionThreshold, model_auto_compact_token_limit_scope: "total" } : {}),
   };
   return {
@@ -566,7 +586,7 @@ export class CodexAgentBackend implements AgentBackend {
     let readyForSteer = Promise.resolve();
     const steerCleanups = new Set<() => void>();
     const cleanSteeredInputs = () => { for (const cleanup of steerCleanups) cleanup(); steerCleanups.clear(); };
-    let contextLimits: CodexContextLimits = { source: "codex", ...(spec.compactionThreshold ? { compactAt: spec.compactionThreshold } : {}) };
+    let contextLimits: CodexContextLimits = { source: "codex", ...(spec.contextWindow != null ? { requestedWindow: spec.contextWindow } : {}), ...(spec.compactionThreshold ? { compactAt: spec.compactionThreshold } : {}) };
     let lastText = "";
     let turns = 0;
     let turnBudgetSignaled = false;   // SOFT-TURN-LIMIT: fires once, mirrors claude.ts
@@ -684,8 +704,13 @@ export class CodexAgentBackend implements AgentBackend {
               if (!this.deps.codexFactory || this.deps.validateModel) {
                 const catalogLimits = await (this.deps.validateModel ?? validateCodexModel)(effectiveModel, effectiveEffort, !!prompt.images?.length || !!prompt.content?.some((b) => b.type === "image"), factoryOptions.env ?? process.env);
                 if (loop.killed) return;
+                if (spec.contextWindow != null) {
+                  const max = catalogLimits?.maxWindow;
+                  if (!max) throw new Error("Codex contextWindow requires a live model maximum; capacity is unknown");
+                  if (spec.contextWindow > max) throw new Error(`Codex contextWindow ${spec.contextWindow} exceeds model ${effectiveModel} maximum ${max}`);
+                }
                 if (catalogLimits) {
-                  contextLimits = { ...catalogLimits, ...(contextLimits.sessionWindow ? { sessionWindow: contextLimits.sessionWindow } : {}), ...(spec.compactionThreshold ? { compactAt: spec.compactionThreshold } : {}) };
+                  contextLimits = { ...catalogLimits, ...(spec.contextWindow != null ? { requestedWindow: spec.contextWindow } : {}), ...(contextLimits.sessionWindow ? { sessionWindow: contextLimits.sessionWindow } : {}), ...(spec.compactionThreshold ? { compactAt: spec.compactionThreshold } : {}) };
                   sink({ kind: "usage", data: { contextOnly: true, model: effectiveModel, contextLimits } });
                 }
                 controller.signal.throwIfAborted();
@@ -834,6 +859,7 @@ export class CodexAgentBackend implements AgentBackend {
     void run();
 
     return {
+      get processPid() { return codex instanceof CodexAppServer ? codex.processPid : null; },
       ...(codex instanceof CodexAppServer ? { command: (text: string) => codex.command(text) } : {}),
       isTurnActive: () => executingTurn || codex instanceof CodexAppServer && codex.isTurnActive(),
       ...(codex instanceof CodexAppServer ? { compact: () => codex.compact(), compactOwner: "sdk" as const, remoteControl: (enable: boolean) => codex.remoteControl(enable) } : {}),

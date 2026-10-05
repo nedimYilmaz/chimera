@@ -32,7 +32,7 @@ export type VoiceControlView = {
 
 const STATUS_LABEL: Record<string, string> = {
   idle: "hold to talk",
-  listening: "listening… release to send",
+  listening: "listening… release to draft",
   transcribing: "transcribing…",
   error: "mic",
 };
@@ -52,7 +52,7 @@ const CONVERSATION_LABEL: Record<string, string> = {
 const STOP_GLYPH = "■";
 const STATUS_GLYPH: Record<string, string> = { idle: "◉", listening: "●", transcribing: "◐", speaking: STOP_GLYPH, error: "⚠" };
 
-const HOLD_TITLE = "hold to talk, release to send · ⌥space for conversation mode";
+const HOLD_TITLE = "hold to talk, release to draft · ⌥space for conversation mode";
 
 export function voiceControlView(input: VoiceControlInput): VoiceControlView {
   const stopMode = input.status === "speaking";

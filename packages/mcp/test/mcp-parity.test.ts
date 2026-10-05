@@ -24,7 +24,7 @@ const CONTRACT_SRC = readFileSync(fileURLToPath(new URL("../../protocol/src/cont
 // engine.ts's own comment above it says never to fold it into handle()'s table. Slicing the
 // source to [handle() start, handlePeer() start) keeps its case labels (several of which
 // literally repeat handle()'s, e.g. "agent.status") out of this scan.
-const HANDLE_START = "async handle(method: string, params: unknown): Promise<unknown> {";
+const HANDLE_START = "async handle(method: string, params: unknown";
 const HANDLE_PEER_START = "async handlePeer(peerEngineId: string, method: string, params: unknown): Promise<unknown> {";
 function localHandleBody(): string {
   const start = ENGINE_SRC.indexOf(HANDLE_START);
@@ -79,6 +79,11 @@ const DYNAMIC_OR_ALIAS_COVERED = new Set([
 // case in handle() at all -- it lives only in handlePeer(), the peer-authenticated wire
 // entrypoint, so it never reaches this scan.
 const INTENTIONALLY_EXCLUDED_RPCS = new Set([
+  "canvas.saveLayout", // Cosmetic private operator layout; agents read the graph only.
+  // Agents must never mint pairing codes or activate a network surface.
+  "operatorweb.status", "operatorweb.enable", "operatorweb.disable", "operatorweb.pairStart", "operatorweb.sessionList", "operatorweb.sessionRevoke", "operatorweb.settingsSet",
+  // Local executable install and private microphone-derived content are operator-only.
+  "stt.configure", "stt.install", "stt.installCancel", "stt.uninstall", "stt.transcribe", "stt.transcribeCancel",
   // Only consent requests and end-own-conversation are agent tools. SDP, mic
   // approval, the inbox and private voice history belong to the desktop operator.
   "voice.native.check", "voice.native.configure", "voice.native.start", "voice.native.poll",
@@ -206,16 +211,6 @@ const INTENTIONALLY_EXCLUDED_RPCS = new Set([
   //    landed a tool), carried over unfixed from the SESSION-TIER landing — same "known gap, not
   //    introduced here" posture, made explicit instead of leaving the suite silently red.
   "mcpstore.setAuth", "voice.realtime.token", "mcpstore.oauth.cancel",
-  //  - group.list/create/update/delete, agent.setGroups . AGENT-GROUPS Phase 1: an operator-
-  //    defined wrapper-box/UI-placement concept (core/src/groups.ts's GroupStore), purely
-  //    cosmetic — putting an agent in "sprint" vs "daily" has zero bearing on what that agent
-  //    can do or how it's scheduled. Deliberately NOT promoted to an agent-facing MCP tool
-  //    (design record, memory 5afcf282): an agent grouping itself is meaningless (it has no
-  //    concept of the operator's own visual organization), and every new MCP tool costs
-  //    tool-surface tokens on EVERY spawn — a repo actively driving that number down. Assign/
-  //    create/rename/delete all live app-only (AgentList's box UI, AgentDetailPanel's assign
-  //    control).
-  "group.list", "group.create", "group.update", "group.delete", "agent.setGroups",
   //  - budget.resume . F50 BUDGET-RESUME: releasing a budget pause is the release valve on the
   //    fleet's hardest guardrail, so the ONE principal who must never reach it is an agent that
   //    just got paused for overspending. chimera_call dispatches nothing outside MCP_TOOLS, so

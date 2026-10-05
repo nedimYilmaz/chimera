@@ -29,7 +29,7 @@ export const PROVIDERS: ProviderProfile[] = [
     authHeader: "x-api-key",
     extraHeaders: { "anthropic-version": "2023-06-01" },
     authModes: ["apiKey", "oauth"],
-    capabilities: { tools: true, vision: true, streaming: true, realtime: false },
+    capabilities: { conversationFork: false, tools: true, vision: true, streaming: true, realtime: false },
     envVar: "ANTHROPIC_API_KEY",
     tosNote: "Claude Pro/Max subscription access rides the official Claude Agent SDK login "
       + "(this app's existing `claude` backend, subscription/CLAUDE_CONFIG_DIR) — chimera "
@@ -56,7 +56,7 @@ export const PROVIDERS: ProviderProfile[] = [
     baseUrl: "https://api.kimi.com",
     defaultModel: "kimi-k3", models: ["kimi-k3"],
     authModes: ["oauth"],
-    capabilities: { tools: true, vision: true, streaming: true, realtime: false },
+    capabilities: { conversationFork: false, tools: true, vision: true, streaming: true, realtime: false },
     tosNote: "Kimi Code subscription access rides the operator's own installed `kimi` CLI login "
       + "(this app's `kimi` backend spawns `kimi acp` directly, subscription auth) — chimera "
       + "does not spoof or proxy Moonshot's subscription auth.",
@@ -75,7 +75,7 @@ export const PROVIDERS: ProviderProfile[] = [
     authModes: ["apiKey", "oauth"],
     // Native voice is available through app-server, subject to CLI/account
     // support. voice.native.check enforces the live agent's transport/state.
-    capabilities: { tools: true, vision: true, streaming: true, realtime: true },
+    capabilities: { conversationFork: false, tools: true, vision: true, streaming: true, realtime: true },
     envVar: "OPENAI_API_KEY",
     tosNote: "ChatGPT Plus/Pro subscription access rides the official Codex SDK login "
       + "(this app's existing `codex` backend, subscription/CODEX_HOME) — tolerated for "
@@ -94,7 +94,7 @@ export const PROVIDERS: ProviderProfile[] = [
     baseUrl: "https://api.openai.com/v1", defaultModel: "gpt-5.6-sol",
     models: ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"],
     modelsEndpoint: "https://api.openai.com/v1/models",
-    authModes: ["apiKey"], capabilities: { tools: true, vision: true, streaming: true },
+    authModes: ["apiKey"], capabilities: { conversationFork: false, tools: true, vision: true, streaming: true },
     envVar: "OPENAI_API_KEY",
   },
   {
@@ -102,7 +102,7 @@ export const PROVIDERS: ProviderProfile[] = [
     baseUrl: "https://api.x.ai/v1", defaultModel: "grok-4.5",
     models: ["grok-4.5", "grok-4.3", "grok-4.20-0309-reasoning"],
     modelsEndpoint: "https://api.x.ai/v1/models",
-    authModes: ["apiKey"], capabilities: { tools: true, vision: true, streaming: true },
+    authModes: ["apiKey"], capabilities: { conversationFork: false, tools: true, vision: true, streaming: true },
     envVar: "XAI_API_KEY",
   },
   {
@@ -115,7 +115,7 @@ export const PROVIDERS: ProviderProfile[] = [
     baseUrl: "https://api.deepseek.com/v1", defaultModel: "deepseek-v4-pro",
     models: ["deepseek-v4-pro", "deepseek-v4-flash"],
     modelsEndpoint: "https://api.deepseek.com/v1/models",
-    authModes: ["apiKey"], capabilities: { tools: true, vision: false, streaming: true },
+    authModes: ["apiKey"], capabilities: { conversationFork: false, tools: true, vision: false, streaming: true },
     envVar: "DEEPSEEK_API_KEY",
   },
   {
@@ -123,7 +123,7 @@ export const PROVIDERS: ProviderProfile[] = [
     baseUrl: "https://api.moonshot.ai/v1", defaultModel: "kimi-k3",
     models: ["kimi-k3", "kimi-k2.7-code", "kimi-k2.7-code-highspeed", "kimi-k2.6"],
     modelsEndpoint: "https://api.moonshot.ai/v1/models",
-    authModes: ["apiKey"], capabilities: { tools: true, vision: true, streaming: true },
+    authModes: ["apiKey"], capabilities: { conversationFork: false, tools: true, vision: true, streaming: true },
     envVar: "MOONSHOT_API_KEY",
     // F23-1B (research doc §A): moonshot documents a 2h request timeout for long agentic
     // turns -- the fetch transport has no implicit timeout of its own, but this keeps the
@@ -135,7 +135,7 @@ export const PROVIDERS: ProviderProfile[] = [
     baseUrl: "https://api.mistral.ai/v1", defaultModel: "mistral-medium-2604",
     models: ["mistral-medium-2604", "mistral-large-2512", "mistral-small-2603"],
     modelsEndpoint: "https://api.mistral.ai/v1/models",
-    authModes: ["apiKey"], capabilities: { tools: true, vision: true, streaming: true },
+    authModes: ["apiKey"], capabilities: { conversationFork: false, tools: true, vision: true, streaming: true },
     envVar: "MISTRAL_API_KEY",
   },
   {
@@ -148,7 +148,7 @@ export const PROVIDERS: ProviderProfile[] = [
     // this entry is the intl base; a `us`/`cn` account override swaps baseUrl+modelsEndpoint
     // to https://dashscope-us.aliyuncs.com/compatible-mode/v1 or
     // https://dashscope.aliyuncs.com/compatible-mode/v1 respectively (see docs/providers/qwen.md).
-    authModes: ["apiKey"], capabilities: { tools: true, vision: true, streaming: true },
+    authModes: ["apiKey"], capabilities: { conversationFork: false, tools: true, vision: true, streaming: true },
     envVar: "DASHSCOPE_API_KEY",
   },
   {
@@ -164,7 +164,7 @@ export const PROVIDERS: ProviderProfile[] = [
     baseUrl: "https://api.groq.com/openai/v1", defaultModel: "openai/gpt-oss-120b",
     models: ["openai/gpt-oss-120b", "qwen/qwen3.6-27b", "groq/compound", "llama-3.3-70b-versatile", "llama-3.1-8b-instant"],
     modelsEndpoint: "https://api.groq.com/openai/v1/models",
-    authModes: ["apiKey"], capabilities: { tools: true, vision: false, streaming: true },
+    authModes: ["apiKey"], capabilities: { conversationFork: false, tools: true, vision: false, streaming: true },
     envVar: "GROQ_API_KEY",
   },
   {
@@ -177,7 +177,7 @@ export const PROVIDERS: ProviderProfile[] = [
     // `capabilities.tools: true` is an aggregate ceiling, not a per-model guarantee. A
     // per-model capability table is a fast-follow once F23-2B's providers.list RPC consumes
     // modelsEndpoint responses (docs/providers/together.md tracks the caveat until then).
-    authModes: ["apiKey"], capabilities: { tools: true, vision: true, streaming: true },
+    authModes: ["apiKey"], capabilities: { conversationFork: false, tools: true, vision: true, streaming: true },
     envVar: "TOGETHER_API_KEY",
   },
   {
@@ -190,7 +190,7 @@ export const PROVIDERS: ProviderProfile[] = [
     modelsEndpoint: "https://integrate.api.nvidia.com/v1/models",
     // `org/model` ids throughout (this is where the dead meta-llama provider's models are
     // actually reachable, per research doc §D/§F.4). Billing is dev-credits, not token price.
-    authModes: ["apiKey"], capabilities: { tools: true, vision: true, streaming: true },
+    authModes: ["apiKey"], capabilities: { conversationFork: false, tools: true, vision: true, streaming: true },
     envVar: "NVIDIA_API_KEY",
   },
   {
@@ -204,7 +204,7 @@ export const PROVIDERS: ProviderProfile[] = [
     // slugs pick routing tier; tool/vision support varies per model -- read
     // `supported_parameters` off `GET /models` rather than assuming the aggregate
     // `capabilities.tools` below applies to every model.
-    authModes: ["apiKey"], capabilities: { tools: true, vision: true, streaming: true },
+    authModes: ["apiKey"], capabilities: { conversationFork: false, tools: true, vision: true, streaming: true },
     envVar: "OPENROUTER_API_KEY",
   },
   {
@@ -214,7 +214,7 @@ export const PROVIDERS: ProviderProfile[] = [
     // more than for most providers; this fallback list is likely to drift fastest.
     models: ["gpt-oss-120b", "gemma-4-31b"],
     modelsEndpoint: "https://api.cerebras.ai/v1/models",
-    authModes: ["apiKey"], capabilities: { tools: true, vision: false, streaming: true },
+    authModes: ["apiKey"], capabilities: { conversationFork: false, tools: true, vision: false, streaming: true },
     envVar: "CEREBRAS_API_KEY",
   },
   {
@@ -231,7 +231,7 @@ export const PROVIDERS: ProviderProfile[] = [
       "accounts/fireworks/models/deepseek-v4-pro", "accounts/fireworks/models/gpt-oss-120b",
     ],
     modelsEndpoint: "https://api.fireworks.ai/inference/v1/models",
-    authModes: ["apiKey"], capabilities: { tools: true, vision: true, streaming: true },
+    authModes: ["apiKey"], capabilities: { conversationFork: false, tools: true, vision: true, streaming: true },
     envVar: "FIREWORKS_API_KEY",
   },
   {
@@ -248,7 +248,7 @@ export const PROVIDERS: ProviderProfile[] = [
     // doc §D) -- see the `zai-coding` entry below for the plan-scoped subscription path.
     baseUrl: "https://api.z.ai/api/paas/v4", defaultModel: "glm-5.2", models: ["glm-5.2", "glm-5.1", "glm-5"],
     modelsEndpoint: "https://api.z.ai/api/paas/v4/models", // best-effort: OpenAI-compat convention, not explicitly confirmed in research doc
-    authModes: ["apiKey"], capabilities: { tools: true, vision: false, streaming: true },
+    authModes: ["apiKey"], capabilities: { conversationFork: false, tools: true, vision: false, streaming: true },
     envVar: "ZAI_API_KEY",
   },
   {
@@ -264,7 +264,7 @@ export const PROVIDERS: ProviderProfile[] = [
     // caller sets it via extraBody. Vision is undocumented on the compat layer -- left `false`
     // until verified; native v2 (`api.cohere.com/v2/chat`) is the fast-follow if RAG/vision
     // are needed.
-    authModes: ["apiKey"], capabilities: { tools: true, vision: false, streaming: true },
+    authModes: ["apiKey"], capabilities: { conversationFork: false, tools: true, vision: false, streaming: true },
     envVar: "COHERE_API_KEY",
   },
   // gemini: research doc §D recommends the openai-compat layer as the cheapest v1 default
@@ -280,7 +280,7 @@ export const PROVIDERS: ProviderProfile[] = [
     // Google Code Assist subscription OAuth is DEFERRED (research doc §G: live-status risk,
     // ToS-disallowed for third parties) — apiKey only until a live test + flag lands it.
     // Reasoning can't be disabled on the 3.x model family (research doc §D quirk).
-    authModes: ["apiKey"], capabilities: { tools: true, vision: true, streaming: true },
+    authModes: ["apiKey"], capabilities: { conversationFork: false, tools: true, vision: true, streaming: true },
     envVar: "GEMINI_API_KEY",
   },
   {
@@ -297,7 +297,7 @@ export const PROVIDERS: ProviderProfile[] = [
     // `{models:[{name:"models/gemini-..."}]}`, which fetchProviderModels (models.ts) strips
     // the "models/" prefix from as its second recognized shape.
     authHeader: "x-goog-api-key",
-    authModes: ["apiKey"], capabilities: { tools: true, vision: true, streaming: true },
+    authModes: ["apiKey"], capabilities: { conversationFork: false, tools: true, vision: true, streaming: true },
     envVar: "GEMINI_API_KEY",
   },
 
@@ -320,7 +320,7 @@ export const PROVIDERS: ProviderProfile[] = [
     baseUrl: "https://api.kimi.com/coding/v1", defaultModel: "k3",
     models: ["k3", "k3-256k", "kimi-for-coding", "kimi-for-coding-highspeed"],
     modelsEndpoint: "https://api.kimi.com/coding/v1/models",
-    authModes: ["apiKey"], capabilities: { tools: true, vision: true, streaming: true },
+    authModes: ["apiKey"], capabilities: { conversationFork: false, tools: true, vision: true, streaming: true },
     envVar: "KIMI_CODE_API_KEY",
     tosNote: "Plan-scoped key from a Kimi Code subscription — explicitly documented as third-party/Claude-Code-agent sanctioned.",
     // Same underlying Moonshot infra as the pay-per-token `moonshot` entry -- long agentic
@@ -337,7 +337,7 @@ export const PROVIDERS: ProviderProfile[] = [
     id: "zai-coding", label: "Z.ai GLM Coding Plan", kind: "openai-compat",
     baseUrl: "https://api.z.ai/api/coding/paas/v4", defaultModel: "glm-5.2", models: ["glm-5.2", "glm-5.1", "glm-5"],
     modelsEndpoint: "https://api.z.ai/api/coding/paas/v4/models", // best-effort: OpenAI-compat convention, not explicitly confirmed in research doc
-    authModes: ["apiKey"], capabilities: { tools: true, vision: false, streaming: true },
+    authModes: ["apiKey"], capabilities: { conversationFork: false, tools: true, vision: false, streaming: true },
     envVar: "ZAI_CODING_PLAN_API_KEY",
     tosNote: "GLM Coding Plan; coding-tools only, no prod workloads. Plan-scoped key from a GLM Coding Plan subscription — sanctioned for coding-tool use.",
   },
@@ -356,7 +356,7 @@ export const PROVIDERS: ProviderProfile[] = [
     extraHeaders: { "copilot-integration-id": "vscode-chat", "x-github-api-version": "2025-04-01" },
     authModes: ["oauth"],
     oauth: { deviceCodeUrl: "https://github.com/login/device/code", scopes: ["read:user"], clientId: "Iv1.b507a08c87ecfe98" },
-    capabilities: { tools: true, vision: true, streaming: true },
+    capabilities: { conversationFork: false, tools: true, vision: true, streaming: true },
     envVar: "COPILOT_API_KEY",
     tosNote: "Gray area for reverse-engineered clients (abuse-detection reports exist), but GitHub now "
       + "officially sanctions some third-party agent integrations.",
@@ -378,7 +378,7 @@ export const PROVIDERS: ProviderProfile[] = [
     // fetchProviderModels's fallback -- never surfaces as an error to the caller.
     modelsEndpoint: "https://cli-chat-proxy.grok.com/v1/models",
     authModes: ["oauth"], oauth: { scopes: [] },
-    capabilities: { tools: true, vision: true, streaming: true },
+    capabilities: { conversationFork: false, tools: true, vision: true, streaming: true },
     envVar: "GROK_BUILD_API_KEY",
     tosNote: "SuperGrok Heavy subscription only. Credentials come from the official Grok CLI's "
       + "~/.grok/auth.json (install it and log in there first) — chimera does not implement its "
@@ -407,7 +407,7 @@ export function customProviderProfile(id: string, cp: CustomProvider): ProviderP
     id, label: cp.label, kind: "openai-compat",
     baseUrl: cp.baseUrl, defaultModel: cp.defaultModel,
     models: [cp.defaultModel], modelsEndpoint: `${cp.baseUrl.replace(/\/$/, "")}/models`,
-    authModes: ["apiKey"], capabilities: { tools: true, vision: false, streaming: true },
+    authModes: ["apiKey"], capabilities: { conversationFork: false, tools: true, vision: false, streaming: true },
     requiresKey: cp.requiresKey, custom: true,
     // GENERIC-SPAWN-CREDENTIAL: generic.ts reads this spawn's key from spec.env[envVar] — a
     // custom provider has no natural conventional env var (it's not a real vendor SDK), so

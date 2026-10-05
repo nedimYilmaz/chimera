@@ -1,3 +1,7 @@
+export * from "./canvas.js";
+import { ForkLineageSchema } from "./fork.js";
+export * from "./fork.js";
+export * from "./issues.js";
 import { z } from "zod";
 import { VoiceLimitsSchema } from "./voice-rooms.js";
 
@@ -390,6 +394,7 @@ export const ProviderCapabilitiesSchema = z.object({
   // so existing catalog entries stay untouched; absent means false. S3 sets it explicitly per
   // provider.
   realtime: z.boolean().optional(),
+  conversationFork: z.boolean().default(false),
 }).strict();
 export type ProviderCapabilities = z.infer<typeof ProviderCapabilitiesSchema>;
 
@@ -625,6 +630,7 @@ export type WorktreeLeaseMode = z.infer<typeof WorktreeLeaseModeSchema>;
 // and a self `hash` (sha256 over every other field, computed by core's AuditLedger) so any
 // insertion/deletion/mutation breaks the chain and is detectable by walking it (audit.verify RPC).
 export const AuditActionSchema = z.enum([
+  "context_link_created", "context_link_read", "context_link_revoked",
   "host_tool", "mcp_tool", "mcp_store_call", "destructive_bash_checkpoint", "credential_resolution",
   "cloud_mutation_gated",
   // F22: a write refused (or, in "warn" mode, merely recorded) because its target sits inside a
@@ -659,7 +665,7 @@ export const AuditActionSchema = z.enum([
   // or presented and REJECTED. The rejection entry is the load-bearing one: an inbound surface
   // whose failed authentications are invisible is a claim, not a control. `resource` is
   // "mcp-listener:<grantId>"; `detail` NEVER carries the token (see LoopbackMcpListener).
-  "mcp_listener_grant",
+  "mcp_listener_grant", "operator_web_control",
 ]);
 export type AuditAction = z.infer<typeof AuditActionSchema>;
 
@@ -1562,67 +1568,9 @@ export * from "./effort.js";
 // not bring it into this module's own scope.
 import { EffortLevelSchema } from "./effort.js";
 
-// ---------- agent groups (operator-defined wrapper boxes) ----------
-// AGENT-GROUPS Phase 1: an ad-hoc, operator-named container ("sprint", "daily") an agent can
-// be placed into — purely a UI/list-placement concept (core/src/groups.ts's GroupStore never
-// touches spawn/scheduling). Reuses ui-state/teamIcon.ts's existing 8 semantic colour ids
-// verbatim rather than inventing a second palette; protocol can't import ui-state, so the set
-// is mirrored here as a literal tuple — ui-state carries a typetest asserting the two stay in
-// lockstep (TeamColorId is the source of truth; this list must never drift from it).
-export const AGENT_GROUP_COLORS = ["blue", "green", "amber", "purple", "cyan", "magenta", "red", "teal"] as const;
-export const AgentGroupColorSchema = z.enum(AGENT_GROUP_COLORS);
-export type AgentGroupColor = z.infer<typeof AgentGroupColorSchema>;
-
-// Slug id (what AgentSpec.groups / AgentRecord actually carry) — distinct from the operator-
-// facing `name`, which may carry spaces/case. Lowercase alnum/dash/underscore, 1-32 chars,
-// must start alnum.
-export const AgentGroupIdSchema = z.string().regex(/^[a-z0-9][a-z0-9_-]{0,31}$/);
-export type AgentGroupId = z.infer<typeof AgentGroupIdSchema>;
-
-export const AgentGroupSchema = z.object({
-  id: AgentGroupIdSchema,
-  name: z.string().trim().min(1).max(48),
-  // Operator-pickable; absent ⇒ the client defaults to hashTeam(id)'s pick (ui-state/
-  // teamIcon.ts) so a group is never colourless without persisting a redundant "was this
-  // ever explicitly set" bit.
-  color: AgentGroupColorSchema.optional(),
-  createdAt: z.number(),
-  order: z.number(),
-}).strict();
-export type AgentGroup = z.infer<typeof AgentGroupSchema>;
-
-export const GroupCreateParamsSchema = z.object({
-  name: z.string().trim().min(1).max(48),
-  color: AgentGroupColorSchema.optional(),
-}).strict();
-export type GroupCreateParams = z.infer<typeof GroupCreateParamsSchema>;
-
-export const GroupUpdateParamsSchema = z.object({
-  id: AgentGroupIdSchema,
-  name: z.string().trim().min(1).max(48).optional(),
-  color: AgentGroupColorSchema.optional(),
-}).strict();
-export type GroupUpdateParams = z.infer<typeof GroupUpdateParamsSchema>;
-
-export const GroupDeleteParamsSchema = z.object({
-  id: AgentGroupIdSchema,
-}).strict();
-export type GroupDeleteParams = z.infer<typeof GroupDeleteParamsSchema>;
-
-export const GroupListResultSchema = z.object({
-  groups: z.array(AgentGroupSchema),
-}).strict();
-export type GroupListResult = z.infer<typeof GroupListResultSchema>;
-
-// A membership naming a group the registry no longer has is resolve-or-ignore at READ time
-// (ui-state), never validated away here — the daemon accepts any well-formed id so a delete
-// race (list fetched, then the group deleted, then this call lands) never fails a caller that
-// did nothing wrong.
-export const AgentSetGroupsParamsSchema = z.object({
-  agentId: z.string().min(1),
-  groups: z.array(AgentGroupIdSchema).max(8),
-}).strict();
-export type AgentSetGroupsParams = z.infer<typeof AgentSetGroupsParamsSchema>;
+// Cycle-safe schemas shared by RPC and MCP.
+export * from "./agent-groups.js";
+import { AgentGroupIdSchema } from "./agent-groups.js";
 
 // F47 (fleet seen-state): the closed set of event kinds that mean "a human needs to look at this
 // agent". Deliberately excludes the high-frequency streaming kinds (message_delta,
@@ -1826,21 +1774,20 @@ export const AgentSpecSchema = z.object({
   // none. Unset falls back to the daemon-wide default (config.advisorModel), so an operator who
   // wants it fleet-wide sets it once and every spawn inherits.
   advisorModel: z.string().optional(),
-  // COMPACTION-THRESHOLD-PER-AGENT: the context window this agent compacts against, in tokens.
-  // Unset inherits the account/provider default, which inherits the model's native window — and for
-  // a 1M model that means compacting only near 1M. Measured, cost is roughly turns x average
-  // context, so a conversation allowed to reach 900k pays for 900k on every remaining turn.
-  //
-  // Per agent because the right window is a property of the WORKLOAD: a long research run needs the
-  // room, a queue worker doing bounded tasks never will. The CLI compacts at ~90% of this (measured:
-  // a 1M window peaked at 896k), so 500_000 here lands compaction near 450k. Clamped to the SDK's
-  // valid range at the backend, which reports when it clamps.
+  // Provider-native compaction setting in tokens. Unset inherits account/provider defaults.
+  // Claude uses it as a compaction window (trigger near 90%); Codex forwards it as the
+  // native total-token trigger, independently of model_context_window and reserved capacity.
+  // Per agent because long research and bounded queue work need different compaction targets.
+  // Claude clamps to its SDK range and reports the clamp; Codex retains native behavior.
   //
   // NULLABLE so agent_reconfigure can CLEAR it: absent means "unchanged" in a sparse patch, which
   // leaves no way to say "drop my override and go back to the account/provider default" — the
   // same reason maxBudgetUsd beside it is nullable. Null and absent resolve identically at spawn
   // (supervisor's `??`), so null never reaches a backend.
   compactionThreshold: z.number().int().positive().nullable().optional(),
+  // Codex-only nominal window override, independent of the compaction target. Null clears it.
+  // The CLI reports usable capacity separately after reserving tokens; core validates live max.
+  contextWindow: z.number().int().positive().nullable().optional(),
   orchestration: z.object({
     allow: z.boolean().default(false),
     maxDepth: z.number().int().positive().default(2),
@@ -1923,6 +1870,7 @@ export type AgentMembership = z.infer<typeof AgentMembershipSchema>;
 
 // ---------- normalized events (spec §5) ----------
 export const EventKindSchema = z.enum([
+  "context_link_changed",
   "agent_started", "message_delta", "message_complete", "tool_call", "tool_result",
   // R2 (inline sub-agent/workflow surfacing): `message_complete`/`tool_call`/`tool_result` gain an
   // OPTIONAL `parentToolUseId?: string` field, present only when the Claude Agent SDK tagged the
@@ -1986,6 +1934,8 @@ export const EventKindSchema = z.enum([
   //     watcher; the OLD config stays active and the daemon never crashes. The message
   //     is scrubbed of secret-shaped substrings before it is emitted (D0 invariant).
   // Both carry agentId "config" (mirrors the "project:"/"team:" system-event namespacing).
+  // Inspector registry invalidation only; consumers reload the bounded group.list snapshot.
+  "group_registry_changed",
   "config_changed",
   "config_error",
   // QUOTA-UNCOOL: an account's failover/session-limit cooldown was dropped BEFORE its stamped
@@ -3457,6 +3407,7 @@ export type PromptStall = z.infer<typeof PromptStallSchema>;
 // AgentSummarySchema is what agent.listSummary returns instead; the full record per agent is
 // still reachable via agent.status(agentId).
 export const AgentSummarySchema = z.object({
+  forkLineage: ForkLineageSchema.optional(),
   id: z.string(),
   name: z.string(),
   role: z.string().nullable(),
@@ -6450,3 +6401,12 @@ export type TerminalReadResponse = z.infer<typeof TerminalReadResponseSchema>;
 export * from "./mcp-tools.js";
 export * from "./pricing.js";
 export * from "./config-patch.js";
+
+export * from "./resources.js";
+export * from "./tool-output-images.js";
+
+export * from "./context-links.js";
+export * from "./gitops.js";
+export * from "./stt.js";
+
+export * from "./operator-web.js";

@@ -1,0 +1,17 @@
+.panel { color: var(--fg); background: var(--bg); padding: 16px; max-width: 960px; margin: 0 auto; min-width: 0; height: 100dvh; overflow-y: auto; overflow-wrap: anywhere; }
+.panel * { box-sizing: border-box; }
+.panel header, .panel nav, .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+.panel h1 { font-size: 22px; }
+.panel h2 { font-size: 18px; }
+.panel h3 { font-size: 16px; }
+.panel article { border: 1px solid var(--line); border-radius: 6px; padding: 12px; margin: 10px 0; min-width: 0; }
+.panel section { min-width: 0; }
+.panel label { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; }
+.panel label.row { flex-direction: row; }
+.panel input:not([type=checkbox]), .panel textarea { width: 100%; min-width: 0; max-width: 100%; background: var(--bg); color: var(--fg); border: 1px solid var(--line); padding: 10px; font: inherit; }
+.panel select { min-height: 44px; max-width: 100%; }
+.panel textarea { min-height: 80px; }
+.panel button { min-height: 44px; padding: 8px 12px; font: inherit; cursor: pointer; }
+.panel button:focus-visible, .panel input:focus-visible, .panel textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.panel pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 400px; overflow: auto; font-size: 13px; }
+.panel footer { margin-top: 24px; color: var(--faint); font-size: 12px; }

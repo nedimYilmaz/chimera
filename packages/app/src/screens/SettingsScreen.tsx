@@ -1,3 +1,6 @@
+import { OperatorWebSettings } from "../components/OperatorWebSettings";
+import { LocalSpeechSettings } from "../components/LocalSpeechSettings";
+import { useLocalStt } from "../voice/localStt";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { UiState } from "@chimera/ui-state";
 import { findMcpOAuthGateway, type McpOAuthGateway, type McpStoreServerSpec } from "@chimera/protocol";
@@ -600,6 +603,7 @@ function NetworkSection() {
           generation + active list, the join field + step indicator, and the
           peers table with the space→grant menu. engine.id comes from the same
           general-section read (daemon.status). */}
+      <OperatorWebSettings />
       <div data-federation-pairing-seam>
         <FederationPairing engineId={state.engineId} />
       </div>
@@ -1237,6 +1241,7 @@ export function AddMcpStoreForm({
 // ---------------------------------------------------------------------------
 
 function VoiceEngineSection() {
+  useLocalStt();
   const engines = listEngines();
   // Subscribed, not mirrored: the pref is also flipped from the command palette and this box has
   // to follow it (a useState copy silently went stale the moment anything else set it).
@@ -1260,6 +1265,7 @@ function VoiceEngineSection() {
           {speakReplies ? "replies are spoken aloud · Esc stops the current one" : "muted — voice input still works"}
         </label>
       </div>
+      <LocalSpeechSettings />
       {engines.map((e) => (
         <div className={styles.kvRow} key={e.id} data-voice-engine-row={e.id}>
           <span className={styles.kvLabel}>{e.label}</span>

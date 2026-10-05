@@ -1,0 +1,10 @@
+{
+  "type": "imageGeneration",
+  "id": "exec-synthetic-generation",
+  "status": "completed",
+  "revisedPrompt": "A synthetic pixel for transcript regression coverage.",
+  "result": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNgaPgPAAIDAYAkYfWXAAAAAElFTkSuQmCC",
+  "transparentBackground": false,
+  "failure": null,
+  "savedPath": "/synthetic/codex/generated.png"
+}

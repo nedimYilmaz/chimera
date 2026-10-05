@@ -1,10 +1,13 @@
 import type { UiState } from "@chimera/ui-state";
 import { useEffect, useRef } from "react";
+import { appStore } from "../state/store";
+import { getDefaultSttEngine } from "../voice/registry";
 import { useStore } from "../state/useStore";
-import { cancelPushToTalk, isPushToTalkBusy, startPushToTalk, stopPushToTalkAndSend, stopSpeakingNow } from "../voice/session";
+import { cancelPushToTalk, isPushToTalkBusy, startPushToTalk, stopPushToTalkAndInsert, stopSpeakingNow } from "../voice/session";
 import { useVoiceStore, voiceLocal } from "../voice/store";
 import { useSpeakReplies } from "../voice/ttsGate";
 import { voiceControlView } from "../voice/controlView";
+import { useLocalStt } from "../voice/localStt";
 import styles from "./PushToTalkControl.module.css";
 
 type GestureOwner =
@@ -22,7 +25,9 @@ function activationKey(key: string): "Enter" | "Space" | null {
 
 // Label/glyph/title copy lives in voice/controlView.ts — a pure view-model, so the operator-facing
 // wording is assertable in a node-env test without rendering React.
-export function PushToTalkControl({ agentId, onSend }: { agentId: string | null; onSend: (text: string) => void }) {
+export function PushToTalkControl({ agentId, draftOwner, onInsert }: { agentId: string | null; draftOwner?: string | null; onInsert: (text: string) => void }) {
+  const localSpeech = useLocalStt();
+  const noEngine = !!localSpeech.status && !getDefaultSttEngine();
   const connected = useStore((s: UiState) => s.connected);
   const status = useVoiceStore((s) => s.status);
   const errorMessage = useVoiceStore((s) => s.errorMessage);
@@ -58,12 +63,13 @@ export function PushToTalkControl({ agentId, onSend }: { agentId: string | null;
       }
       invalidateCapture();
     };
-  }, [agentId, connected, conversationActive]);
+  }, [agentId, draftOwner, connected, conversationActive]);
 
   // R3: while a ⌥Space conversation owns the mic, the click/hold gesture is inert — the chord is
   // the only control surface (mirrors session.ts's startPushToTalk guard).
   const begin = (owner: GestureStart): boolean => {
     if (gesture.current) return false;
+    if (noEngine && !stopMode) { appStore.dispatch({ type: "selectTab", tab: "settings" }); return false; }
     if (stopMode) {
       gesture.current = { ...owner, mode: "stop" } as GestureOwner;
       stopSpeakingNow();
@@ -80,7 +86,7 @@ export function PushToTalkControl({ agentId, onSend }: { agentId: string | null;
     // Releasing while the permission prompt/RPC is opening cancels that pending
     // capture; otherwise it could start recording after the button was released.
     if (status !== "listening") { if (isPushToTalkBusy() && status !== "transcribing") cancelPushToTalk(); return; }
-    void stopPushToTalkAndSend(onSend);
+    void stopPushToTalkAndInsert(onInsert);
   };
   const finish = (owner: GestureOwner, cancelled: boolean): void => {
     if (owner.mode === "stop") return;
@@ -89,6 +95,9 @@ export function PushToTalkControl({ agentId, onSend }: { agentId: string | null;
   };
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>): void => {
+    if (event.key === "Escape" && !conversationActive && isPushToTalkBusy()) {
+      event.preventDefault(); event.stopPropagation(); invalidateCapture(); return;
+    }
     const key = activationKey(event.key);
     if (!key) return;
     event.preventDefault();
@@ -145,7 +154,7 @@ export function PushToTalkControl({ agentId, onSend }: { agentId: string | null;
       type="button"
       className={`${styles.control} ${statusClass}${view.muted && !stopMode ? ` ${styles.muted}` : ""}`}
       disabled={disabled}
-      title={stopMode ? `${view.title} · press Space or Enter while focused` : `${view.title} · hold Space or Enter while focused, release to send`}
+      title={stopMode ? `${view.title} · press Space or Enter while focused` : `${view.title} · hold Space or Enter while focused, release to insert into draft · Esc cancels`}
       aria-label={stopMode ? "stop speaking" : undefined}
       onKeyDown={onKeyDown}
       onKeyUp={onKeyUp}
@@ -162,7 +171,7 @@ export function PushToTalkControl({ agentId, onSend }: { agentId: string | null;
       data-voice-muted={view.muted || undefined}
     >
       <span className={styles.glyph}>{view.glyph}</span>
-      <span className={styles.label}>{view.label}</span>
+      <span className={styles.label}>{noEngine && status === "idle" ? "Set up local speech" : view.label}</span>
     </button>
   );
 }

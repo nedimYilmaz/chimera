@@ -74,5 +74,6 @@ export default defineConfig({
   },
   build: {
     target: "es2022",
+    rollupOptions: { input: { desktop: path.resolve(import.meta.dirname, "index.html"), operator: path.resolve(import.meta.dirname, "operator.html") } },
   },
 });

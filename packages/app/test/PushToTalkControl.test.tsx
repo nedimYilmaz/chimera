@@ -1,3 +1,4 @@
+vi.mock("../src/voice/localStt", () => ({ useLocalStt: () => ({ appleLocales: [] }) }));
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as React from "react";
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from "react-test-renderer";
@@ -51,7 +52,7 @@ vi.mock("../src/voice/session", () => ({
   cancelPushToTalk: session.cancel,
   isPushToTalkBusy: () => session.busy,
   startPushToTalk: session.start,
-  stopPushToTalkAndSend: session.stopAndSend,
+  stopPushToTalkAndInsert: session.stopAndSend,
   stopSpeakingNow: session.stopSpeaking,
 }));
 
@@ -65,7 +66,7 @@ function fire(listeners: Map<string, Set<Listener>>, type: string): void {
 
 function mount(agentId: string | null = "a1", onSend = vi.fn()): { root: ReactTestRenderer; button: () => ReactTestInstance } {
   let root!: ReactTestRenderer;
-  act(() => { root = create(<PushToTalkControl agentId={agentId} onSend={onSend} />); });
+  act(() => { root = create(<PushToTalkControl agentId={agentId} onInsert={onSend} />); });
   return { root, button: () => root.root.findByProps({ "data-push-to-talk": true }) };
 }
 
@@ -101,7 +102,7 @@ describe("PushToTalkControl focused gesture ownership", () => {
     let root: ReactTestRenderer | undefined;
     try {
       expect(() => {
-        act(() => { root = create(<PushToTalkControl agentId="a1" onSend={() => {}} />); });
+        act(() => { root = create(<PushToTalkControl agentId="a1" onInsert={() => {}} />); });
       }).not.toThrow();
     } finally {
       if (root) act(() => root.unmount());
@@ -224,7 +225,7 @@ describe("PushToTalkControl focused gesture ownership", () => {
     const first = mount("a1");
     session.busy = true;
     act(() => { voiceLocal.dispatch({ type: "transcribing" }); });
-    act(() => { first.root.update(<PushToTalkControl agentId="a2" onSend={() => {}} />); });
+    act(() => { first.root.update(<PushToTalkControl agentId="a2" onInsert={() => {}} />); });
     expect(session.cancel).toHaveBeenCalledTimes(1);
     act(() => first.root.unmount());
 
@@ -271,7 +272,7 @@ describe("PushToTalkControl focused gesture ownership", () => {
       fire(windowListeners, "blur");
       mockDocument.hidden = true;
       fire(documentListeners, "visibilitychange");
-      root.update(<PushToTalkControl agentId="a2" onSend={() => {}} />);
+      root.update(<PushToTalkControl agentId="a2" onInsert={() => {}} />);
     });
     act(() => root.unmount());
     expect(session.cancel).not.toHaveBeenCalled();
@@ -304,4 +305,14 @@ describe("PushToTalkControl focused gesture ownership", () => {
     expect(session.cancel).not.toHaveBeenCalled();
     act(() => conversation.root.unmount());
   });
+});
+
+it("Escape on the focused mic cancels dictation and prevents insertion", () => {
+  session.cancel.mockClear(); session.stopAndSend.mockClear();
+  appStore.dispatch({ type: "connected", connected: true }); voiceLocal.dispatch({ type: "idle" });
+  const control = mount(); session.busy = true;
+  act(() => voiceLocal.dispatch({ type: "sessionStarted", sessionId: "dictation", agentId: "a1" }));
+  const event = keyEvent("Escape"); act(() => control.button().props.onKeyDown(event));
+  expect(session.cancel).toHaveBeenCalledOnce(); expect(session.stopAndSend).not.toHaveBeenCalled(); expect(event.stopPropagation).toHaveBeenCalled();
+  session.busy = false; act(() => control.root.unmount());
 });

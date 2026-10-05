@@ -18,6 +18,19 @@ function priorAgent(over: Partial<AgentRecord> & { agentId: string }): AgentReco
 }
 
 describe("replayAgentsAsOf (R2: deterministic fold-from-log, bounded to any seq)", () => {
+  it("recovers branch identity from the snapshot gap and ignores malformed lineage", () => {
+    const events = new EventLog(mkdtempSync(join(tmpdir(), "chimera-replay-")));
+    const baseline: ReplaySnapshotSource = { agents: [priorAgent({ agentId: "child" })], lastSeq: 0 };
+    const lineage = { forkedFrom: "parent", mode: "snapshot", atSeq: 17 };
+    events.append({ agentId: "child", kind: "agent_started", data: { sessionId: "child-session", forkLineage: lineage } });
+    events.append({ agentId: "child", kind: "status", data: { forkLineage: { ...lineage, atSeq: -1 } } });
+    expect(replayAgentsAsOf(baseline, events)[0]?.forkLineage).toEqual(lineage);
+    expect(baseline.agents![0]?.forkLineage).toBeUndefined();
+    const later = { ...lineage, mode: "native", atSeq: 24 };
+    events.append({ agentId: "child", kind: "status", data: { forkLineage: later } });
+    expect(replayAgentsAsOf(baseline, events)[0]?.forkLineage).toEqual(later);
+  });
+
   it("preserves restart counts through startup and interrupted turns, resetting only on completion", () => {
     const events = new EventLog(mkdtempSync(join(tmpdir(), "chimera-replay-")));
     const baseline: ReplaySnapshotSource = { agents: [priorAgent({ agentId: "a1", crashCount: 3 })], lastSeq: 0 };

@@ -4,7 +4,7 @@ import { existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import { execFile } from "node:child_process";
-import { AgentSpecSchema, ATTENTION_EVENT_KINDS, parseAgentAddress, effectiveContextLimitFor, clampCompactionThresholdForProvider, type AccountQuotaWindow, type AgentSpec, type CompactResult, type EffortLevel, type ModelMetadataLookup, type CodexContextLimits, type QuestionAnswer, type QuestionOption, type QuestionDefault, type RemoteControlStatus, type DynamicCapConfig, type ExplainCheck, type WorktreeSetupHook, type AgentSendResult, type PromptStall, type FailureDisposition, type UsageScope } from "@chimera/protocol";
+import { AgentSetGroupsParamsSchema, AgentSpecSchema, ATTENTION_EVENT_KINDS, parseAgentAddress, effectiveContextLimitFor, clampCompactionThresholdForProvider, type AccountQuotaWindow, type AgentSpec, type CompactResult, type EffortLevel, type ModelMetadataLookup, type CodexContextLimits, type QuestionAnswer, type QuestionOption, type QuestionDefault, type RemoteControlStatus, type DynamicCapConfig, type ExplainCheck, type WorktreeSetupHook, type AgentSendResult, type PromptStall, type FailureDisposition, type UsageScope } from "@chimera/protocol";
 import type { DynamicCapTracker } from "./dynamic-cap.js";
 import type { EngineToolName } from "@chimera/protocol/engine-help";
 import { mcpToolTags } from "@chimera/protocol";
@@ -157,7 +157,7 @@ export function buildCapabilityBlock(opts: { skillsUsable?: boolean } = {}): str
 // and a patch that reached those would silently mean something other than "change this setting".
 export const RECONFIGURABLE_KEYS = [
   "model", "effort", "account", "acknowledgeCodexFullAccessRisk",
-  "maxTurns", "turnLimitPolicy", "maxBudgetUsd", "compactionThreshold",
+  "maxTurns", "turnLimitPolicy", "maxBudgetUsd", "compactionThreshold", "contextWindow",
   "instructions", "autonomy", "orchestration", "loadSettings",
 ] as const;
 export const RECONFIGURABLE: ReadonlySet<string> = new Set(RECONFIGURABLE_KEYS);
@@ -363,6 +363,7 @@ export type AgentRecord = {
   // left undefined) so a fresh record is never confused with a pre-P3-T1 one. Replaces the
   // depth+createdAt parent-reconstruction heuristic in ui-state/reducer.ts's treeOrder.
   parentId: string | null;
+  forkLineage?: import("@chimera/protocol").ForkLineage;
   // CROSS-PROVIDER-HANDOFF: the reverse edge from parentId above. parentId answers "who
   // called agent.spawn to create me" (a live spawning agent); handoffFrom answers "whose
   // context was I built from" (supervisor.handoff — the source agent may already be dead by
@@ -1278,6 +1279,7 @@ export class AgentSupervisor {
       // non-handoff spawn). Deliberately NOT threaded onto opts.parentId — a handoff target
       // wasn't spawned by a live caller invoking agent.spawn, it's a continuation.
       handoffFrom?: string;
+      forkLineage?: import("@chimera/protocol").ForkLineage;
       originConductorId?: string | null;
       // OPTIONAL explicit project override. undefined ⇒ derive via deps.projectFor(spec.cwd);
       // null or a string ⇒ use exactly that value, no derivation.
@@ -1416,6 +1418,7 @@ export class AgentSupervisor {
       ...(spec.displayLabel !== undefined ? { displayLabel: spec.displayLabel, displayLabelPinned: true } : {}),
       state: "running", depth, treeId, createdAt: Date.now(), principal, attempts: [], costUsd: 0,
       parentId: opts.parentId ?? null, originConductorId: opts.originConductorId ?? null, projectId,
+      ...(opts.forkLineage ? { forkLineage: opts.forkLineage } : {}),
       ...(opts.handoffFrom !== undefined ? { handoffFrom: opts.handoffFrom } : {}),
       ...(opts.membership ? { membership: opts.membership } : {}),
       ...(opts.sessionRole !== undefined ? { sessionRole: opts.sessionRole } : {}),
@@ -1492,6 +1495,7 @@ export class AgentSupervisor {
         ...(record.spec.session ? { session: true } : {}),
         ...(record.displayLabel !== undefined ? { displayLabel: record.displayLabel } : {}),
         ...(record.projectId !== null ? { projectId: record.projectId } : {}),
+        ...(record.forkLineage ? { forkLineage: record.forkLineage } : {}),
         ...(record.handoffFrom !== undefined ? { handoffFrom: record.handoffFrom } : {}),
         ...(record.membership ? { membership: record.membership } : {}),
         ...(record.sessionRole ? { sessionRole: record.sessionRole } : {}),
@@ -1858,7 +1862,7 @@ export class AgentSupervisor {
     // compaction trigger for a configured value outside the SDK's valid range. No-op for every
     // non-claude provider (raw threshold IS their real trigger already).
     record.effectiveContextLimit = record.provider === "codex" ? compactionThreshold.value ?? 0 : effectiveContextLimitFor(effectiveModel, clampCompactionThresholdForProvider(record.provider, compactionThreshold.value), this.deps.modelCatalog);
-    if (record.provider === "codex") record.contextLimits = { source: "codex", ...(compactionThreshold.value ? { compactAt: compactionThreshold.value } : {}) };
+    if (record.provider === "codex") record.contextLimits = { source: "codex", ...(record.spec.contextWindow ? { requestedWindow: record.spec.contextWindow } : {}), ...(compactionThreshold.value ? { compactAt: compactionThreshold.value } : {}) };
     const resolved: ResolvedAgentSpec = {
       ...record.spec, ...pluginExclusions, ...(withCapabilities !== undefined ? { instructions: withCapabilities } : {}), agentId: record.agentId, accountName,
       resolvedProvider: account.provider, env, depth: record.depth,
@@ -2088,7 +2092,7 @@ export class AgentSupervisor {
       record.actualModel = e.data["model"];
       const compactionThreshold = this.resolveCompactionThreshold(record, record.accountName);
       record.effectiveContextLimit = record.provider === "codex" ? compactionThreshold.value ?? 0 : effectiveContextLimitFor(record.actualModel, clampCompactionThresholdForProvider(record.provider, compactionThreshold.value), this.deps.modelCatalog);
-      if (record.provider === "codex") record.contextLimits = { source: "codex", ...(compactionThreshold.value ? { compactAt: compactionThreshold.value } : {}) };
+      if (record.provider === "codex") record.contextLimits = { source: "codex", ...(record.spec.contextWindow ? { requestedWindow: record.spec.contextWindow } : {}), ...(compactionThreshold.value ? { compactAt: compactionThreshold.value } : {}) };
       liveModelChanged = !e.data["model"].startsWith("<");
     }
     if (record.provider === "codex" && e.data["contextLimits"] && typeof e.data["contextLimits"] === "object") {
@@ -3738,6 +3742,11 @@ export class AgentSupervisor {
   // non-running local agent's mailbox) and SubscriptionRegistry's signal delivery (subscriptions.ts,
   // via the wakeMailbox dep). Safe to call for any agentId in any state: deliverPending itself
   // already no-ops unless the record is live+running.
+  resourceProcessPid(agentId: string): number | null {
+    const record = this.status(agentId);
+    return record.state === "running" ? this.handles.get(agentId)?.processPid ?? null : null;
+  }
+
   wakeMailbox(agentId: string): void {
     this.deliverPending(agentId);
   }
@@ -4663,7 +4672,7 @@ export class AgentSupervisor {
     // Validate the entire new spec and credential BEFORE interrupting the source.
     const nextSpec = AgentSpecSchema.parse({ ...r.spec, ...patch, account: accountName, provider: account.provider, model,
       effort: patch.effort, providerOptions: {}, plugins: [],
-      compactionThreshold: patch.compactionThreshold, resume: null, resumeOnly: false,
+      compactionThreshold: patch.compactionThreshold, contextWindow: patch.contextWindow, resume: null, resumeOnly: false,
     });
     await this.deps.credentials.resolve(account.auth);
     if (this.providerTransfers.has(agentId) || this.status(agentId) !== r || r.state !== initialState) throw new GuardrailError("agent changed while preparing the provider switch; retry");
@@ -5857,16 +5866,28 @@ export class AgentSupervisor {
   // so every connected client's ui-state projection stays live without a refetch (mirrors
   // jobName/sessionRole's own `status` re-emit, not just agent.list's snapshot path).
   // Deduped, never re-validated against the group registry here — a membership naming a
-  // deleted/unknown group is a ui-state READ-time resolve-or-ignore concern (see groups.ts's
-  // header), never rejected at write time.
+  // deleted/unknown group retains the app’s raw-ID box fallback until explicitly cleared
+  // or reassigned, never rejected at write time.
   async setAgentGroups(agentId: string, groups: string[]): Promise<void> {
-    const record = this.status(agentId);                      // throws UnknownAgentError for ghosts
+    const record = this.status(agentId);
     const deduped = [...new Set(groups)];
+    AgentSetGroupsParamsSchema.parse({ agentId, groups: deduped });
     record.groups = deduped;
     this.deps.events.append({
       agentId, kind: "status",
       data: { state: record.state, groups: deduped },
     });
+  }
+
+  async changeAgentGroups(agentId: string, groups: string[], operation: "add" | "remove"): Promise<void> {
+    AgentSetGroupsParamsSchema.parse({ agentId, groups });
+    const current = this.status(agentId).groups ?? [];
+    const changes = new Set(groups);
+    // No await between reading the record and replacement: concurrent calls cannot lose
+    // another caller's membership changes, and the total cap is checked before mutation.
+    await this.setAgentGroups(agentId, operation === "add"
+      ? [...current, ...groups]
+      : current.filter((id) => !changes.has(id)));
   }
 
   // F47 (fleet seen-state): the single stamp seam. Called from every site that appends an
@@ -5954,6 +5975,14 @@ export class AgentSupervisor {
   // just emitted ONLY from the timeout fallbacks (`timedOut: true`). Emitting them here too makes
   // every client converge on the daemon's truth regardless of who answered. Omitting `timedOut`
   // is what distinguishes a real answer from the fallback.
+  /** Operator projection exposes resolver ownership, never provider handles. */
+  operatorAttention(): Array<{ id: string; agentId: string; kind: "permission" | "question" }> {
+    return [
+      ...[...this.pendingPermissions].map(([id, p]) => ({ id, agentId: p.agentId, kind: "permission" as const })),
+      ...[...this.pendingQuestions].map(([id, p]) => ({ id, agentId: p.agentId, kind: "question" as const })),
+    ];
+  }
+
   respondPermission(requestId: string, allow: boolean): boolean {
     const pending = this.pendingPermissions.get(requestId);
     if (!pending) return false;

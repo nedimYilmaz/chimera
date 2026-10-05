@@ -1,0 +1,24 @@
+{
+  "provenance": "Generated locally with macOS say, afconvert PCM16 16k mono; canonical WAV header rewritten with Python wave. No third-party audio.",
+  "host": "macOS-26.6.1-arm64-arm-64bit-Mach-O",
+  "fixtures": [
+    {
+      "language": "en",
+      "text": "Please review the changes before sending the message.",
+      "voice": "Samantha",
+      "rate": 150,
+      "sha256": "c380bd1d00965d6f0f84abeb37a9efc6634c9443343fd39213519f4bc45a8b0b",
+      "durationMs": 3071.875,
+      "observedCliSeconds": 2.18
+    },
+    {
+      "language": "tr",
+      "text": "Mesajı göndermeden önce değişiklikleri kontrol edin.",
+      "voice": "Yelda",
+      "rate": 150,
+      "sha256": "8ab29fb1dd9acaba6d8f286b24a23a7f3a1612765d2ed2e2c79d49c3a542880a",
+      "durationMs": 4209.75,
+      "observedCliSeconds": 1.26
+    }
+  ]
+}

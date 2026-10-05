@@ -62,6 +62,10 @@ function enqueueSynthesis(text: string, final: boolean, agentId: string): void {
 }
 
 function handleVoiceEvent(event: NormalizedEvent): void {
+  // A local hold owns the draft and status; unrelated agent speech must not
+  // take the mic control out of recording/transcribing or change its text.
+  const local = voiceLocal.getState();
+  if (local.sessionId?.startsWith("dictation:") && (local.status === "listening" || local.status === "transcribing")) return;
   const data = event.data;
   switch (event.kind) {
     case "voice_partial_transcript": {

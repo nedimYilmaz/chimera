@@ -169,3 +169,10 @@ describe("ArtifactStore (D13)", () => {
     expect(remaining.map((r) => r.label)).toContain("l204");
   });
 });
+it("bounds context reads against actual snapshot size, including metadata/content mismatch", () => {
+  const { dir, store } = makeStore(); const src = writeSourceFile(dir, "bounded.txt", 10);
+  const rec = store.add({ kind: "file", path: src, label: "bounded", agentId: "a", taskId: null });
+  expect(store.readContent(rec.id, 10)).toBe("x".repeat(10));
+  writeFileSync(join(dir, "artifacts", rec.id), "x".repeat(32769));
+  expect(() => store.readContent(rec.id, 32768)).toThrow(OversizeArtifactError);
+});

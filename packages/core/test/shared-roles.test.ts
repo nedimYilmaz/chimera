@@ -22,6 +22,12 @@ const BASE: RoleSpec = {
 } as unknown as RoleSpec;
 
 describe("resolveRole (ROLES-UNIFY §4)", () => {
+  it("resolves a context window from library, binding and caller without changing compaction", () => {
+    const library = fakeLibrary({ worker: { ...BASE, contextWindow: 272000, compactionThreshold: 500000 } });
+    const binding = { role: "worker", overrides: { contextWindow: 500000 } };
+    expect(resolveRole(library, binding)).toMatchObject({ contextWindow: 500000, compactionThreshold: 500000 });
+    expect(resolveRole(library, binding, { contextWindow: null })).toMatchObject({ contextWindow: null, compactionThreshold: 500000 });
+  });
   it("merge order: library defaults < binding.overrides < callerOverrides, each a shallow spread", () => {
     const library = fakeLibrary({ worker: BASE });
     const resolved = resolveRole(

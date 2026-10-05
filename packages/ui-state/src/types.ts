@@ -1,4 +1,4 @@
-import type { CodexContextLimits, AccountQuota, AccountQuotaReason, AgentGroup, ContentBlock, EffortLevel, FailureCause as ProtocolFailureCause, McpListenerStatus, MemoryGetResult, MemoryRecord, MemorySearchMode, NormalizedEvent, ReviewSession, TaskEvidence, TaskState, WakeScheduling, WorkflowSpec, WorkflowStep } from "@chimera/protocol";
+import type { CodexContextLimits, AccountQuota, AccountQuotaReason, ToolOutputImage, ToolOutputImageWarning, AgentGroup, ContentBlock, EffortLevel, FailureCause as ProtocolFailureCause, McpListenerStatus, MemoryGetResult, MemoryRecord, MemorySearchMode, NormalizedEvent, ReviewSession, TaskEvidence, TaskState, WakeScheduling, WorkflowSpec, WorkflowStep } from "@chimera/protocol";
 
 export type WorkflowGraphEdgeKind = "implicit" | "route" | "fanOutJoin" | "planResume" | "subWorkflowJoin";
 export type WorkflowGraphNode = { id: string; step: WorkflowStep };
@@ -118,7 +118,7 @@ export type MemoryCapacityView = {
 // into the row, so treating it as "everything below this is not yet in
 // transcript" never re-fetches something already shown.
 export type TranscriptItem =
-  | { role: "assistant"; text: string; streaming: boolean; ts?: number; seq?: number }
+  | { role: "assistant"; text: string; streaming: boolean; ts?: number; seq?: number; completedSeq?: number }
   // IMAGE.SHOW (TUI): a user turn now optionally carries the image(s) that rode
   // along with the message (pasted/dropped, see clipboard.ts). Additive/optional
   // -- a plain text turn omits it and renders exactly as before. AgentDetail
@@ -139,7 +139,7 @@ export type TranscriptItem =
   // TURN-COST-VISIBLE: `turnId` is the assistant message this call arrived on. Calls sharing one
   // were produced in a single model turn (one context read between them); calls with different ones
   // each cost their own. Optional — a backend that does not report it simply shows no turn count.
-  | { role: "tool"; toolName: string; input?: unknown; status: "called" | "done" | "denied"; result?: string; toolId?: string; turnId?: string; ts?: number; seq?: number }
+  | { role: "tool"; toolName: string; input?: unknown; status: "called" | "done" | "denied"; result?: string; images?: ToolOutputImage[]; imageOutputWarnings?: ToolOutputImageWarning[]; toolId?: string; turnId?: string; ts?: number; seq?: number }
   // BACKGROUND-TASK-VISIBILITY: a script the agent started and walked away from, shown inline
   // where it was started — the same treatment a tool call gets, because from the reader's side it
   // is the same question ("what is this agent doing right now"). Distinct from role:"tool" because
@@ -732,6 +732,7 @@ export type AgentView = {
   // spawn); `undefined` means an older daemon that doesn't emit the field yet —
   // treeOrder falls back to its depth+createdAt heuristic in that case (see
   // reducer.ts). Authoritative-when-present, mirroring gitBranch/shadowInfo.
+  forkLineage?: import("@chimera/protocol").ForkLineage;
   parentId?: string | null;
   originConductorId?: string | null;
   /** Derived inspector indentation; wire depth remains real spawn depth. */
@@ -961,6 +962,7 @@ export type AgentRecordLite = {
   // P3-T2: rides the SAME agent.list snapshot (AgentRecord.parentId/projectId,
   // P3-T1). See AgentView's own doc comment for the optional/defensive contract
   // (undefined = older daemon; null = a real "no parent"/"no project" value).
+  forkLineage?: import("@chimera/protocol").ForkLineage;
   parentId?: string | null;
   originConductorId?: string | null;
   projectId?: string | null;

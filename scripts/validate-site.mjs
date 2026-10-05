@@ -13,7 +13,7 @@
 // --allow-missing-assets: screenshots under site/assets/ may not exist yet in a local
 // preview. CI never passes it, so a deploy without the real images fails.
 
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, normalize, posix, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -141,7 +141,7 @@ function checkPage(htmlPath) {
 
   // Relative links/sources must resolve inside site/ (the whole Pages artifact).
   const relative = [
-    ...attrs(html, /\s(?:href|src)="([^"]+)"/g),
+    ...attrs(html, /\s(?:href|src|poster)="([^"]+)"/g),
   ].filter((u) => !/^(https?:|mailto:|data:|tel:|#)/i.test(u));
   for (const u of new Set(relative)) {
     const clean = u.replace(/[?#].*$/, "");
@@ -180,6 +180,32 @@ function checkPage(htmlPath) {
   }
 }
 for (const p of pages) checkPage(p);
+
+// Native video policy and complete bounded assets; poster URLs are checked above too.
+for (const page of pages) {
+  for (const match of read(page).matchAll(/<video\b[^>]*>[\s\S]*?<\/video>/gi)) {
+    const video = match[0], tag = video.slice(0, video.indexOf('>'));
+    for (const [ok, reason] of [[/\bcontrols\b/.test(tag),'native controls'], [/\bplaysinline\b/.test(tag),'inline playback'], [/preload="(?:none|metadata)"/.test(tag),'bounded preload'], [/poster="[^"]+"/.test(tag),'static poster'], [! /\bautoplay\b/.test(tag),'user-initiated playback'], [/<track\b[^>]*kind="captions"/.test(video),'caption track']]) if (!ok) fail(`${page}: video missing ${reason}`);
+  }
+}
+if (existsSync(join(root,'site/videos.html'))) {
+  try {
+    const provenance = JSON.parse(read('site/assets/videos/provenance.json'));
+    if (provenance.clips.length < 5 || provenance.clips.length > 7) fail('videos: expected 5–7 clips');
+    if (provenance.sourceTreeDirty) fail('videos: fixture capture source was dirty');
+    for (const clip of provenance.clips) {
+      if (clip.durationSeconds < 15 || clip.durationSeconds > 40) fail(`videos: ${clip.id} pacing`);
+      for (const format of ['webm','mp4']) {
+        const f = clip.files[format]; if (!f) { fail(`videos: ${clip.id} missing ${format}`); continue; }
+        checkRepoPath(`site/assets/videos/${f.file}`,`videos:${clip.id}`);
+        const file = join(root,'site/assets/videos',f.file);
+        if (existsSync(file) && (statSync(file).size !== f.bytes || f.bytes > 15*1024*1024)) fail(`videos: ${f.file} size mismatch or over 15 MiB`);
+      }
+      for (const name of ['poster','captions','steps']) checkRepoPath(`site/assets/videos/${clip.files[name]}`,`videos:${clip.id}`);
+      if (!idsByPage.get('site/videos.html')?.includes(clip.id)) fail(`videos: ${clip.id} missing player`);
+    }
+  } catch (e) { fail(`videos: ${e.message}`); }
+}
 
 // ——— Feature inventory (site/features.json) ———
 // features.html and the generated regions of index.html are built from it by
@@ -234,7 +260,7 @@ if (!/prefers-reduced-motion/.test(read("site/styles.css"))) fail("site/styles.c
   checkTerms(md, "README.md");
   checkToolCounts(md, "README.md");
   const inline = [...md.matchAll(/!?\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g)].map((m) => m[1]);
-  const html = attrs(md, /(?:href|src)="([^"]+)"/g);
+  const html = attrs(md, /(?:href|src|poster)="([^"]+)"/g);
   for (const u of new Set([...inline, ...html])) {
     if (u.startsWith("#") || /^(mailto:|data:)/i.test(u)) continue;
     if (/^https?:\/\//i.test(u)) {

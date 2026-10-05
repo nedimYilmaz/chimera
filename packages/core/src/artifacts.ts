@@ -132,9 +132,10 @@ export class ArtifactStore {
 
   // Dynamic Planner: reads back the snapshotted bytes of a non-"link" artifact (the plan
   // gate needs the actual JSON content, not just existence/metadata).
-  readContent(id: string): string {
+  readContent(id: string, maxBytes?: number): string {
     const rec = this.get(id);
     if (rec.kind === "link") throw new UnknownArtifactError(`artifact "${id}" is a "link" kind with no snapshotted content`);
+    if (maxBytes !== undefined && statSync(this.snapshotPath(id)).size > maxBytes) throw new OversizeArtifactError("artifact snapshot exceeds requested byte bound");
     return readFileSync(this.snapshotPath(id), "utf8");
   }
 

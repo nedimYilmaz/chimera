@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTeamList } from "../state/useTeamList";
+import { LoadStatusNote } from "../components/LoadStatusNote";
 import type { UiState } from "@chimera/ui-state";
 import { onRowKeyDown } from "../a11y";
 import { displayChord, registerActionHandler } from "../keymap";
@@ -71,6 +73,7 @@ export function TeamsScreen() {
   // PANE-RESIZE: the row carries the width and is the drag ceiling.
   const pane = usePaneRow("teams");
   const teams = useStore((s: UiState) => s.teams);
+  const teamStatus = useTeamList(coord);
   const roles = useStore((s: UiState) => s.roles);
   const teamCursor = useStore((s: UiState) => s.teamCursor);
   const detail = useStore((s: UiState) => s.teamDetail);
@@ -134,12 +137,19 @@ export function TeamsScreen() {
   const filteredRef = useRef<Array<Record<string, unknown>>>(filteredTeams);
   filteredRef.current = filteredTeams;
 
-  // Clamp the cursor when the query narrows the visible set out from under it.
+  // Keep the entity selected through insertion/reordering, including the first
+  // render of refreshed rows, so its detail/form identity never flashes to a neighbor.
+  const selectedRef = useRef<{ name: string | null; cursor: number }>({ name: null, cursor: teamCursor });
+  const effectiveCursor = useMemo(() => {
+    const { name, cursor } = selectedRef.current;
+    const at = name !== null && teamCursor === cursor ? rows.findIndex(row => row.name === name) : -1;
+    return rows.length === 0 ? 0 : Math.min(rows.length - 1, at >= 0 ? at : teamCursor);
+  }, [rows, teamCursor]);
   useEffect(() => {
-    const n = filteredTeams.length;
     const cur = appStore.getState().teamCursor;
-    if (n > 0 && cur >= n) appStore.dispatch({ type: "teamCursor", delta: n - 1 - cur });
-  }, [filteredTeams.length]);
+    if (effectiveCursor !== cur) appStore.dispatch({ type: "teamCursor", delta: effectiveCursor - cur });
+    selectedRef.current = { name: rows[effectiveCursor]?.name ?? null, cursor: effectiveCursor };
+  }, [rows, effectiveCursor]);
 
   const ownerState = useMemo(
     () => ({ agents, agentOrder, collapsed, teams, mainConductorId }),
@@ -186,14 +196,14 @@ export function TeamsScreen() {
   }, [detailQueue, coordSeq]);
 
   // tab entry + relevant events → refresh the list and any open drill
-  useEffect(() => { void coord.loadTeams(); void rolesCommands.loadRoles(); }, []);
+  useEffect(() => { void rolesCommands.loadRoles(); }, []);
   useEffect(() => { if (coordSeq > 0) void coord.refresh(); }, [coordSeq]);
 
   // Selection drives the detail fetch directly: whichever team is under the
   // cursor gets its team.status loaded immediately — a single click or an
   // arrow-key move is enough, no separate "drill" action required to see it.
   const selectedTeamName = (() => {
-    const name = filteredTeams[teamCursor]?.["name"];
+    const name = filteredTeams[effectiveCursor]?.["name"];
     return typeof name === "string" && name.length > 0 ? name : null;
   })();
   useEffect(() => {
@@ -292,8 +302,8 @@ export function TeamsScreen() {
   // W16: the chip row's target — the drilled team while a detail is open,
   // else the list cursor's row (SAME resolution requestEdit/requestDissolve
   // already use).
-  const targetName = detailName ?? rows[teamCursor]?.name ?? null;
-  const targetRunning = detail ? detail.running : rows[teamCursor]?.running ?? 0;
+  const targetName = detailName ?? rows[effectiveCursor]?.name ?? null;
+  const targetRunning = detail ? detail.running : rows[effectiveCursor]?.running ?? 0;
   const editSpec = editingTeam
     ? (detail && detailName === editingTeam ? detail.spec : teams.items.find((t) => t["name"] === editingTeam))
     : undefined;
@@ -303,14 +313,14 @@ export function TeamsScreen() {
     <div className={styles.screen}>
     <div data-screen-layout="split" className={styles.row} {...pane.rowProps}>
       <Panel
-        label={<>teams <span className={styles.countMeta}>({sortedTeams.length})</span></>}
+        label={<>teams <span className={styles.countMeta}>({teamStatus.loaded ? sortedTeams.length : "…"})</span></>}
         className={styles.master}
       >
         <SearchBox
           value={query}
           onChange={setQuery}
           placeholder="search teams (name · purpose · role · member id)"
-          count={{ shown: rows.length, total: sortedTeams.length, noun: "teams" }}
+          count={teamStatus.loaded ? { shown: rows.length, total: sortedTeams.length, noun: "teams" } : undefined}
           dataAttr="teams-search"
         />
         <div className={styles.colHead}>
@@ -319,15 +329,17 @@ export function TeamsScreen() {
           <div className={styles.colRunning}>running</div>
           <div className={styles.colQueue}>queue</div>
         </div>
-        {!teams.available ? (
+        <div className={styles.teamsBody} data-team-list role="region" aria-label="Teams list" tabIndex={0}>
+        <LoadStatusNote status={teamStatus} what="teams" hasRows={sortedTeams.length > 0} onRetry={() => { void coord.loadTeams(); }} />
+        {teamStatus.unsupported ? (
           <div className={styles.emptyHint}>teams require a Phase 2 daemon</div>
         ) : rows.length === 0 ? (
-          <div className={styles.emptyHint}>{query.trim() ? "no teams match" : `no teams — ${displayChord("mod+o")} creates one`}</div>
+          teamStatus.loaded && !teamStatus.error ? <div className={styles.emptyHint}>{query.trim() ? "no teams match" : `no teams — ${displayChord("mod+o")} creates one`}</div> : null
         ) : (
           rows.map((t, i) => (
             <div
               key={t.name}
-              className={i === teamCursor ? styles.rowSelected : styles.rowItem}
+              className={i === effectiveCursor ? styles.rowSelected : styles.rowItem}
               onClick={() => selectTeam(i)}
               onDoubleClick={() => { selectTeam(i); setAgentFocused(true); }}
               onKeyDown={onRowKeyDown(() => selectTeam(i))}
@@ -336,7 +348,7 @@ export function TeamsScreen() {
               data-team-row={t.name}
             >
               <div className={styles.colTeam}>
-                <span className={i === teamCursor ? undefined : styles.softName}>{t.name}</span>
+                <span className={i === effectiveCursor ? undefined : styles.softName}>{t.name}</span>
                 {t.owner !== null && <span className={styles.ownerMeta}> · {ownerLabel(ownerState, t.name) ?? shortId(t.owner)}</span>}
               </div>
               <div className={`${styles.colRoles} ${styles.mutedCell}`}>{t.roleCount}</div>
@@ -354,7 +366,7 @@ export function TeamsScreen() {
             </div>
           ))
         )}
-        <div className={styles.filler} />
+        </div>
         <PanelFooter>
           <div className={styles.footerRow}>
             <span>↑↓ select · enter focus agents</span>
@@ -450,6 +462,8 @@ function DetailBody({ detail, library, agents, agentIdx, setAgentIdx, queueInfo,
 }) {
   const spec = detail.spec;
   const name = str(spec["name"]);
+  const selectedAgent = agents[agentIdx];
+  const selectedAgentId = selectedAgent ? str(selectedAgent["agentId"]) : "";
   const roleSpecs = spec["roles"] && typeof spec["roles"] === "object" ? (spec["roles"] as Record<string, unknown>) : {};
   const roles = Object.keys(roleSpecs);
   const queue = typeof spec["queue"] === "string" ? (spec["queue"] as string) : null;
@@ -602,72 +616,77 @@ function DetailBody({ detail, library, agents, agentIdx, setAgentIdx, queueInfo,
           )}
         </div>
       </div>
-      <div className={styles.agentHead}>
-        <div className={styles.colState}>state</div>
-        <div className={styles.colRole}>role</div>
-        <div className={styles.colAgent}>agent</div>
-        <div className={styles.colAcct}>acct</div>
-        <div className={styles.colCost}>cost</div>
-        <div className={styles.colActivity}>activity</div>
+      <div className={styles.agentTable} role="region" aria-label="Team workers" tabIndex={0} data-team-agent-table>
+        <div className={styles.agentTableContent}>
+          <div className={styles.agentHead} data-team-agent-head>
+            <div className={styles.colState}>state</div>
+            <div className={styles.colRole}>role</div>
+            <div className={styles.colAgent}>agent</div>
+            <div className={styles.colAcct}>acct</div>
+            <div className={styles.colCost}>cost</div>
+            <div className={styles.colActivity}>activity</div>
+          </div>
+          <div className={styles.agentsBody}>
+          {agents.length === 0 ? (
+            <div className={styles.emptyHint}>no workers yet — the scheduler spawns them as tasks drain</div>
+          ) : (
+            agents.map((rec, i) => {
+              const agentId = str(rec["agentId"]);
+              const state = str(rec["state"]) || "unknown";
+              const visual = stateVisual(state);
+              const membership = rec["membership"] && typeof rec["membership"] === "object" ? (rec["membership"] as Record<string, unknown>) : undefined;
+              const account = str(rec["accountName"]);
+              const selected = i === agentIdx;
+              return (
+                <div key={agentId || i}>
+                  <div
+                    className={selected ? styles.agentRowSelected : styles.agentRow}
+                    onClick={() => setAgentIdx(i)}
+                    onDoubleClick={() => agentId && getCoordCommands(appStore, rpcCall).openAgent(agentId)}
+                    onKeyDown={onRowKeyDown(() => setAgentIdx(i))}
+                    role="button"
+                    tabIndex={0}
+                    data-team-agent={agentId}
+                  >
+                    <div className={styles.colState}>
+                      <span className={toneClass[visual.tone]}>{visual.glyph}</span>
+                      <span className={styles.mutedCell}> {state}</span>
+                    </div>
+                    <div className={`${styles.colRole} ${styles.mutedCell}`}>{str(membership?.["role"]) || "—"}</div>
+                    <div className={styles.colAgent}>
+                      <span className={selected ? undefined : styles.softName} title={agentId ? `${agentName(agentId)} · ${agentId}` : undefined}>{agentId ? agentName(agentId) : "—"}</span>
+                      {agentId && <span className={styles.idMeta}> {shortId(agentId)}</span>}
+                    </div>
+                    <div className={styles.colAcct}>
+                      {account && (
+                        <>
+                          <span style={{ color: `var(${accountToneVar(account)})` }}>▪</span>
+                          <span className={styles.mutedCell}> {account}</span>
+                        </>
+                      )}
+                    </div>
+                    <div className={`${styles.colCost} ${styles.mutedCell}`}>{fmtCost(num(rec["costUsd"]))}</div>
+                    <div className={styles.colActivity} title={str(rec["resultText"]) || agentActivity(rec)}>{agentActivity(rec)}</div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+          </div>
+        </div>
       </div>
-      <div className={styles.agentsBody}>
-      {agents.length === 0 ? (
-        <div className={styles.emptyHint}>no workers yet — the scheduler spawns them as tasks drain</div>
-      ) : (
-        agents.map((rec, i) => {
-          const agentId = str(rec["agentId"]);
-          const state = str(rec["state"]) || "unknown";
-          const visual = stateVisual(state);
-          const membership = rec["membership"] && typeof rec["membership"] === "object" ? (rec["membership"] as Record<string, unknown>) : undefined;
-          const account = str(rec["accountName"]);
-          const selected = i === agentIdx;
-          return (
-            <div key={agentId || i}>
-              <div
-                className={selected ? styles.agentRowSelected : styles.agentRow}
-                onClick={() => setAgentIdx(i)}
-                onDoubleClick={() => agentId && getCoordCommands(appStore, rpcCall).openAgent(agentId)}
-                onKeyDown={onRowKeyDown(() => setAgentIdx(i))}
-                role="button"
-                tabIndex={0}
-                data-team-agent={agentId}
-              >
-                <div className={styles.colState}>
-                  <span className={toneClass[visual.tone]}>{visual.glyph}</span>
-                  <span className={styles.mutedCell}> {state}</span>
-                </div>
-                <div className={`${styles.colRole} ${styles.mutedCell}`}>{str(membership?.["role"]) || "—"}</div>
-                <div className={styles.colAgent}>
-                  <span className={selected ? undefined : styles.softName}>{agentId ? agentName(agentId) : "—"}</span>
-                  {agentId && <span className={styles.idMeta}> {shortId(agentId)}</span>}
-                </div>
-                <div className={styles.colAcct}>
-                  {account && (
-                    <>
-                      <span style={{ color: `var(${accountToneVar(account)})` }}>▪</span>
-                      <span className={styles.mutedCell}> {account}</span>
-                    </>
-                  )}
-                </div>
-                <div className={`${styles.colCost} ${styles.mutedCell}`}>{fmtCost(num(rec["costUsd"]))}</div>
-                <div className={styles.colActivity}>{agentActivity(rec)}</div>
-              </div>
-              <Collapse open={selected}>
-                {selected ? (
-                  <AgentInspector
-                    record={rec}
-                    task={queueInfo && agentId ? taskForAgent(queueInfo.tasks, agentId) : null}
-                    retryLimit={queueInfo?.retryLimit ?? 0}
-                    owner={owner}
-                    queue={queue}
-                  />
-                ) : null}
-              </Collapse>
-            </div>
-          );
-        })
-      )}
-      </div>
+      <Collapse open={selectedAgent !== undefined} className={styles.workerInspector}>
+        {selectedAgent ? (
+          <AgentInspector
+            key={selectedAgentId}
+            record={selectedAgent}
+            task={queueInfo && selectedAgentId ? taskForAgent(queueInfo.tasks, selectedAgentId) : null}
+            retryLimit={queueInfo?.retryLimit ?? 0}
+            owner={owner}
+            queue={queue}
+          />
+        ) : null}
+      </Collapse>
       <PanelFooter>click agent → drill into transcript · esc back · {displayChord("mod+e")} edit · {displayChord("mod+shift+x")} dissolve</PanelFooter>
     </>
   );

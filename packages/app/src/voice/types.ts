@@ -11,7 +11,7 @@ export type EngineMetadata = {
 
 export interface SpeechEngine {
   readonly meta: EngineMetadata;
-  transcribe?(audio: Blob): Promise<string>;
+  transcribe?(audio: Blob, options?: { signal?: AbortSignal; language?: "en" | "tr" }): Promise<string>;
   synthesize?(text: string): Promise<void>;
   /** Cancel in-flight/queued playback — used when a turn errors mid-speech (§7). */
   stopSpeaking?(): void;

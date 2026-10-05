@@ -190,3 +190,9 @@ describe("app overlay lifecycle", () => {
     dispose();
   });
 });
+it("secondary context sharing dismisses other overlays while preserving its inline inspector and draft", () => {
+  composerLocal.set({ agentDetail: { agentId: "a" }, composeText: "draft", spawnOpen: true, targetMenuOpen: true, toolDetail: { agentId: "a", toolId: "t" } as never });
+  dismissAppLocalOverlays({ preserveAgentDetail: true });
+  expect(composerLocal.getState()).toMatchObject({ agentDetail: { agentId: "a" }, composeText: "draft", spawnOpen: false, targetMenuOpen: false, toolDetail: null });
+  dismissAppLocalOverlays(); expect(composerLocal.getState().agentDetail).toBeNull();
+});

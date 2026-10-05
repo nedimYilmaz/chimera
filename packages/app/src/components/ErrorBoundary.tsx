@@ -33,6 +33,8 @@ interface ErrorBoundaryProps {
   /** Side-channel notice hook — the caller wires the app's notice/error line
    * (console logging is unconditional and lives in the boundary). */
   onError?: (error: Error, info: ErrorInfo) => void;
+  /** Recreate a failed asynchronous child before retrying (for example React.lazy). */
+  onRetry?: () => void;
 }
 
 interface ErrorBoundaryState {
@@ -54,6 +56,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   }
 
   private reset = (): void => {
+    this.props.onRetry?.();
     this.setState({ error: null });
   };
 

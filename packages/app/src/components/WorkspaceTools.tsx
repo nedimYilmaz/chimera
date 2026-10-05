@@ -1,3 +1,5 @@
+import { ownContextActivation } from "./contextKeys";
+import { ContextLinkShareForm } from "./ContextLinkShareOverlay";
 import { useState } from "react";
 import { OverlayCard, OverlayCardHeader } from "./OverlayCard";
 import { useStore } from "../state/useStore";
@@ -19,8 +21,9 @@ export function WorkspaceTools({onClose}:{onClose:()=>void}) {
   const [values,setValues]=useState<Record<string,string>>({});
   const [message,setMessage]=useState("");
   const [note,setNote]=useState<string|null>(null);
+  const [sharing,setSharing]=useState<{agentId:string;text:string}|null>(null);
   const [noteAgent,setNoteAgent]=useState(agent?.agentId);
-  if(noteAgent!==agent?.agentId) {setNoteAgent(agent?.agentId);setNote(null);}
+  if(noteAgent!==agent?.agentId) {setNoteAgent(agent?.agentId);setNote(null);setSharing(null);}
   const save=(change:(d:WorkspaceData)=>WorkspaceData,success="Saved locally."):boolean=>{
     const error=workspaceTools.update(change);setMessage(error??success);return !error;
   };
@@ -33,7 +36,7 @@ export function WorkspaceTools({onClose}:{onClose:()=>void}) {
   const variables=templateVariables(source);
   return <OverlayCard width={880} onClose={onClose} ariaLabel="Workspace tools">
     <OverlayCardHeader title="Workspace tools" meta={agent?.displayLabel ?? "Select an agent for agent tools"} hint={<button onClick={onClose}>Close</button>}/>
-    <div className={styles.body}>
+    <div className={styles.body} onKeyDown={ownContextActivation}>
       <nav className={styles.tabs} aria-label="Workspace tool categories">{sections.map(s=><button key={s} aria-pressed={section===s} onClick={()=>{setSection(s);setMessage("");}}>{s}</button>)}</nav>
       <p className={styles.hint}>Personal tools saved on this device. Notes, drafts and templates are not sent to agents automatically.</p>
       {section==="Prompts" && <div className={styles.grid}>
@@ -49,7 +52,7 @@ export function WorkspaceTools({onClose}:{onClose:()=>void}) {
         const c=composerLocal.getState();if(c.composeText || c.pendingImages.length){setMessage("Save or clear the current composer before restoring a draft.");return;}
         composerLocal.set({composeText:draft.text,pendingImages:structuredClone(draft.images),nextImageNum:draft.nextImageNum});setMessage("Restored to the current composer. Review the recipient before sending.");
       }}>Restore</button><button aria-label={`Delete draft ${draft.name}`} onClick={()=>save(d=>({...d,drafts:d.drafts.filter(x=>x.id!==draft.id)}))}>Delete</button></article>)}</section>}
-      {section==="Notes" && <section><h3>Private operator notes</h3><p>Local notes for the selected agent, separate from its conversation.</p><textarea aria-label="Operator notes" disabled={!agent} maxLength={50000} value={note??(agent?data.notes[agent.agentId]??"":"")} onChange={e=>setNote(e.target.value)}/><button disabled={!agent} onClick={()=>agent&&save(d=>({...d,notes:{...d.notes,[agent.agentId]:note??d.notes[agent.agentId]??""}}))}>Save notes</button></section>}
+      {section==="Notes" && <section><h3>Private operator notes</h3><p>Local notes for the selected agent, separate from its conversation.</p><textarea aria-label="Operator notes" disabled={!agent} maxLength={50000} value={note??(agent?data.notes[agent.agentId]??"":"")} onChange={e=>setNote(e.target.value)}/><button disabled={!agent} onClick={()=>agent&&save(d=>({...d,notes:{...d.notes,[agent.agentId]:note??d.notes[agent.agentId]??""}}))}>Save notes</button><button type="button" data-note-share disabled={!agent||!(note??(agent?data.notes[agent.agentId]:"")??"")} onClick={()=>agent&&setSharing({agentId:agent.agentId,text:note??data.notes[agent.agentId]??""})}>Share with agent…</button>{sharing&&<ContextLinkShareForm initial={{consumer:sharing.agentId,from:{kind:"note-snapshot",ref:sharing.agentId},text:sharing.text}} onClose={()=>setSharing(null)} onShared={()=>setMessage("Immutable snapshot shared; your private note draft is preserved.")}/>}</section>}
       {section==="Bookmarks" && <section><h3>Transcript bookmarks</h3><p>Save a turn from the loaded transcript; open retrieves older pages when needed.</p>{!agent&&<p>Select an agent first.</p>}{data.bookmarks.filter(b=>b.agentId===agent?.agentId).map(b=><div className={styles.entry} key={b.id}><button onClick={()=>{openBookmark(b);onClose();}}>{b.role}: {b.text.slice(0,100)}</button><button aria-label="Delete bookmark" onClick={()=>save(d=>({...d,bookmarks:d.bookmarks.filter(x=>x.id!==b.id)}))}>Delete</button></div>)}<label>Bookmark a loaded turn<select aria-label="Bookmark turn" defaultValue="" onChange={e=>{
         const item=agent?.transcript[Number(e.target.value)];if(!agent||!item||item.seq===undefined)return;
         if(data.bookmarks.some(b=>b.agentId===agent.agentId&&b.seq===item.seq&&b.role===item.role)){setMessage("This turn is already bookmarked.");return;}

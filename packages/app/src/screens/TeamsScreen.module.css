@@ -40,9 +40,10 @@
     overflow-y: auto;
   }
 
-  .master {
+  .screen .row > .master {
     width: 100%;
     flex: 0 0 260px;
+    min-height: 0;
   }
 
   .detail {
@@ -60,8 +61,16 @@
   color: var(--faint);
 }
 
-.filler {
+.teamsBody {
   flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.teamsBody:focus-visible {
+  outline: 2px solid var(--accent-bright);
+  outline-offset: -2px;
 }
 
 /* ---- master list ---- */
@@ -331,9 +340,45 @@
 }
 
 /* ---- agents table (mock 595-613) ---- */
-.agentHead {
-  padding: 8px 18px 4px;
+.agentTable {
+  flex: 1;
+  min-width: 0;
+  min-height: 160px;
   display: flex;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.agentTable:focus-visible {
+  outline: 2px solid var(--accent-bright);
+  outline-offset: -2px;
+}
+
+/* One horizontal scroll owner keeps headers with their cells without moving
+   the team's title, role controls or footer. The body still scrolls vertically. */
+.agentTableContent {
+  flex: 1;
+  min-width: 760px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.workerInspector {
+  flex-shrink: 0;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.agentHead,
+.agentRow,
+.agentRowSelected {
+  display: grid;
+  grid-template-columns: 110px 90px minmax(140px, 1fr) 100px 100px minmax(180px, 1.4fr);
+}
+
+.agentHead {
+  padding: 8px 21px 4px 18px;
   color: var(--faint);
   font-size: var(--fs-tiny);
   letter-spacing: 0.05em;
@@ -347,6 +392,7 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 .agentsBody::-webkit-scrollbar {
@@ -371,6 +417,7 @@
 .colRole {
   width: 90px;
   flex-shrink: 0;
+  overflow-wrap: anywhere;
 }
 
 .colAgent {
@@ -382,14 +429,16 @@
 }
 
 .colAcct {
-  width: 70px;
+  width: 100px;
   flex-shrink: 0;
+  overflow-wrap: anywhere;
 }
 
 .colCost {
-  width: 60px;
+  width: 100px;
   flex-shrink: 0;
   text-align: right;
+  overflow-wrap: anywhere;
 }
 
 .colActivity {
@@ -416,9 +465,8 @@
 
 .agentRow,
 .agentRowSelected {
-  display: flex;
   align-items: center;
-  padding: 2px 18px;
+  padding: 2px 18px 2px 16px;
   border-left: 2px solid transparent;
   cursor: pointer;
 }

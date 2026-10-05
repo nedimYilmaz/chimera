@@ -37,3 +37,8 @@ docs/superpowers/**
 !docs/superpowers/plans/native-voice-meetings.md
 !docs/superpowers/specs/2026-07-28-kimi-backend-s0-findings.md
 docs/PRE-PUBLICATION-AUDIT.md
+
+# Private reproducible UX26 implementation contracts (public sync still excludes all docs).
+!docs/superpowers/plans/2026-10-05-workspace-evolution.md
+!docs/superpowers/plans/2026-10-05-workspace-evolution.tasks.json
+!docs/superpowers/plans/2026-10-05-ui-stability.md

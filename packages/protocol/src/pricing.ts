@@ -397,6 +397,8 @@ export type CodexContextLimits = {
   source: "codex";
   defaultWindow?: number;
   maxWindow?: number;
+  /** Agent-configured nominal window; never provider-reported usable capacity. */
+  requestedWindow?: number;
   sessionWindow?: number;
   compactAt?: number;
 };

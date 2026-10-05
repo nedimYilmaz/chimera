@@ -97,8 +97,14 @@
   border-bottom-color: var(--accent);
 }
 
+/* A keycap, not plain text: a bare "0" before "roles" reads like a count. */
 .tabNumber {
   color: var(--faint);
+  font: inherit;
+  font-size: 0.85em;
+  padding: 0 3px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-badge);
 }
 
 .badge {

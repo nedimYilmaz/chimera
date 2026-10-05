@@ -1,3 +1,4 @@
+import { BranchNotice } from "./ForkAgentOverlay";
 import { onOpenBookmark } from "../state/workspaceTools";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AgentView, UiState } from "@chimera/ui-state";
@@ -518,7 +519,7 @@ export function TranscriptPanel({ agent: liveAgent, workflow }: { agent: AgentVi
 
 
   // AGENT-GROUPS Phase 1: the registry the detail panel's assign-to-group control offers —
-  // loaded once on mount, refreshed after any create/rename/delete (see commands.groups.ts).
+  // loaded on mount and invalidated by registry events/reconnect (see commands.groups.ts).
   const groupRegistry = useStore((s) => s.groups.items);
   useEffect(() => { void groupsCmd.loadGroups(); }, []);
 
@@ -756,6 +757,7 @@ export function TranscriptPanel({ agent: liveAgent, workflow }: { agent: AgentVi
         onToggleVoiceHistory={!isTaskMode && currentAgent?.provider === "codex" && currentAgentId
           ? () => setVoiceHistoryOpenFor(voiceHistoryOpen ? null : currentAgentId) : undefined}
       />
+      {currentAgentId && <BranchNotice agentId={currentAgentId} />}
       <Collapse open={agentDetailOpen}>
         {agentDetailOpen && currentAgent ? (
           <AgentDetailPanel

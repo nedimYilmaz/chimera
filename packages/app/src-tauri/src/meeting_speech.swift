@@ -177,3 +177,14 @@ public func meetingSpeechFinish(_ token: UInt64, _ boundary: UnsafePointer<CChar
     let id = boundary.map { String(cString: $0) }
     speechQueue.async { sessions[token]?.finishRound(boundary: id) }
 }
+
+// Capability discovery never requests Speech authorization or opens a microphone.
+@_cdecl("chimera_local_speech_locales")
+public func localSpeechLocales(_ callback: @convention(c) (UnsafePointer<CChar>, UnsafeMutableRawPointer?) -> Void, _ context: UnsafeMutableRawPointer?) {
+    let locales = SFSpeechRecognizer.supportedLocales().filter {
+        guard let recognizer = SFSpeechRecognizer(locale: $0) else { return false }
+        return recognizer.isAvailable && recognizer.supportsOnDeviceRecognition
+    }.map { $0.identifier.replacingOccurrences(of: "_", with: "-") }.sorted()
+    let data = try! JSONSerialization.data(withJSONObject: locales)
+    String(data: data, encoding: .utf8)!.withCString { callback($0, context) }
+}

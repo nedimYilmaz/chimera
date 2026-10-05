@@ -1,3 +1,5 @@
+import type { GitTarget } from "@chimera/protocol";
+import { WorkingTreeDisclosure } from "../components/WorkingTreePanel";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { CodeBlock, MessageBody } from "../components/MessageBody";
@@ -72,7 +74,7 @@ export function HighlightedCode({ content, lang, highlightLine }: { content: str
   return <CodeBlock block={{ type: "code", lang, text: content }} />;
 }
 
-export function FileViewer({ selected, onClose, highlightLine }: { selected: FsSelectedFile; onClose: () => void; highlightLine?: number | null }) {
+export function FileViewer({ selected, onClose, highlightLine, worktree }: { selected: FsSelectedFile; onClose: () => void; highlightLine?: number | null; worktree?: { target: GitTarget; path: string } }) {
   useEffect(() => {
     const onKey = (ev: KeyboardEvent) => {
       if (ev.key === "Escape") {
@@ -130,6 +132,7 @@ export function FileViewer({ selected, onClose, highlightLine }: { selected: FsS
           </button>
         </div>
         <div className={styles.body}>
+          {worktree && <WorkingTreeDisclosure target={worktree.target} initialPath={worktree.path} />}
           {view.kind === "error" ? (
             <div className={styles.placeholder}>{view.message}</div>
           ) : view.kind === "image" ? (

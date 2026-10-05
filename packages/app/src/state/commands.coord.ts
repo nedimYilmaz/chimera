@@ -11,6 +11,7 @@ import type { MemoryHit, QueueStatusView, TeamStatusView, UiStore } from "@chime
 import type { MemoryGetResult, MemoryStatsResult } from "@chimera/protocol";
 import { buildMemorySearchParams } from "./selectors.coord";
 import { scopeMatches } from "@chimera/ui-state";
+import { createLoadStatus, runLoad } from "./loadStatus";
 
 // MEM-4's memory.index RPC is not yet on every daemon; this is the app's local
 // view of its status reply (the protocol type lands with MEM-4). memoryIndexStatus
@@ -60,6 +61,39 @@ export function createCoordCommands(store: UiStore, request: RequestFn) {
     } catch (err) {
       store.dispatch({ type: "commandError", message: errMessage(err) });
     }
+  };
+
+  const teamsStatus = createLoadStatus();
+  const loadTeams = (): Promise<void> => runLoad(
+    teamsStatus,
+    () => request<Array<Record<string, unknown>>>("team.list", {}),
+    items => store.dispatch({ type: "teams", available: true, items }),
+    { isUnsupported: isUnknownMethod, onUnsupported: () => store.dispatch({ type: "teams", available: false, items: [] }) },
+  );
+
+  // Both surfaces share one list owner: even overlapping mounts must observe the
+  // synchronous connection edge once, before React can coalesce disconnect/reconnect.
+  let teamConsumers = 0;
+  let stopTeamEdges: (() => void) | null = null;
+  const watchTeams = (): (() => void) => {
+    if (teamConsumers++ === 0) {
+      let wasConnected = store.getState().connected;
+      stopTeamEdges = store.subscribe(() => {
+        const connected = store.getState().connected;
+        if (connected === wasConnected) return;
+        wasConnected = connected;
+        if (connected) void loadTeams();
+        else teamsStatus.interrupt("connection to the daemon was lost");
+      });
+      void loadTeams();
+    }
+    return () => {
+      if (--teamConsumers === 0) {
+        stopTeamEdges?.();
+        stopTeamEdges = null;
+        teamsStatus.interrupt("team list view was closed during loading");
+      }
+    };
   };
 
   const tryPhase2 = async (method: "team.list" | "queue.list", kind: "teams" | "queues"): Promise<void> => {
@@ -113,7 +147,9 @@ export function createCoordCommands(store: UiStore, request: RequestFn) {
 
   return {
     // ---- snapshots -------------------------------------------------------
-    loadTeams: (): Promise<void> => tryPhase2("team.list", "teams"),
+    teamsStatus,
+    watchTeams,
+    loadTeams,
     loadQueues: (): Promise<void> => tryPhase2("queue.list", "queues"),
 
     /** Raw queue.status (no dispatch) — the queues master list derives its
@@ -125,7 +161,7 @@ export function createCoordCommands(store: UiStore, request: RequestFn) {
      * any open drill-in. Fired on tab entry and on relevant events. */
     refresh: (): Promise<void> =>
       guarded(async () => {
-        await Promise.all([tryPhase2("team.list", "teams"), tryPhase2("queue.list", "queues")]);
+        await Promise.all([loadTeams(), tryPhase2("queue.list", "queues")]);
         await Promise.all([reloadTeamDetailIfOpen(), (async () => {
           const open = store.getState().queueDetail;
           const name = open?.spec["name"];
@@ -144,7 +180,7 @@ export function createCoordCommands(store: UiStore, request: RequestFn) {
     /** team.create — REJECTS on failure (the form shows the error inline). */
     createTeam: async (spec: Record<string, unknown>): Promise<void> => {
       await request("team.create", { spec });
-      await tryPhase2("team.list", "teams");
+      await loadTeams();
     },
 
     /** Destructive — only ever reached through the ConfirmCard gate. */
@@ -152,7 +188,7 @@ export function createCoordCommands(store: UiStore, request: RequestFn) {
       guarded(async () => {
         await request("team.dissolve", { name });
         store.dispatch({ type: "teamDetail", detail: null }); // a dissolved team's drill is stale
-        await tryPhase2("team.list", "teams");
+        await loadTeams();
       }),
 
     /** team.update — REJECTS on failure so TeamFormCard's own catch shows the
@@ -164,7 +200,7 @@ export function createCoordCommands(store: UiStore, request: RequestFn) {
     updateTeam: async (name: string, patch: Record<string, unknown>): Promise<void> => {
       try {
         await request("team.update", { name, patch });
-        await tryPhase2("team.list", "teams");
+        await loadTeams();
         await reloadTeamDetailIfOpen();
       } catch (err) {
         store.dispatch({ type: "commandError", message: errMessage(err) });

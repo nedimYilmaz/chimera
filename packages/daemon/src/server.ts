@@ -159,7 +159,9 @@ export async function startRpcServer(opts: { socketPath: string; engine: Engine;
             // caller's shape changes. Whatever remains after subtracting these two from the app's
             // rtt is the renderer's own.
             const startedAt = performance.now();
-            const result = await opts.engine.handle(req.method, req.params ?? {});
+            // Same-OS-user local client trust, not authenticated human intent.
+            // MCP carries callerAgentId and remains on the agent-authority path.
+            const result = await opts.engine.handle(req.method, req.params ?? {}, { trustedLocalClient: true });
             if (req.method === "daemon.status" && result !== null && typeof result === "object" && !Array.isArray(result)) {
               const stamped = result as Record<string, unknown>;
               stamped["serverHandleMs"] = Math.round((performance.now() - startedAt) * 10) / 10;

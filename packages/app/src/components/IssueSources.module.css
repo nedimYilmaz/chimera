@@ -1,0 +1,14 @@
+.root { padding: 10px 12px; border-bottom: 1px solid var(--line); min-width: 0; font-size: 12px; overflow-wrap: anywhere; }
+.root summary { cursor: pointer; }
+.content { display: grid; gap: 8px; padding-top: 8px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.form { display: grid; gap: 8px; min-width: 0; }
+.form label { display: grid; gap: 4px; }
+.form input, .form select, .form textarea { width: 100%; min-width: 0; box-sizing: border-box; }
+.form textarea { min-height: 140px; resize: vertical; }
+.note { opacity: .75; }
+.chip { display: inline-flex; flex-wrap: wrap; gap: 5px; margin-left: 8px; font-size: 11px; vertical-align: baseline; }
+.chip button { font-size: inherit; }
+
+.form input[type="checkbox"] { width: auto; }
+.form label.row { display: flex; }

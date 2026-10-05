@@ -84,11 +84,11 @@ export function reattachConductors(
     // Session-limit HOLD (restart-survival): re-register a prior PAUSED agent and re-arm its
     // auto-resume (or resume now if the reset already passed). Runs BEFORE the running-only
     // guard below — paused is not "running". Same membership guard as the running case.
-    if (a.state === "paused") { if (!a.membership) engine.supervisor.reattachPaused?.(a); continue; }
+    if (a.state === "paused") { if (!a.membership || a.forkLineage && a.spec.session) engine.supervisor.reattachPaused?.(a); continue; }
     if (isTerminal(a)) { engine.supervisor.reattachTerminal?.(a); continue; }
     if (a.state !== "running") continue;
     const isConductor = (a.spec as { conductor?: boolean })?.conductor === true;
-    const resumable = !a.membership && (isConductor || typeof a.sessionId === "string");
+    const resumable = (!a.membership || a.forkLineage && a.spec.session) && (isConductor || typeof a.sessionId === "string");
     if (resumable && mode === "lazy" && engine.supervisor.reattachDormant) {
       // LAZY-REATTACH (default): come back PAUSED with the session intact and NO process. The
       // record's `running` state in the snapshot means the same thing whether the daemon exited
@@ -113,6 +113,8 @@ export function reattachConductors(
         { ...a.spec, resume: a.sessionId ?? null, resumeOnly: true },
         { agentId: a.agentId, treeId: a.treeId, depth: a.depth, parentId: a.parentId,
           projectId: a.projectId, originConductorId: a.originConductorId ?? null,
+          ...(a.forkLineage ? { forkLineage: a.forkLineage } : {}),
+          ...(a.forkLineage && a.membership ? { membership: a.membership, principal: a.principal } : {}),
           ...(a.attentionAt !== undefined ? { attentionAt: a.attentionAt } : {}),
           ...(a.reviewedAt !== undefined ? { reviewedAt: a.reviewedAt } : {}) },
       ).catch((e) => {

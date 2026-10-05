@@ -784,3 +784,13 @@ code {
   .gtools { display: none; }
   .cat { break-inside: avoid-page; }
 }
+
+/* Demo playback is user initiated; static posters and steps remain useful without script. */
+.demo-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:2rem; }
+.demo-card { min-width:0; scroll-margin-top:5rem; }
+.demo-card video { display:block; width:100%; height:auto; aspect-ratio:8/5; background:#0b0f14; border-radius:.6rem; }
+.demo-card h2 { font-size:1.35rem; }
+.demo-links { display:flex; flex-wrap:wrap; gap:.8rem; font-size:.9rem; }
+.demo-nav { display:flex; flex-wrap:wrap; gap:1rem; }
+@media (max-width:48rem) { .demo-grid { grid-template-columns:1fr; } }
+@media (prefers-reduced-motion:reduce) { .demo-card { scroll-behavior:auto; } }

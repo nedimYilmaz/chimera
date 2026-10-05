@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { UiState } from "@chimera/ui-state";
 import { attachedTeamNames, builtinDiff, overriddenFieldsOf, overridesOf, resolvedRoleBindingSpec, ROLE_SPEC_PATCH_FIELDS, sessionRoleUsage, teamRoleUsage } from "@chimera/ui-state";
 import { BUILTIN_ROLES } from "@chimera/protocol";
@@ -7,7 +7,9 @@ import { displayChord, registerActionHandler } from "../keymap";
 import { rpcCall } from "../rpc/bridge";
 import { appStore } from "../state/store";
 import { useStore } from "../state/useStore";
-import { getRolesCommands } from "../state/commands.roles";
+import { getRolesCommands, rolesStatus } from "../state/commands.roles";
+import { useTeamList } from "../state/useTeamList";
+import { useLoadStatus } from "../state/loadStatus";
 import { getCoordCommands } from "../state/commands.coord";
 import { composerLocal } from "../state/commands.agents";
 import { CONFIRMS } from "../copy";
@@ -15,6 +17,7 @@ import { isDiscoveredRole, latestCoordSeq, newestFirst, roleConfig, str } from "
 import { RoleFormCard, roleFormValuesFromSpec, type RoleFormValues } from "../components/RoleFormCard";
 import { RoleBindingOverrideEditor } from "../components/RoleBindingOverrideEditor";
 import { ConfirmCard } from "../components/ConfirmCard";
+import { LoadStatusNote } from "../components/LoadStatusNote";
 import { ActionChipRow } from "../components/ActionChipRow";
 import { Panel, PanelFooter } from "../components/Panel";
 import styles from "./RolesScreen.module.css";
@@ -52,17 +55,29 @@ export function RolesScreen() {
   const mode = useStore((s: UiState) => s.mode);
   const confirm = useStore((s: UiState) => s.confirm);
   const coordSeq = useStore((s: UiState) => latestCoordSeq(s.events));
+  const libStatus = useLoadStatus(rolesStatus);
+  const teamStatus = useTeamList(coord);
 
   const [formTarget, setFormTarget] = useState<{ kind: "createSession" | "editSession" | "cloneSession"; name?: string } | null>(null);
   const [attachTeam, setAttachTeam] = useState<string | null>(null);
   const [attachRoleName, setAttachRoleName] = useState("");
   const [attachError, setAttachError] = useState<string | null>(null);
 
-  // tab entry: this screen needs BOTH role.list (the unified library) and
-  // team.list (team bindings) — unlike TeamsScreen, no other always-mounted
-  // owner guarantees teams.items is populated before this tab is ever opened.
-  useEffect(() => { void roles.loadRoles(); void coord.loadTeams(); }, []);
+  useEffect(() => { void roles.loadRoles(); }, []);
   useEffect(() => { if (coordSeq > 0) void coord.loadTeams(); }, [coordSeq]);
+  // store.ts folds daemon://state into connected synchronously. Observe that store edge,
+  // not a render snapshot: React may batch a drop/reconnect into one render, losing the drop
+  // and letting a pre-drop reply repaint rows as fresh. No timers or extra snapshot owner.
+  useEffect(() => {
+    let wasConnected = appStore.getState().connected;
+    return appStore.subscribe(() => {
+      const connected = appStore.getState().connected;
+      if (connected === wasConnected) return;
+      wasConnected = connected; // before loading: the resulting store updates can re-enter
+      if (connected) void roles.loadRoles();
+      else rolesStatus.interrupt("connection to the daemon was lost");
+    });
+  }, []);
 
   const sortedTeams = useMemo(() => newestFirst(teams.items), [teams.items]);
 
@@ -78,15 +93,30 @@ export function RolesScreen() {
     return out;
   }, [rolesState.items, sortedTeams]);
 
-  // clamp the cursor against the current row count, same pattern TeamsScreen
-  // uses for its search-narrowed list.
-  useEffect(() => {
-    const n = rows.length;
-    const cur = appStore.getState().roleCursor;
-    if (n > 0 && cur >= n) appStore.dispatch({ type: "roleCursor", delta: n - 1 - cur });
-  }, [rows.length]);
+  // `roleCursor` is an ROW INDEX in the reducer, so a refresh that inserts or reorders rows (a role
+  // created elsewhere, a new team) would silently move the selection — and remount the detail
+  // pane, discarding an unsaved binding override.  Remember WHICH row is selected and resolve it
+  // back to an index during render, so no intermediate render ever shows the wrong row.  A cursor
+  // the user moved since the key was recorded wins (`cursor` mismatch).
+  const selectedRef = useRef<{ key: string | null; cursor: number }>({ key: null, cursor: roleCursor });
+  const effectiveCursor = useMemo(() => {
+    const { key, cursor } = selectedRef.current;
+    let next = roleCursor;
+    if (key !== null && roleCursor === cursor) {
+      const at = rows.findIndex((r) => rowKey(r) === key);
+      if (at >= 0) next = at;
+    }
+    return rows.length > 0 && next >= rows.length ? rows.length - 1 : next;
+  }, [rows, roleCursor]);
 
-  const selected = rows[roleCursor] ?? null;
+  // Commit the resolved index back to the store (also the old end-of-list clamp), then re-record.
+  useEffect(() => {
+    const cur = appStore.getState().roleCursor;
+    if (effectiveCursor !== cur) appStore.dispatch({ type: "roleCursor", delta: effectiveCursor - cur });
+    selectedRef.current = { key: rows[effectiveCursor] ? rowKey(rows[effectiveCursor]) : null, cursor: effectiveCursor };
+  }, [rows, effectiveCursor]);
+
+  const selected = rows[effectiveCursor] ?? null;
 
   useEffect(() => {
     const disposers = [
@@ -97,8 +127,9 @@ export function RolesScreen() {
       registerActionHandler("roles.delete", () => requestDelete()),
     ];
     return () => { for (const d of disposers) d(); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- handlers read live state via appStore.getState()
-  }, []);
+    // RPC loads replace the rows after mount; handlers must use that current list for
+    // navigation and edit/delete targets, rather than the initially empty snapshot.
+  }, [rows]);
 
   function move(delta: number): void {
     const n = rows.length;
@@ -136,12 +167,13 @@ export function RolesScreen() {
 
   return (
     <div data-screen-layout="split" className={styles.row} {...pane.rowProps}>
-      <Panel label={<>roles <span className={styles.countMeta}>({rows.length})</span></>} className={styles.master}>
+      <Panel label={<>roles <span className={styles.countMeta}>({libStatus.loaded ? rows.length : "…"})</span></>} className={styles.master}>
         {!rolesState.available ? (
           <div className={styles.emptyHint}>the role library requires a Phase 2 daemon — team roles below still work</div>
         ) : null}
         <div className={styles.sectionHead}>role library</div>
-        {rolesState.available && rolesState.items.length === 0 && (
+        <LoadStatusNote status={libStatus} what="roles" hasRows={rolesState.items.length > 0} onRetry={() => void roles.loadRoles()} />
+        {rolesState.available && libStatus.loaded && !libStatus.error && rolesState.items.length === 0 && (
           <div className={styles.emptyHint}>no roles — {displayChord("mod+o")} creates one</div>
         )}
         {rows.map((r, i) => {
@@ -154,7 +186,7 @@ export function RolesScreen() {
             return (
               <div
                 key={rowKey(r)}
-                className={i === roleCursor ? styles.rowSelected : styles.rowItem}
+                className={i === effectiveCursor ? styles.rowSelected : styles.rowItem}
                 onClick={() => appStore.dispatch({ type: "roleCursor", delta: i - roleCursor })}
                 onKeyDown={onRowKeyDown(() => appStore.dispatch({ type: "roleCursor", delta: i - roleCursor }))}
                 role="button" tabIndex={0} data-role-row={r.name}
@@ -171,7 +203,8 @@ export function RolesScreen() {
           return null;
         })}
         <div className={styles.sectionHead}>team roles</div>
-        {sortedTeams.length === 0 && <div className={styles.emptyHint}>no teams yet</div>}
+        <LoadStatusNote status={teamStatus} what="teams" hasRows={sortedTeams.length > 0} onRetry={() => { void coord.loadTeams(); }} />
+        {teamStatus.unsupported ? <div className={styles.emptyHint}>teams require a Phase 2 daemon</div> : teamStatus.loaded && !teamStatus.error && sortedTeams.length === 0 && <div className={styles.emptyHint}>no teams yet</div>}
         {sortedTeams.map((teamSpec) => {
           const teamName = str(teamSpec["name"]);
           const roleRecord = teamSpec["roles"] && typeof teamSpec["roles"] === "object" ? (teamSpec["roles"] as Record<string, unknown>) : {};
@@ -193,7 +226,7 @@ export function RolesScreen() {
                 return (
                   <div
                     key={roleKey}
-                    className={i === roleCursor ? styles.rowSelected : styles.rowItem}
+                    className={i === effectiveCursor ? styles.rowSelected : styles.rowItem}
                     onClick={() => appStore.dispatch({ type: "roleCursor", delta: i - roleCursor })}
                     onKeyDown={onRowKeyDown(() => appStore.dispatch({ type: "roleCursor", delta: i - roleCursor }))}
                     role="button" tabIndex={0} data-role-row={`${teamName}/${roleKey}`}

@@ -125,9 +125,23 @@ you.
 | **Desktop app** | The full UI: agent transcripts, spawn forms, permission prompts, an in-repo file tree and viewer, an in-app terminal, push-to-talk voice and meeting rooms — over agents, projects, teams, queues, schedules, events and memory. |
 | **`chimera` MCP server** | Lets any MCP client spawn and coordinate agents as tool calls from inside its own session — an agent orchestrating other agents. |
 
-Both sit on the same daemon and the same RPC contract. Neither holds state of
-its own: the app is a projection of the daemon's event log (see
-[How it works](#how-it-works)).
+Both use the same daemon and RPC contract. The app consumes events and RPC
+snapshots, keeps local drafts and layout preferences, and exposes stale or
+incomplete observations during reconnect (see [How it works](#how-it-works)).
+
+## Short product demos
+
+Six animated workflows captured from the actual interface with fictional Atlas data and a scripted daemon. These illustrate controls and visible state; worker outcomes and desktop targets are scripted. No live provider execution is implied.
+
+<!-- videos:readme:start -->
+<table>
+<tr><td width="50%"><a href="https://nedimyilmaz.github.io/chimera/videos.html#team-queue-lifecycle"><img src="site/assets/videos/chimera-team-queue-lifecycle.poster.jpg" alt="Put the next task in motion — play the demo" width="420"></a><br><strong>Put the next task in motion</strong> · 36.7s</td><td width="50%"><a href="https://nedimyilmaz.github.io/chimera/videos.html#memory-search-link"><img src="site/assets/videos/chimera-memory-search-link.poster.jpg" alt="Search → open → follow a linked note — play the demo" width="420"></a><br><strong>Search → open → follow a linked note</strong> · 27.1s</td></tr>
+<tr><td width="50%"><a href="https://nedimyilmaz.github.io/chimera/videos.html#context-handoff"><img src="site/assets/videos/chimera-context-handoff.poster.jpg" alt="Share just the context they need — play the demo" width="420"></a><br><strong>Share just the context they need</strong> · 28.3s</td><td width="50%"><a href="https://nedimyilmaz.github.io/chimera/videos.html#resource-diagnostics"><img src="site/assets/videos/chimera-resource-diagnostics.poster.jpg" alt="See why new agents are waiting — play the demo" width="420"></a><br><strong>See why new agents are waiting</strong> · 22.5s</td></tr>
+<tr><td width="50%"><a href="https://nedimyilmaz.github.io/chimera/videos.html#project-canvas"><img src="site/assets/videos/chimera-project-canvas.poster.jpg" alt="Find the relationships behind the work — play the demo" width="420"></a><br><strong>Find the relationships behind the work</strong> · 25.0s</td><td width="50%"><a href="https://nedimyilmaz.github.io/chimera/videos.html#desktop-preview"><img src="site/assets/videos/chimera-desktop-preview.poster.jpg" alt="Keep desktop control in view — play the demo" width="420"></a><br><strong>Keep desktop control in view</strong> · 23.8s</td></tr>
+</table>
+<!-- videos:readme:end -->
+
+[Watch with controls, captions and text alternatives](https://nedimyilmaz.github.io/chimera/videos.html). Videos contain zoom/pan motion; posters and text steps provide a static alternative.
 
 ## Features
 

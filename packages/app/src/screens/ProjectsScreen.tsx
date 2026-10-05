@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import type { UiState } from "@chimera/ui-state";
 import { displayChord, registerActionHandler, runAction } from "../keymap";
 import { rpcCall } from "../rpc/bridge";
@@ -33,6 +33,8 @@ import { usePaneRow } from "../components/PaneDivider";
 // W7 local store (commands.projects.ts) — refresh on tab entry + relevant
 // events (agent_started/status/result/error), no polling timers.
 
+const ProjectCanvas = lazy(() => import("../components/ProjectCanvas"));
+
 const commands = getProjectsCommands(appStore, rpcCall);
 
 function invokeProjectTool(rpc: "project.unarchive" | "checkpoint.create", params: Record<string, unknown>, project: string): void {
@@ -55,6 +57,15 @@ const toneClass: Record<string, string> = {
 export function ProjectsScreen() {
   // PANE-RESIZE: the row carries the width and is the drag ceiling.
   const pane = usePaneRow("projects");
+  const [canvasView, setCanvasView] = useState(false);
+  const [canvasVisited, setCanvasVisited] = useState(false);
+  const [canvasWide, setCanvasWide] = useState(() => typeof window.matchMedia === "function" && window.matchMedia("(min-width: 600px)").matches);
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const media = window.matchMedia("(min-width: 600px)");
+    const change = () => { setCanvasWide(media.matches); };
+    media.addEventListener("change", change); return () => media.removeEventListener("change", change);
+  }, []);
   const items = useProjectsLocal((s) => s.items);
   const cursor = useProjectsLocal((s) => s.cursor);
   const query = useProjectsLocal((s) => s.query);
@@ -207,6 +218,11 @@ export function ProjectsScreen() {
       {/* PANE-RESIZE: the seam, in place of the gap. */}
       {pane.divider}
       <Panel label={detailName ? `project · ${detailName}` : "project"} className={styles.detail}>
+        {detail !== null && <div className={styles.canvasToggle} aria-label="Project view">
+          <button type="button" data-project-list aria-pressed={!canvasView || !canvasWide} onClick={() => setCanvasView(false)}>List</button>
+          <button type="button" data-project-canvas-toggle aria-pressed={canvasView && canvasWide} disabled={!canvasWide} title={!canvasWide ? "Canvas needs a wider window" : "Arrange existing project entities"} onClick={() => { setCanvasVisited(true); setCanvasView(true); }}>Canvas</button>
+          {!canvasWide && <span>Canvas needs a wider window</span>}
+        </div>}
         {detail === null ? (
           <div className={styles.emptyPane}>
             <div className={styles.emptyGlyph}>◆</div>
@@ -214,14 +230,14 @@ export function ProjectsScreen() {
           </div>
         ) : (
           <Collapse open={!projectDetailCollapsed} fill>
-            <DetailBody
+            {canvasVisited ? <Suspense fallback={<div role="status">Loading Project Canvas…</div>}><ProjectCanvas key={detailName} projectId={detailName!} mode={canvasView && canvasWide ? "canvas" : "list"} projectDetails={<DetailBody detail={detail} assignOpen={assignOpen} sessionIdx={sessionIdx} teamIdx={teamIdx} teamCatalog={teams.items} onSelectSession={(i) => projectsLocal.set({ sessionIdx: i, sessionFocused: true })} />} /></Suspense> : <DetailBody
               detail={detail}
               sessionIdx={sessionIdx}
               teamIdx={teamIdx}
               assignOpen={assignOpen}
               teamCatalog={teams.items}
               onSelectSession={(i) => projectsLocal.set({ sessionIdx: i, sessionFocused: true })}
-            />
+            />}
           </Collapse>
         )}
         {formOpen && (

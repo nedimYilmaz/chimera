@@ -4,7 +4,7 @@ import styles from "./OverlayCard.module.css";
 // Multiple existing callers render a ConfirmCard inside a form OverlayCard.
 // Only the topmost dialog owns Escape; a module-local DOM stack works across
 // React roots and body portals without coupling the shell to callers.
-const overlayStack: Array<{ element: HTMLElement; id: string; ancestors: string[] }> = [];
+const overlayStack: Array<{ element: HTMLElement; id: string; ancestors: string[]; replace?: () => void }> = [];
 const OverlayContext = createContext({ titleId: undefined as string | undefined, ancestors: [] as string[] });
 
 // The ONE overlay shell every card mounts through (PLAN §0.5 + §8): a scrim
@@ -33,6 +33,8 @@ export function OverlayCard(props: {
   escGuard?: () => boolean;
   /** Override the accessible name supplied by the nearest OverlayCardHeader. */
   ariaLabel?: string;
+  /** Transient image viewers yield to any newly opened card in the shared shell. */
+  dismissOnReplacement?: boolean;
 }) {
   const parent = useContext(OverlayContext);
   const titleId = useId();
@@ -63,8 +65,11 @@ export function OverlayCard(props: {
     if (hasDocument && cardAtMount) {
       // Descendant effects run before parents, including across React portals.
       // Keep that logical nesting order instead of trusting effect registration.
+      for (const overlay of overlayStack) {
+        if (!overlay.ancestors.includes(titleId) && !ancestors.includes(overlay.id)) overlay.replace?.();
+      }
       const index = overlayStack.findIndex((entry) => entry.ancestors.includes(titleId));
-      overlayStack.splice(index < 0 ? overlayStack.length : index, 0, { element: cardAtMount, id: titleId, ancestors });
+      overlayStack.splice(index < 0 ? overlayStack.length : index, 0, { element: cardAtMount, id: titleId, ancestors, ...(props.dismissOnReplacement ? { replace: () => onCloseRef.current?.() } : {}) });
     }
     const isRenderedFocusTarget = (el: HTMLElement): boolean => {
       if (!el.isConnected || el.matches(":disabled") || el.getAttribute("aria-disabled") === "true") return false;

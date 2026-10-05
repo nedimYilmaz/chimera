@@ -1,0 +1,28 @@
+.root { display: flex; flex-direction: column; min-width: 0; min-height: 0; flex: 1; overflow: auto; gap: 8px; padding: 8px; color: var(--fg-soft); }
+.toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex-shrink: 0; }
+.root button, .root input, .root select { font: inherit; color: inherit; background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 4px 8px; max-width: 100%; }
+.root button { cursor: pointer; }
+.root button:disabled { opacity: .5; cursor: default; }
+.root button:focus-visible, .surface:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.root p { margin: 0; overflow-wrap: anywhere; }
+.arrange { display: flex; gap: 6px; flex-wrap: wrap; padding: 6px; }
+.arrange label { display: flex; flex-direction: column; min-width: 0; }
+.surface { position: relative; overflow: hidden; min-height: 360px; height: 430px; flex-shrink: 0; width: 100%; border: 1px solid var(--line); touch-action: none; background: var(--bg); }
+.world { position: absolute; inset: 0; contain: strict; overflow: hidden; pointer-events: none; }
+.edges { position: absolute; width: 100%; height: 100%; overflow: hidden; pointer-events: none; }
+.edges path { stroke: var(--faint); fill: none; }
+.edges text { fill: var(--fg-soft); font-size: 10px; }
+.root .node { position: absolute; width: 184px; height: 76px; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 3px; text-align: left; background: var(--panel); pointer-events: auto; }
+.node[aria-pressed="true"] { border-color: var(--accent); background: var(--sel-bg); }
+.node span, .node small { font-size: var(--fs-tiny); color: var(--faint); }
+.node strong { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.selection { max-height: 300px; overflow: auto; flex-shrink: 0; min-width: 0; border: 1px solid var(--line); padding: 8px; overflow-wrap: anywhere; }
+.selection > button { margin-left: 8px; }
+.list { display: flex; flex-direction: column; max-height: 440px; overflow: auto; flex-shrink: 0; }
+.list button { display: flex; gap: 8px; justify-content: space-between; text-align: left; min-height: 32px; flex-shrink: 0; }
+.list button span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hint { font-size: var(--fs-tiny); color: var(--faint); }
+.sticky { position: absolute; max-width: 184px; padding: 8px; background: var(--sel-bg); color: var(--fg-soft); white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (prefers-reduced-motion: reduce) { .root * { transition: none; animation: none; } }
+
+.projectDetails { display: flex; flex-direction: column; height: 500px; min-width: 0; overflow: auto; }

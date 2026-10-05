@@ -14,6 +14,7 @@ import { chimeraHome } from "../paths.js";
 import { recordProviderModels } from "../providers/model-list-cache.js";
 import { ensureWorkdir } from "../workdir.js";
 import { toolResultText } from "./tool-result.js";
+import { toolResultImageFields, withoutRawImages } from "./tool-result-images.js";
 import { TurnController } from "../turn-controller.js";
 import { findProvider } from "../providers/catalog.js";
 import { computeCostUsd, estimateChimeraMcpToolSurface, TOOL_SURFACE_NOTE, CLAUDE_AUTO_COMPACT_WINDOW_MIN, CLAUDE_AUTO_COMPACT_WINDOW_MAX, type AccountQuotaWindow, type ModelMetadataLookup } from "@chimera/protocol";
@@ -370,6 +371,7 @@ export class ClaudeAgentBackend implements AgentBackend {
     // (see terminateProcessGroup) independent of whether the SDK's own JS-level stream ever
     // yields another message. Stays null for a fake queryFn (every existing test) since those
     // never call spawnClaudeCodeProcess at all — byte-identical behavior for them.
+    let cliExited = false;
     let cliProcess: { pid?: number | undefined; once(event: "exit", listener: () => void): void } | null = null;
     // AGENT-FAILURE-REACHES-CONDUCTOR: a process-layer death (the CLI exits non-zero on its own,
     // outside any SDK-recognized protocol error) used to surface as a bare "exited with code 1" —
@@ -649,9 +651,10 @@ export class ClaudeAgentBackend implements AgentBackend {
           cwd: spawnOpts.cwd, env: spawnOpts.env, stdio: ["pipe", "pipe", "pipe"],
           detached: process.platform !== "win32", signal: spawnOpts.signal,
         });
+        cliExited = false;
         cliProcess = child;
         child.stderr?.on("data", (d: Buffer) => { stderrTail = (stderrTail + d.toString()).slice(-4000); });
-        child.once("exit", (code) => { cliExitCode = code; });
+        child.once("exit", (code) => { cliExitCode = code; if (cliProcess === child) cliExited = true; });
         return child as unknown as ClaudeCliSpawnedProcess;
       },
       ...(claudeSettings ? { settings: claudeSettings } : {}),
@@ -1041,10 +1044,11 @@ export class ClaudeAgentBackend implements AgentBackend {
                   data: {
                     ...(typeof b["tool_use_id"] === "string" ? { toolId: b["tool_use_id"] } : {}),
                     ...(text !== "" ? { result: text } : {}),
+                    ...toolResultImageFields(b["content"]),
                     ...(b["is_error"] === true ? { isError: true } : {}),
                     ...userParentToolUseIdField,
                   },
-                  raw,
+                  raw: withoutRawImages(raw),
                 });
               }
             }
@@ -1248,6 +1252,7 @@ export class ClaudeAgentBackend implements AgentBackend {
     })();
 
     return {
+      get processPid() { return cliExited ? null : cliProcess?.pid ?? null; },
       send: async (text: string, images?: Image[], content?: ContentBlock[]) => {
         input.push(userMessage(text, images, content));
         armTurn();   // R2-TURN-LIFECYCLE: a fresh prompt is now in flight — (re)arm the watchdog

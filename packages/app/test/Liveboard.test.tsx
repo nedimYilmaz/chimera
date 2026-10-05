@@ -14,12 +14,16 @@ import { act, create } from "react-test-renderer";
 // module, which fires real listen()/invoke() calls as an import-time DEV side
 // effect — same seam TranscriptPanel.test.tsx stubs.
 const tailByAgent = vi.hoisted(() => new Map<string, unknown[]>());
+const tailPending = vi.hoisted(() => new Map<string, () => Promise<unknown[]>>());
+const tailErrors = vi.hoisted(() => new Map<string, Error>());
 const tailCalls = vi.hoisted(() => [] as string[]);
 
 vi.mock("../src/rpc/bridge", () => ({
   rpcCall: vi.fn(async (method: string, params?: Record<string, unknown>) => {
     if (method === "agent.tail" && params && typeof params["agentId"] === "string") {
       tailCalls.push(params["agentId"]);
+      if (tailPending.has(params["agentId"])) return tailPending.get(params["agentId"])!();
+      if (tailErrors.has(params["agentId"])) throw tailErrors.get(params["agentId"]);
       return tailByAgent.get(params["agentId"]) ?? [];
     }
     return [];
@@ -69,6 +73,7 @@ describe("Liveboard — per-lane history backfill", () => {
   // selection to an unrelated decoy agent up front so every lane agent below
   // is provably NOT the selection, matching the real "non-selected lane" bug.
   beforeAll(() => {
+    appStore.dispatch({ type: "connected", connected: true });
     appStore.dispatch({
       type: "agentRecords",
       records: [{ agentId: "selected-decoy", state: "done", accountName: "acct-decoy", provider: "claude", costUsd: 0, createdAt: 0 }],
@@ -130,4 +135,58 @@ describe("Liveboard — per-lane history backfill", () => {
 
     expect(tailCalls).not.toContain("lb-agent-3");
   });
+});
+
+
+describe("Liveboard failed initial history", () => {
+  it("shows a retryable error rather than a successful empty transcript", async () => {
+    if (liveRenderer) { act(() => liveRenderer!.unmount()); liveRenderer = null; }
+    for (const lane of appStore.getState().liveboardLanes) appStore.dispatch({ type: "liveboardLaneRemove", agentId: lane.agentId });
+    appStore.dispatch({ type: "connected", connected: true });
+    appStore.dispatch({ type: "agentRecords", records: [{ agentId: "lb-error", state: "done", accountName: "acct-a", provider: "claude", costUsd: 0, createdAt: 10 }] });
+    appStore.dispatch({ type: "liveboardLaneAdd", agentId: "lb-error" });
+    tailErrors.set("lb-error", new Error("fixture offline"));
+    const renderer = await renderBoard();
+    expect(JSON.stringify(renderer.toJSON())).toContain("couldn't load transcript");
+    expect(JSON.stringify(renderer.toJSON())).not.toContain("no transcript yet");
+    tailErrors.delete("lb-error");
+    tailByAgent.set("lb-error", [ev(100, "message_complete", "lb-error", 100, { text: "recovered history" })]);
+    const retry = renderer.root.findAllByType("button").find(b => b.props["data-load-retry"] !== undefined)!;
+    await act(async () => { retry.props.onClick(); await Promise.resolve(); await Promise.resolve(); });
+    expect(JSON.stringify(renderer.toJSON())).toContain("recovered history");
+    act(() => renderer.unmount()); liveRenderer = null;
+  });
+});
+
+
+it("invalidates pre-disconnect replies, dedups retry and keeps selection through batched reconnect", async () => {
+  if (liveRenderer) { act(() => liveRenderer!.unmount()); liveRenderer = null; }
+  for (const lane of appStore.getState().liveboardLanes) appStore.dispatch({ type: "liveboardLaneRemove", agentId: lane.agentId });
+  appStore.dispatch({ type: "connected", connected: true });
+  appStore.dispatch({ type: "agentRecords", records: [{ agentId: "lb-late", state: "done", accountName: "acct-a", provider: "claude", costUsd: 0, createdAt: 11 }] });
+  appStore.dispatch({ type: "liveboardLaneAdd", agentId: "lb-late" });
+  const pending: ((events: unknown[]) => void)[] = [];
+  tailPending.set("lb-late", () => new Promise(resolve => pending.push(resolve)));
+  const selected = appStore.getState().selectedAgentId;
+  const renderer = await renderBoard();
+  expect(pending).toHaveLength(1);
+  expect(JSON.stringify(renderer.toJSON())).toContain("loading ");
+  await act(async () => {
+    appStore.dispatch({ type: "connected", connected: false });
+    appStore.dispatch({ type: "connected", connected: true });
+  });
+  expect(pending).toHaveLength(2);
+  const retry = renderer.root.findAllByType("button").find(b => b.props["data-load-retry"] !== undefined)!;
+  await act(async () => { retry.props.onClick(); retry.props.onClick(); });
+  expect(pending).toHaveLength(2);
+  await act(async () => { pending[1]!([ev(200, "message_complete", "lb-late", 200, { text: "current transcript" })]); });
+  await act(async () => { pending[0]!([ev(100, "message_complete", "lb-late", 100, { text: "obsolete transcript" })]); });
+  expect(JSON.stringify(renderer.toJSON())).toContain("current transcript");
+  expect(JSON.stringify(renderer.toJSON())).not.toContain("obsolete transcript");
+  expect(appStore.getState().selectedAgentId).toBe(selected);
+  await act(async () => { appStore.dispatch({ type: "connected", connected: false }); });
+  expect(JSON.stringify(renderer.toJSON())).toContain("current transcript");
+  expect(JSON.stringify(renderer.toJSON())).toContain("showing last loaded transcript");
+  act(() => renderer.unmount()); liveRenderer = null;
+  tailPending.delete("lb-late");
 });

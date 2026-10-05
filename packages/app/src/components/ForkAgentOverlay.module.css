@@ -1,0 +1,8 @@
+.form { min-width:0; padding:12px; display:flex; flex-direction:column; gap:10px; overflow-wrap:anywhere; max-height:65vh; overflow:auto; }
+.form label { display:flex; flex-direction:column; gap:6px; }
+.form input, .form textarea { min-width:0; width:100%; box-sizing:border-box; }
+.form textarea { resize:vertical; min-height:80px; }
+.form fieldset { min-width:0; border:1px solid var(--line); }
+.form fieldset label, .form .check { flex-direction:row; align-items:flex-start; }
+.form input[type=checkbox], .form input[type=radio] { width:auto; }
+.notice, .lineage { min-width:0; overflow-wrap:anywhere; padding:6px; }

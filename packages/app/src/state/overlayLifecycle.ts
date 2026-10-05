@@ -28,7 +28,7 @@ export function reducerOverlayId(state: UiState): string | null {
 
 /** Dismiss module-local popups while preserving composer drafts, attachments,
  * fetched lists, cursors, expanded navigation, replay state, and PerfHud. */
-export function dismissAppLocalOverlays(): void {
+export function dismissAppLocalOverlays(options: { preserveAgentDetail?: boolean } = {}): void {
   const composer = composerLocal.getState();
   if (
     composer.targetMenuOpen ||
@@ -44,7 +44,7 @@ export function dismissAppLocalOverlays(): void {
       slashDismissed: true,
       slashIndex: 0,
       toolDetail: null,
-      agentDetail: null,
+      agentDetail: options.preserveAgentDetail ? composer.agentDetail : null,
       permissionRaw: false,
     });
   }

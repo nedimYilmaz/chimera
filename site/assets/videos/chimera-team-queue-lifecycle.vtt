@@ -1,0 +1,37 @@
+WEBVTT
+
+1
+00:00:02.600 --> 00:00:04.533
+Workspace: the conductor and its team of agents
+
+2
+00:00:04.533 --> 00:00:07.533
+1 · Open the Queues tab
+
+3
+00:00:07.533 --> 00:00:11.667
+2 · Open the atlas-release queue
+
+4
+00:00:11.667 --> 00:00:16.867
+3 · Select a task, then choose “new”
+
+5
+00:00:16.867 --> 00:00:23.067
+4 · Type the task; Enter moves through fields
+
+6
+00:00:23.067 --> 00:00:25.600
+5 · Push the task: pending
+
+7
+00:00:25.600 --> 00:00:28.267
+6 · Scripted worker state: in progress
+
+8
+00:00:28.267 --> 00:00:31.867
+7 · The task finishes: done, counts update
+
+9
+00:00:31.867 --> 00:00:36.733
+State changes replayed by a scripted daemon

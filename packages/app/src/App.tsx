@@ -1,5 +1,6 @@
-import { lazy, Suspense, useEffect } from "react";
+import { useEffect } from "react";
 import { isOnboardingGated, type UiState } from "@chimera/ui-state";
+import { lazyScreen } from "./components/lazyScreen";
 import { TopBar } from "./components/TopBar";
 import { NativeVoiceDock } from "./components/NativeVoiceDock";
 import { MeetingRoomsProvider, MeetingRoomsBand, useMeetingRooms } from "./components/MeetingRooms";
@@ -29,18 +30,18 @@ import { installTerminalInputListener } from "./state/terminalSessions";
 //
 // AgentsScreen and WelcomeScreen stay EAGER on purpose: they are the startup route, and deferring
 // them would trade a cost you pay once, later, for a blank frame on every cold start.
-const ProjectsScreen = lazy(() => import("./screens/ProjectsScreen").then((m) => ({ default: m.ProjectsScreen })));
-const TeamsScreen = lazy(() => import("./screens/TeamsScreen").then((m) => ({ default: m.TeamsScreen })));
-const RolesScreen = lazy(() => import("./screens/RolesScreen").then((m) => ({ default: m.RolesScreen })));
-const QueuesScreen = lazy(() => import("./screens/QueuesScreen").then((m) => ({ default: m.QueuesScreen })));
-const EventsScreen = lazy(() => import("./screens/EventsScreen").then((m) => ({ default: m.EventsScreen })));
-const InboxScreen = lazy(() => import("./screens/InboxScreen").then((m) => ({ default: m.InboxScreen })));
-const SloScreen = lazy(() => import("./screens/SloScreen").then((m) => ({ default: m.SloScreen })));
-const HistoryScreen = lazy(() => import("./screens/HistoryScreen").then((m) => ({ default: m.HistoryScreen })));
-const MemoryScreen = lazy(() => import("./screens/MemoryScreen").then((m) => ({ default: m.MemoryScreen })));
-const SettingsScreen = lazy(() => import("./screens/SettingsScreen").then((m) => ({ default: m.SettingsScreen })));
-const HelpScreen = lazy(() => import("./screens/HelpScreen").then((m) => ({ default: m.HelpScreen })));
-const ReviewRoomScreen = lazy(() => import("./screens/ReviewRoomScreen").then((m) => ({ default: m.ReviewRoomScreen })));
+const ProjectsScreen = lazyScreen(() => import("./screens/ProjectsScreen").then((m) => ({ default: m.ProjectsScreen })));
+const TeamsScreen = lazyScreen(() => import("./screens/TeamsScreen").then((m) => ({ default: m.TeamsScreen })));
+const RolesScreen = lazyScreen(() => import("./screens/RolesScreen").then((m) => ({ default: m.RolesScreen })));
+const QueuesScreen = lazyScreen(() => import("./screens/QueuesScreen").then((m) => ({ default: m.QueuesScreen })));
+const EventsScreen = lazyScreen(() => import("./screens/EventsScreen").then((m) => ({ default: m.EventsScreen })));
+const InboxScreen = lazyScreen(() => import("./screens/InboxScreen").then((m) => ({ default: m.InboxScreen })));
+const SloScreen = lazyScreen(() => import("./screens/SloScreen").then((m) => ({ default: m.SloScreen })));
+const HistoryScreen = lazyScreen(() => import("./screens/HistoryScreen").then((m) => ({ default: m.HistoryScreen })));
+const MemoryScreen = lazyScreen(() => import("./screens/MemoryScreen").then((m) => ({ default: m.MemoryScreen })));
+const SettingsScreen = lazyScreen(() => import("./screens/SettingsScreen").then((m) => ({ default: m.SettingsScreen })));
+const HelpScreen = lazyScreen(() => import("./screens/HelpScreen").then((m) => ({ default: m.HelpScreen })));
+const ReviewRoomScreen = lazyScreen(() => import("./screens/ReviewRoomScreen").then((m) => ({ default: m.ReviewRoomScreen })));
 
 import { requestOsNotifyPermission } from "./state/notifyOs";
 import { getCoordCommands } from "./state/commands.coord";
@@ -248,9 +249,7 @@ function AppContent() {
       {conn === "disconnected" && <DisconnectedBanner />}
       <PinnedBar />
       <main className={styles.content}>
-        {/* fallback={null} rather than a spinner: these chunks come off local disk in a webview,
-            so a visible "loading" would flash for longer than the load it announces. */}
-        <Suspense fallback={null}>
+        {/* Lazy routes contain failures; chrome remains available for navigation. */}
         {gated ? <WelcomeScreen />
           : reviewOpen ? <ReviewRoomScreen />
           : helpOpen ? <HelpScreen />
@@ -265,7 +264,6 @@ function AppContent() {
           : activeTab === "roles" ? <RolesScreen />
           : activeTab === "runs" ? <HistoryScreen />
           : <MemoryScreen />}
-        </Suspense>
       </main>
       <WorkflowStudio />
       <Footer />

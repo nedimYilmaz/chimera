@@ -10,15 +10,16 @@ import type { EngineMetadata, SpeechEngine } from "./types";
 
 const engines = new Map<string, SpeechEngine>();
 
-function register(engine: SpeechEngine): void {
+export function register(engine: SpeechEngine): void {
   engines.set(engine.meta.id, engine);
 }
 
 register(createSpeechSynthesisEngine());
-register(createMockSttEngine());
+if (import.meta.env.DEV && typeof window !== "undefined" && window.__CHIMERA_MOCK__) register(createMockSttEngine());
 
 export const DEFAULT_TTS_ENGINE_ID = SYSTEM_TTS_ENGINE_ID;
-export const DEFAULT_STT_ENGINE_ID = MOCK_STT_ENGINE_ID;
+export let DEFAULT_STT_ENGINE_ID: string | null = engines.has(MOCK_STT_ENGINE_ID) ? MOCK_STT_ENGINE_ID : null;
+export function selectSttEngine(id: string | null): void { DEFAULT_STT_ENGINE_ID = id; }
 
 export function listEngines(): EngineMetadata[] {
   return [...engines.values()].map((e) => e.meta);
@@ -34,8 +35,10 @@ function requireEngine(id: string): SpeechEngine {
   return engine;
 }
 
-export function getDefaultSttEngine(): SpeechEngine {
-  return requireEngine(DEFAULT_STT_ENGINE_ID);
+export function getDefaultSttEngine(): SpeechEngine | undefined {
+  const selected = DEFAULT_STT_ENGINE_ID ? engines.get(DEFAULT_STT_ENGINE_ID) : undefined;
+  if (DEFAULT_STT_ENGINE_ID) return selected?.meta.healthy && selected.transcribe ? selected : undefined;
+  return [...engines.values()].find(e => e.meta.isLocal && e.meta.healthy && e.transcribe);
 }
 
 export function getDefaultTtsEngine(): SpeechEngine {

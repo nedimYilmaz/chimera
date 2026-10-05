@@ -1,3 +1,4 @@
+import { WorkingTreeDisclosure } from "./WorkingTreePanel";
 import type { TaskEvidence } from "@chimera/protocol";
 import { evidenceFileStatusGlyph, evidenceProvenanceLine, evidenceStepLine } from "../state/selectors.evidence";
 import styles from "./ChangesEvidencePanel.module.css";
@@ -52,6 +53,7 @@ export function ChangesEvidencePanel({
         evidence.provenance.map((entry) => (
           <div className={styles.section} key={entry.worktreeKey} data-evidence-provenance={entry.worktreeKey}>
             <span className={styles.sectionLabel}>{evidenceProvenanceLine(entry)}</span>
+            {entry.agentIds.length > 0 && <WorkingTreeDisclosure target={{ agentId: entry.agentIds[entry.agentIds.length - 1]! }} taskId={evidence.taskId} />}
             {entry.diff.available && entry.diff.files.length > 0 && (
               <div className={styles.fileList}>
                 {entry.diff.files.map((f) => (

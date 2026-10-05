@@ -1,8 +1,12 @@
+import { probeWorkspaceScale } from "./probes/workspace-scale.mjs";
+import { probeWorkspaceRecovery } from "./probes/workspace-recovery.mjs";
 // Real Chromium rendering of actual app components through an isolated Vite
 // fixture. Synthetic state only: no daemon, provider, account, network, mic or
 // production build. Set CHIMERA_BROWSER_GATE_SCREENSHOTS=1 to capture screenshots.
 import assert from "node:assert/strict";
-import { writeFileSync } from "node:fs";
+import { probeInspectorRegistry } from "./probes/groups-registry.mjs";
+import { probeTeamsForms } from "./probes/teams-form.mjs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -108,6 +112,8 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
     args: [
     "--headless=new",
     "--mute-audio",
+    "--use-fake-device-for-media-stream",
+    "--enable-automation",
     "--no-first-run",
     "--no-default-browser-check",
     "--disable-background-networking",
@@ -124,7 +130,7 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
   const { sessionId } = await call("Target.attachToTarget", { targetId, flatten: true });
   await call("Page.enable", {}, sessionId);
   await call("Runtime.enable", {}, sessionId);
-  await installLoopbackGuard(cdp, sessionId, `http://127.0.0.1:${port}`);
+  await installLoopbackGuard(cdp, sessionId, `http://127.0.0.1:${port}`, { fakeMicrophone: true });
   await call("Page.navigate", { url: `http://127.0.0.1:${port}/__ui-qa` }, sessionId);
   const evaluate = async (expression) => {
     const result = await call("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true }, sessionId);
@@ -185,17 +191,25 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
     assert.ok(point, `missing pointer target: ${selector}`);
     return point;
   };
-  const layoutAudit = async (scope = "document.body") => evaluate(`(() => {
+  const layoutAudit = async (scope = "document.body", scrollRegion = null) => evaluate(`(() => {
     const root = ${scope};
     const rootRect = root.getBoundingClientRect();
     const bounds = root === document.body
       ? { left: 0, right: innerWidth }
       : { left: rootRect.left, right: rootRect.right };
     const all = [...root.querySelectorAll("*")];
+    const scroller = ${scrollRegion ? `root.querySelector(${JSON.stringify(scrollRegion)})` : "null"};
+    const scrollerBounds = scroller?.getBoundingClientRect();
+    const accessibleScroll = scroller && /^(auto|scroll)$/.test(getComputedStyle(scroller).overflowX)
+      && scroller.tabIndex >= 0 && scroller.getAttribute('aria-label') && scroller.clientWidth > 0
+      && scrollerBounds.left >= bounds.left && scrollerBounds.right <= bounds.right;
     const overflowing = all.filter((el) => {
       const r = el.getBoundingClientRect();
       const s = getComputedStyle(el);
       if (s.display === "none" || s.visibility === "hidden" || el.closest('[aria-hidden="true"],[inert]')) return false;
+      // Opt in only for a bounded, labeled keyboard scroll region. Its content
+      // reachability is exercised separately; keep auditing the region itself.
+      if (accessibleScroll && el !== scroller && scroller.contains(el)) return false;
       return s.position !== "fixed" && r.width > 0 && (r.right > bounds.right + 1 || r.left < bounds.left - 1);
     }).map((el) => ({ tag: el.tagName, text: (el.textContent || "").trim().slice(0, 40), rect: el.getBoundingClientRect().toJSON() })).slice(0, 8);
     const interactive = [...root.querySelectorAll('button,a[href],input,select,textarea,[role="button"],[role="tab"],[tabindex]')];
@@ -213,6 +227,7 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
       pageWidth: document.documentElement.scrollWidth,
       scopeWidth: rootRect.width,
       scopeScrollWidth: root.scrollWidth,
+      accessibleScroll: Boolean(accessibleScroll),
       overflowing,
       hiddenInteractive,
     };
@@ -222,6 +237,162 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
   const networkGuard = await verifyLoopbackGuard(evaluate);
   check("network guard blocks external fetch and websocket", networkGuard.fetchBlocked && networkGuard.websocketBlocked
     && networkGuard.attempts.length === 2 && networkGuard.attempts.every((attempt) => attempt.blocked), networkGuard);
+
+
+  if (process.env.CHIMERA_BROWSER_GATE_RECOVERY_ONLY === "1") {
+    await probeWorkspaceRecovery({ check, show, evaluate, waitFor, click, key, viewport, screenshot, settleRender, artifactDir });
+    await probeWorkspaceScale({ check, show, evaluate, waitFor, click, key, viewport, screenshot, settleRender, artifactDir });
+    return;
+  }
+
+  if (process.env.CHIMERA_BROWSER_GATE_IMAGE_ONLY !== "1" && process.env.CHIMERA_BROWSER_GATE_TEAMS_FORM_ONLY !== "1") {
+    await probeInspectorRegistry({ viewport, show, waitFor, evaluate, check });
+    if (process.env.CHIMERA_BROWSER_GATE_GROUPS_ONLY === "1") return;
+  }
+  if (process.env.CHIMERA_BROWSER_GATE_IMAGE_ONLY !== "1") {
+    await probeTeamsForms({ viewport, show, waitFor, click, evaluate, settleRender, key, call, sessionId, check, screenshot, artifactDir });
+    if (process.env.CHIMERA_BROWSER_GATE_TEAMS_FORM_ONLY === "1") return;
+  }
+
+  // UX26-G: actual review controls with synthetic RPC races, no live daemon or Git writes.
+  await viewport(768, 900);
+  await show("git-review");
+  await waitFor("window.__UI_QA__.git.pending() === 1");
+  const gitLoading = await evaluate(`!!document.querySelector('[data-load-status="loading"]') && !document.body.textContent.includes('Working tree clean')`);
+  await evaluate(`window.__UI_QA__.git.settle('error')`);
+  await waitFor(`document.querySelector('[data-load-retry]')`);
+  await click('[data-load-retry]');
+  const gitRetry = await evaluate(`document.querySelector('[data-load-retry]').disabled`);
+  await evaluate(`window.__UI_QA__.git.settle('rows')`);
+  await waitFor(`document.querySelector('[data-git-branch]')`);
+  check("ux26 g working tree states", gitLoading && gitRetry && await evaluate(`document.querySelector('[data-git-branch]').textContent.includes('chimera/review-fixture') && !document.querySelector('[data-load-status]')`));
+  await click('[aria-label="Working-tree files"] li:first-child button:first-child');
+  await waitFor(`document.querySelector('[data-git-edit-load]')`);
+  await click('[data-git-edit-load]');
+  await waitFor(`document.querySelector('[aria-label="File text draft"]')`);
+  await evaluate(`document.querySelector('[aria-label="File text draft"]').focus(); document.querySelector('[aria-label="File text draft"]').select()`);
+  await call("Input.insertText", { text: "retained unsaved text" }, sessionId);
+  await evaluate(`window.__UI_QA__.git.externalContent()`);
+  await click('[data-git-edit-save]');
+  await waitFor(`document.querySelector('[data-git-editor]').textContent.includes('stale_content')`);
+  check("ux26 g edit content conflict keeps draft", await evaluate(`document.querySelector('[aria-label="File text draft"]').value === 'retained unsaved text' && window.__UI_QA__.git.writes().length === 0`));
+  await evaluate(`window.__UI_QA__.git.cycle()`);
+  await waitFor(`window.__UI_QA__.git.pending() === 1`);
+  await evaluate(`window.__UI_QA__.git.settle('rows')`);
+  await settleRender();
+  check("ux26 g edit unsaved draft preserved", await evaluate(`document.querySelector('[aria-label="File text draft"]').value === 'retained unsaved text' && document.querySelector('[aria-label="Working-tree files"] li:first-child button').getAttribute('aria-pressed') === 'true'`));
+  await evaluate(`window.__UI_QA__.git.externalIndex()`);
+  await click('[aria-label="Stage one.txt"]');
+  await waitFor(`document.querySelector('[data-git-error]')`);
+  check("ux26 g index only conflict", await evaluate(`document.querySelector('[data-git-error]').textContent.includes('stale_index') && window.__UI_QA__.git.writes().length === 0`));
+  await click('[data-git-refresh]');
+  await waitFor(`window.__UI_QA__.git.pending() === 1`);
+  await evaluate(`window.__UI_QA__.git.settle('rows')`);
+  await settleRender();
+  check("ux26 g stale head refresh keeps selection", await evaluate(`!document.querySelector('[data-git-error]') && document.querySelector('[aria-label="Working-tree files"] li:first-child button').getAttribute('aria-pressed') === 'true' && document.querySelector('[aria-label="File text draft"]').value === 'retained unsaved text'`));
+  await click('[data-git-commit-open]');
+  await waitFor(`document.querySelector('[aria-label="Commit message"]') === document.activeElement`);
+  await call("Input.insertText", { text: "reviewed fixture commit" }, sessionId);
+  const gitCommitFocus = await evaluate(`!!document.querySelector('[data-git-commit]') && !document.querySelector('[data-git-commit-submit]').disabled && document.querySelector('[data-git-commit]').textContent.includes('one.txt')`);
+  await key("Escape"); await settleRender();
+  check("ux26 g stage commit overlay focus escape", gitCommitFocus && await evaluate(`!document.querySelector('[data-git-commit]') && document.activeElement === document.querySelector('[data-git-commit-open]') && window.__UI_QA__.git.writes().length === 0`));
+  let gitLayout = true;
+  for (const width of [360, 768, 1440]) {
+    await viewport(width, 900);
+    const audit = await layoutAudit("document.querySelector('[data-git-review-pane]')");
+    const composer = await evaluate(`(() => { const el=document.querySelector('[data-composer] textarea'); const r=el.getBoundingClientRect(); return r.width>0 && r.bottom<=innerHeight && !!document.elementFromPoint(r.left+r.width/2,r.top+r.height/2)?.closest('[data-composer]'); })()`);
+    gitLayout &&= audit.pageWidth <= width && audit.overflowing.length === 0 && composer;
+    await screenshot(`ux26-g-review-${width}`);
+  }
+  check("ux26 g no overflow no composer overlap 360 768 1440", gitLayout);
+  await click('[aria-label="Unstage one.txt"]'); await waitFor(`window.__UI_QA__.git.pending() === 1`); await evaluate(`window.__UI_QA__.git.settle('rows')`); await settleRender();
+  const gitUnstage = await evaluate(`!document.querySelector('[aria-label="Unstage one.txt"]')`);
+  await click('[aria-label="Stage one.txt"]'); await waitFor(`window.__UI_QA__.git.pending() === 1`); await evaluate(`window.__UI_QA__.git.settle('rows')`); await settleRender();
+  await click('[data-git-commit-open]'); await waitFor(`document.querySelector('[aria-label="Commit message"]')`); await click('[data-git-commit-submit]'); await waitFor(`window.__UI_QA__.git.pending() === 1`); await evaluate(`window.__UI_QA__.git.settle('rows')`); await settleRender();
+  check("ux26 g explicit unstage stage reviewed commit", gitUnstage && await evaluate(`window.__UI_QA__.git.writes().length === 3 && window.__UI_QA__.git.writes()[0].params.paths.length === 1 && window.__UI_QA__.git.writes()[0].params.unstage === true && window.__UI_QA__.git.writes()[1].params.unstage === false && window.__UI_QA__.git.writes()[2].method === 'worktree.gitCommit' && document.body.textContent.includes('Committed reviewed-fixture-sha')`));
+  await click('[data-git-refresh]'); await waitFor(`window.__UI_QA__.git.pending() === 1`); await evaluate(`window.__UI_QA__.git.settle('lease')`); await settleRender();
+  check("ux26 g lease held state", await evaluate(`document.querySelector('[data-git-lease]').textContent.includes('live fixture agent') && document.querySelector('[aria-label="Stage one.txt"]').disabled && document.querySelector('[data-git-edit-save]').disabled`));
+  await click('[data-git-refresh]'); await waitFor(`window.__UI_QA__.git.pending() === 1`); await evaluate(`window.__UI_QA__.git.settle('clean')`); await settleRender();
+  check("ux26 g successful clean state", await evaluate(`document.body.textContent.includes('Working tree clean')`));
+  await click('[data-git-refresh]'); await waitFor(`window.__UI_QA__.git.pending() === 1`); await evaluate(`window.__UI_QA__.git.settle('unsupported')`); await settleRender();
+  check("ux26 g unsupported actions stay disabled", await evaluate(`document.body.textContent.includes('actions unavailable') && document.querySelector('[data-git-commit-open]').disabled`));
+
+  // Optional local proof uses the real installed-CLI item without checking binary/session
+  // data into the repository. Every regular gate still decodes the sanitized raster fixture.
+  let expectedImageDimensions = { width: 1, height: 1 };
+  if (process.env.CHIMERA_TEST_IMAGE_OUTPUT_FIXTURE) {
+    const item = JSON.parse(readFileSync(process.env.CHIMERA_TEST_IMAGE_OUTPUT_FIXTURE, "utf8"));
+    const bytes = Buffer.from(item.result, "base64");
+    expectedImageDimensions = { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
+    await evaluate(`window.__UI_QA_IMAGE__ = ${JSON.stringify({ mediaType: "image/png", data: item.result })}; true`);
+  }
+  for (const width of [360, 768, 1440]) {
+    await viewport(width, 900);
+    await show("output-images");
+    await waitFor(`document.querySelector('[data-output-image-chip] img')?.naturalWidth > 0`);
+    const layout = await layoutAudit('document.querySelector("[data-output-image-fixture]")');
+    check(`output images ${width}px fit viewport`, layout.overflowing.length === 0 && layout.scopeScrollWidth <= layout.scopeWidth + 1, layout);
+  }
+  check("output preview visible while tool strip is collapsed", await evaluate(`document.querySelectorAll('[data-output-image-chip]').length === 2 && !document.querySelector('[data-tool-detail]')`));
+  const decoded = await evaluate(`(() => { const img = document.querySelector('[data-output-image-chip] img'); return { width: img.naturalWidth, height: img.naturalHeight, complete: img.complete }; })()`);
+  check("output raster decodes actual image bytes", decoded.complete && decoded.width === expectedImageDimensions.width && decoded.height === expectedImageDimensions.height, decoded);
+  await waitFor(`document.querySelectorAll('[data-output-image-chip]:disabled').length === 1`);
+  check("output malformed raster degrades safely", await evaluate(`document.querySelector('[data-output-image-chip]:disabled').textContent.includes('Image unavailable')`));
+  check("output oversized payload has explicit omission", await evaluate(`document.querySelector('[data-image-output-warning]').textContent.includes('too-large')`));
+  await evaluate(`document.querySelector('[data-output-image-chip]').focus(); document.querySelector('[data-output-image-chip]').click()`);
+  await waitFor(`document.querySelector('[data-image-lightbox] img')?.naturalWidth > 0`);
+  check("output viewer uses existing named overlay", await evaluate(`document.querySelector('[data-image-lightbox] [role="dialog"]').getAttribute('aria-label') === 'image_generation image 1'`));
+  await evaluate(`document.querySelector('[data-image-lightbox] button').focus(); document.querySelector('[data-image-lightbox] button').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
+  await waitFor(`!document.querySelector('[data-image-lightbox]')`);
+  check("output viewer escape restores opener focus", await evaluate(`document.activeElement === document.querySelector('[data-output-image-chip]')`));
+  await evaluate(`document.querySelector('[data-image-owner-switch]').click()`);
+  await waitFor(`!document.querySelector('[data-output-image-chip]')`);
+  check("output images remain with owning agent", await evaluate(`!document.querySelector('[data-image-lightbox]') && !document.querySelector('[data-output-images]')`));
+  await evaluate(`document.querySelector('[data-image-owner-switch]').click()`);
+  await waitFor(`document.querySelector('[data-output-image-chip] img')?.naturalWidth > 0`);
+  check("output replay preserves inline preview", await evaluate(`document.querySelectorAll('[data-output-image-chip]').length === 2`));
+  await evaluate(`document.querySelector('[data-output-image-chip]').click(); window.__UI_QA__.imageRegisteredOverlay(true)`);
+  await waitFor(`document.querySelector('[data-accounts-rows]')`);
+  check("output viewer closes when registered overlay opens", await evaluate(`!document.querySelector('[data-image-lightbox]') && document.querySelectorAll('[role="dialog"]').length === 1`));
+  await evaluate(`window.__UI_QA__.imageRegisteredOverlay(false)`);
+  await waitFor(`!document.querySelector('[data-accounts-rows]')`);
+  await evaluate(`document.querySelector('[data-output-image-chip]').click()`);
+  await waitFor(`document.querySelector('[data-image-lightbox]')`);
+  await evaluate(`window.__UI_QA__.imageAgentSelection()`);
+  // A fixture deliberately keeps the old transcript mounted so this probes the
+  // app selection lifecycle rather than merely relying on React unmount cleanup.
+  await evaluate(`new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))`);
+  check("output viewer closes on agent selection", await evaluate(`!document.querySelector('[data-image-lightbox]')`));
+  await evaluate(`document.querySelector('[data-output-image-chip]').click()`);
+  await waitFor(`document.querySelector('[data-image-lightbox]')`);
+  await evaluate(`document.querySelector('[data-image-replacement]').click()`);
+  await waitFor(`document.querySelector('[aria-label="Local replacement"]')`);
+  check("output viewer yields to another local card", await evaluate(`!document.querySelector('[data-image-lightbox]') && document.querySelectorAll('[role="dialog"]').length === 1`));
+  await evaluate(`document.querySelector('[aria-label="Local replacement"]').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
+  await waitFor(`!document.querySelector('[aria-label="Local replacement"]')`);
+  await evaluate(`document.querySelector('[data-image-replacement]').click()`);
+  await waitFor(`document.querySelector('[aria-label="Local replacement"]')`);
+  await evaluate(`document.querySelector('[data-output-image-chip]').click()`);
+  await waitFor(`document.querySelector('[data-image-lightbox]')`);
+  // Simulate delayed teardown of the old card after the replacement has mounted.
+  // Unmount cleanup must only remove the old card, never notify the new viewer.
+  await evaluate(`document.querySelector('[data-image-close-replacement]').click()`);
+  await waitFor(`!document.querySelector('[aria-label="Local replacement"]')`);
+  await evaluate(`new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))`);
+  check("output old card teardown preserves replacement image", await evaluate(`!!document.querySelector('[data-image-lightbox]')`));
+  await evaluate(`document.querySelector('[data-image-lightbox] button')?.click()`);
+  await waitFor(`!document.querySelector('[data-image-lightbox]')`);
+  await evaluate(`document.querySelector('[data-image-replacement]').click()`);
+  await waitFor(`document.querySelector('[aria-label="Local replacement"]')`);
+  await evaluate(`document.querySelector('[data-image-nested-confirm]').click()`);
+  await waitFor(`document.querySelectorAll('[role="dialog"]').length === 2`);
+  await evaluate(`document.querySelector('[role="dialog"] [role="dialog"] button').focus(); document.querySelector('[role="dialog"] [role="dialog"] button').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
+  await waitFor(`document.querySelectorAll('[role="dialog"]').length === 1`);
+  check("output nested ConfirmCard preserves parent lifecycle", await evaluate(`!!document.querySelector('[aria-label="Local replacement"]') && !document.querySelector('[role="dialog"] [role="dialog"]')`));
+  await evaluate(`document.querySelector('[aria-label="Local replacement"]').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
+  await waitFor(`!document.querySelector('[aria-label="Local replacement"]')`);
+  await screenshot("output-images");
+  if (process.env.CHIMERA_BROWSER_GATE_IMAGE_ONLY === "1") return;
 
   await viewport(390, 900);
   await show("computer-use");
@@ -368,12 +539,15 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
 
   const actionCounts = () => evaluate(`JSON.parse(document.querySelector('[data-ui-qa-action-counts]').textContent)`);
   const focus = (selector) => evaluate(`document.querySelector(${JSON.stringify(selector)})?.focus()`);
-  const input = (selector, value) => evaluate(`(() => {
-    const element = document.querySelector(${JSON.stringify(selector)});
-    const setter = Object.getOwnPropertyDescriptor(element instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype, "value").set;
-    setter.call(element, ${JSON.stringify(value)});
-    element.dispatchEvent(new Event("input", { bubbles: true }));
-  })()`);
+  const input = async (selector, value) => {
+    await waitFor(`document.querySelector(${JSON.stringify(selector)})`);
+    await evaluate(`(() => {
+      const element = document.querySelector(${JSON.stringify(selector)});
+      const setter = Object.getOwnPropertyDescriptor(element instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype, "value").set;
+      setter.call(element, ${JSON.stringify(value)});
+      element.dispatchEvent(new Event("input", { bubbles: true }));
+    })()`);
+  };
   await viewport(630, 760);
 
   await show("settings");
@@ -654,6 +828,495 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
   check("topbar has no hidden focusable controls", narrowTopbarLayout.hiddenInteractive.length === 0, narrowTopbarLayout);
   await screenshot("topbar-narrow");
 
+  // UX26: deferred RPCs drive the real Roles screen and shared chrome, including
+  // updates that arrive after a disconnect. No live daemon or desktop is involved.
+  await viewport(1440, 900);
+  // R: actual Agents screen, 301 workers, one on-demand process snapshot.
+  await viewport(1440, 900);
+  await show("resources");
+  await waitFor(`document.querySelector('[data-agent-resources]')`);
+  check("ux26 r collapsed avoids fleet scans", await evaluate(`window.__UI_QA__.resources.pending() === 0`));
+  await click('[data-agent-resources] summary');
+  await waitFor(`window.__UI_QA__.resources.pending() === 1`);
+  const resourceLoading = await evaluate(`!!document.querySelector('[data-load-status="loading"]') && !document.querySelector('[data-resource-tree]')`);
+  await evaluate(`window.__UI_QA__.resources.settle('ok')`);
+  await waitFor(`document.querySelector('[data-resource-tree]')`);
+  const resourceOk = await evaluate(`(() => { const p=document.querySelector('[data-agent-resources]'); return p.textContent.includes('300 procs') && p.textContent.includes('separate from token context') && p.textContent.includes('new agents wait for capacity') && p.querySelectorAll('[title*="PID"]').length <= 14 && ![...p.querySelectorAll('button')].some(b=>/stop|kill/.test(b.textContent)); })()`);
+  await evaluate(`window.__UI_QA__.resources.cycle()`);
+  await waitFor(`window.__UI_QA__.resources.pending() === 1`);
+  await evaluate(`window.__UI_QA__.resources.settle('error')`);
+  await waitFor(`document.querySelector('[data-agent-resources] [data-load-status="stale"]')`);
+  check("ux26 r stale keeps last good", await evaluate(`document.querySelector('[data-agent-resources]').textContent.includes('300 procs') && document.querySelector('[data-resource-updated]').textContent.includes('stale')`));
+  await click('[data-agent-resources] [data-load-retry]');
+  await waitFor(`window.__UI_QA__.resources.pending() === 1`);
+  const resourceBusy = await evaluate(`document.querySelector('[data-agent-resources] [data-load-retry]').disabled`);
+  await evaluate(`window.__UI_QA__.resources.settle('fail-open')`);
+  await waitFor(`document.querySelector('[data-agent-resources]').textContent.includes('admission is fail-open')`);
+  const failOpen = true;
+  await evaluate(`document.querySelector('[data-resource-tree]').scrollTop = 8204`);
+  await settleRender();
+  const treeScrolled = await evaluate(`document.querySelector('[data-resource-tree]').scrollTop > 8000 && !!document.querySelector('[data-resource-tree] [title*="PID 399"]')`);
+  await evaluate(`window.__UI_QA__.resources.cycle()`);
+  await waitFor(`window.__UI_QA__.resources.pending() === 1`);
+  await evaluate(`window.__UI_QA__.resources.connected(false); window.__UI_QA__.resources.settle('unavailable')`);
+  await settleRender();
+  const lateDropped = await evaluate(`document.querySelector('[data-agent-resources]').textContent.includes('300 procs') && document.querySelector('[data-resource-updated]').textContent.includes('stale')`);
+  await evaluate(`window.__UI_QA__.resources.connected(true)`);
+  await waitFor(`window.__UI_QA__.resources.pending() === 1`);
+  await evaluate(`window.__UI_QA__.resources.settle('unavailable')`);
+  await waitFor(`document.querySelector('[data-agent-resources]').textContent.includes('Resources unavailable · platform')`);
+  const unavailable = await evaluate(`!document.querySelector('[data-resource-tree]')`);
+  await evaluate(`window.__UI_QA__.resources.cycle()`);
+  await waitFor(`window.__UI_QA__.resources.pending() === 1`);
+  await evaluate(`window.__UI_QA__.resources.settle('stale')`);
+  await waitFor(`document.querySelector('[data-resource-tree]')`);
+  check("ux26 r tree recovery resets virtual window", treeScrolled && await evaluate(`document.querySelector('[data-resource-tree]').scrollTop === 0 && !!document.querySelector('[data-resource-tree] [title*="PID 100"]')`));
+  let resourceLayout = true;
+  const resourceAudits = [];
+  for (const width of [360, 768, 1440]) {
+    await viewport(width, 900);
+    const audit = await layoutAudit('document.querySelector("[data-screen-probe]")');
+    await evaluate(`document.querySelector('[data-composer] textarea')?.scrollIntoView({block: "nearest", inline: "nearest"})`);
+    await settleRender();
+    const reachable = await evaluate(`(() => { const c=document.querySelector('[data-composer] textarea'); if(!c)return false; const r=c.getBoundingClientRect(); const hit=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);return r.width>0 && r.bottom<=innerHeight && (hit===c||c.contains(hit)); })()`);
+    resourceAudits.push({width, audit, reachable});
+    resourceLayout = resourceLayout && audit.pageWidth <= width && audit.scopeScrollWidth <= audit.scopeWidth && audit.overflowing.length === 0 && reachable;
+    await screenshot(`ux26-r-resources-${width}`);
+  }
+  check("ux26 r no overflow 360 768 1440", resourceLayout, resourceAudits);
+  await evaluate(`window.__UI_QA__.resources.cycle()`);
+  await waitFor(`window.__UI_QA__.resources.pending() === 1`);
+  await evaluate(`window.__UI_QA__.resources.settle('unsupported')`);
+  await waitFor(`document.querySelector('[data-agent-resources]').textContent.includes('this daemon does not support')`);
+  const unsupported = await evaluate(`!document.querySelector('[data-agent-resources] [data-load-retry]')`);
+  check("ux26 r resources section states", resourceLoading && resourceOk && resourceBusy && failOpen && lateDropped && unavailable && unsupported);
+
+
+  // UX26-S: actual controls and browser MediaRecorder/OfflineAudioContext, synthetic
+  // local daemon response. Upstream recognition is proved separately by stt-live.
+  await viewport(1440, 900);
+  await show("stt");
+  await waitFor(`document.querySelector('[data-stt-engine]')?.value === 'whisper-cpp'`);
+  const speechIdle = await evaluate(`window.__UI_QA__.stt.snapshot()`);
+  await call("Browser.grantPermissions", { origin: `http://127.0.0.1:${port}`, permissions: ["audioCapture"] });
+  await evaluate(`document.querySelector('[data-compose-input]').focus(); document.querySelector('[data-compose-input]').setSelectionRange(7, 7); document.querySelector('[data-push-to-talk]').focus()`);
+  await call("Input.dispatchKeyEvent", { type: "keyDown", key: " ", code: "Space", windowsVirtualKeyCode: 32 }, sessionId);
+  try { await waitFor(`document.querySelector('[data-push-to-talk]').dataset.voiceStatus === 'listening'`); }
+  catch (error) { throw new Error(`Local speech hold failed: ${JSON.stringify(await evaluate(`({ ...window.__UI_QA__.stt.snapshot(), label: document.querySelector('[data-push-to-talk]').textContent, disabled: document.querySelector('[data-push-to-talk]').disabled, focus: document.activeElement.outerHTML.slice(0,200) })`))}`); }
+  await new Promise(resolve => setTimeout(resolve, 700));
+  await call("Input.dispatchKeyEvent", { type: "keyUp", key: " ", code: "Space", windowsVirtualKeyCode: 32 }, sessionId);
+  await waitFor(`document.querySelector('[data-compose-input]').value === 'before review this message after'`);
+  const speechInserted = await evaluate(`window.__UI_QA__.stt.snapshot()`);
+  check("ux26 s ptt hold release inserts draft", speechIdle.micRequests === 0 && speechInserted.micRequests === 1 && speechInserted.sends === 0 && speechInserted.transcribes === 1 && speechInserted.audioBytes > 44 && speechInserted.audioBytes <= 1920044 && speechInserted.lastLanguage === "en", speechInserted);
+  await evaluate(`(() => { const e = document.querySelector('[data-stt-language]'); e.value = 'tr'; e.dispatchEvent(new Event('change', {bubbles:true})); })()`);
+  await waitFor(`window.__UI_QA__.stt.snapshot().loadedLanguage === 'tr'`);
+  await evaluate(`new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))`);
+  await evaluate(`document.querySelector('[data-compose-input]').setSelectionRange(0,0); document.querySelector('[data-push-to-talk]').focus()`);
+  await call("Input.dispatchKeyEvent", { type: "keyDown", key: " ", code: "Space", windowsVirtualKeyCode: 32 }, sessionId);
+  await waitFor(`document.querySelector('[data-push-to-talk]').dataset.voiceStatus === 'listening'`);
+  await new Promise(resolve => setTimeout(resolve, 700));
+  await call("Input.dispatchKeyEvent", { type: "keyUp", key: " ", code: "Space", windowsVirtualKeyCode: 32 }, sessionId);
+  await waitFor(`document.querySelector('[data-compose-input]').value.startsWith('Mesajı inceleyin')`);
+  check("ux26 s language selection stays local", await evaluate(`window.__UI_QA__.stt.snapshot().lastLanguage === 'tr' && window.__UI_QA__.stt.snapshot().sends === 0 && document.querySelector('[data-compose-input]').value.endsWith('before review this message after')`));
+  await evaluate(`new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))`);
+  await evaluate(`document.querySelector('[data-push-to-talk]').focus()`);
+  await call("Input.dispatchKeyEvent", { type: "keyDown", key: " ", code: "Space", windowsVirtualKeyCode: 32 }, sessionId);
+  await waitFor(`document.querySelector('[data-push-to-talk]').dataset.voiceStatus === 'listening'`);
+  await call("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 }, sessionId);
+  await call("Input.dispatchKeyEvent", { type: "keyUp", key: " ", code: "Space", windowsVirtualKeyCode: 32 }, sessionId);
+  await waitFor(`document.querySelector('[data-push-to-talk]').dataset.voiceStatus === 'idle'`);
+  check("ux26 s cancel releases capture", await evaluate(`window.__UI_QA__.stt.snapshot().activeTracks === 0 && window.__UI_QA__.stt.snapshot().transcribes === 2 && window.__UI_QA__.stt.snapshot().sends === 0`));
+  await call("Browser.setPermission", { origin: `http://127.0.0.1:${port}`, permission: { name: "microphone" }, setting: "denied" });
+  await evaluate(`document.querySelector('[data-push-to-talk]').focus()`);
+  await call("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 }, sessionId);
+  await waitFor(`document.querySelector('[data-push-to-talk]').dataset.voiceStatus === 'error'`);
+  await call("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 }, sessionId);
+  const deniedSpeech = await evaluate(`document.querySelector('[data-push-to-talk]').textContent.toLowerCase().includes('denied') && window.__UI_QA__.stt.snapshot().sends === 0`);
+  await evaluate(`window.__UI_QA__.stt.mode('unavailable')`);
+  // A completed denial stays visible; reset via the same fixture voice store used by prior probes.
+  await show("stt");
+  await evaluate(`window.__UI_QA__.stt.mode('unavailable')`);
+  await waitFor(`document.querySelector('[data-push-to-talk]').textContent.includes('Set up local speech')`);
+  check("ux26 s ptt denied and unavailable states", deniedSpeech && await evaluate(`document.querySelector('[data-stt-install]')?.disabled && window.__UI_QA__.stt.snapshot().micRequests === 0`));
+  await evaluate(`window.__UI_QA__.stt.mode('downloading')`);
+  await waitFor(`!!document.querySelector('[data-stt-progress]')`);
+  const downloadProgress = await evaluate(`document.querySelector('[data-stt-progress]').value === 0.4`);
+  await click('[data-stt-install-details] summary');
+  await click('[data-stt-cancel]');
+  await waitFor(`!document.querySelector('[data-stt-progress]')`);
+  await evaluate(`window.__UI_QA__.stt.mode('failed')`);
+  await waitFor(`document.querySelector('[data-stt-install]')?.textContent.includes('Retry')`);
+  check("ux26 s install progress cancel verify", downloadProgress && await evaluate(`document.querySelector('[data-local-speech-settings]').textContent.includes('integrity check failed') && document.querySelector('[data-local-speech-settings]').textContent.includes('ae85e4a935d7')`));
+  const speechGeometry = [];
+  for (const width of [360, 768, 1440]) {
+    await viewport(width, 900);
+    const audit = await layoutAudit('document.querySelector("[data-stt-stage]")');
+    const composer = await evaluate(`(() => { const e = document.querySelector('[data-compose-input]'); const r = e.getBoundingClientRect(); return r.width > 20 && document.elementFromPoint(r.left + Math.min(10,r.width/2), r.top + r.height/2) === e; })()`);
+    speechGeometry.push({ width, fits: audit.scopeScrollWidth <= audit.scopeWidth + 1 && audit.pageWidth <= width + 1 && audit.overflowing.length === 0, composer });
+    await screenshot(`ux26-s-${width}`);
+  }
+  check("ux26 s no overflow no composer overlap 360 768 1440", speechGeometry.every(r => r.fits && r.composer), speechGeometry);
+
+  await show("roles-stability");
+  await waitFor(`window.__UI_QA__.stability.pending().length === 1`);
+  check("ux26 roles pending is not empty", await evaluate(`document.querySelector('[data-load-status="loading"]') && !document.body.textContent.includes('no roles') && !document.body.textContent.includes('roles (0)')`));
+  await evaluate(`window.__UI_QA__.stability.settle(1, 'error')`);
+  await waitFor(`document.querySelector('[data-load-status="error"]')`);
+  await click('[data-load-retry]');
+  await waitFor(`window.__UI_QA__.stability.pending().includes(2)`);
+  check("ux26 roles retry is busy", await evaluate(`document.querySelector('[data-load-retry]').disabled && document.querySelector('[data-load-retry]').textContent.includes('retrying')`));
+  await evaluate(`window.__UI_QA__.stability.settle(2, 'rows')`);
+  await waitFor(`document.querySelector('[data-role-row="tester"]')`);
+  check("ux26 roles retry recovers real rows", await evaluate(`!document.querySelector('[data-load-status]') && document.body.textContent.includes('roles (2)')`));
+  await focus('[data-role-row="tester"]');
+  await key('ArrowDown');
+  check("ux26 roles keyboard uses loaded rows", await evaluate(`document.querySelector('[data-role-binding-override-editor]') !== null`));
+  await focus('[data-override-input="cwd"]');
+  await call("Input.insertText", { text: "-unsaved" }, sessionId);
+  const overrideDraft = await evaluate(`document.querySelector('[data-override-input="cwd"]').value`);
+  await evaluate(`window.__UI_QA__.stability.refresh()`);
+  await waitFor(`window.__UI_QA__.stability.pending().includes(3)`);
+  await evaluate(`window.__UI_QA__.stability.settle(3, 'error')`);
+  await waitFor(`document.querySelector('[data-load-status="stale"]')`);
+  check("ux26 roles failed refresh retains rows and draft", await evaluate(`document.querySelector('[data-role-row="tester"]') && document.querySelector('[data-override-input="cwd"]').value === ${JSON.stringify(overrideDraft)}`));
+  await click('[data-load-retry]');
+  await waitFor(`window.__UI_QA__.stability.pending().includes(4)`);
+  await evaluate(`window.__UI_QA__.stability.connected(false)`);
+  await settleRender();
+  await evaluate(`window.__UI_QA__.stability.settle(4, 'large')`);
+  await settleRender();
+  check("ux26 roles disconnect drops late reply", await evaluate(`document.querySelectorAll('[data-role-row]').length === 2 && document.querySelector('[data-load-status="stale"]') && !document.querySelector('[data-load-retry]').disabled`));
+  await evaluate(`window.__UI_QA__.stability.connected(true)`);
+  await waitFor(`window.__UI_QA__.stability.pending().includes(5)`);
+  await evaluate(`window.__UI_QA__.stability.connected(true)`);
+  await settleRender();
+  check("ux26 roles reconnect reloads once", await evaluate(`JSON.stringify(window.__UI_QA__.stability.pending()) === '[5]'`));
+  await evaluate(`window.__UI_QA__.stability.settle(5, 'large')`);
+  await waitFor(`document.querySelectorAll('[data-role-row]').length === 202`);
+  check("ux26 roles refresh keeps selection and unsaved override", await evaluate(`document.querySelector('[data-override-input="cwd"]').value === ${JSON.stringify(overrideDraft)} && !document.querySelector('[data-load-status]')`));
+
+  for (const width of [360, 768, 1440]) {
+    await viewport(width, 900);
+    const audit = await layoutAudit('document.querySelector("[data-screen-probe]")');
+    check(`ux26 roles large list ${width}px fits viewport`, audit.pageWidth <= width && audit.overflowing.length === 0, audit);
+    // Narrow screens intentionally scroll the stacked split, wider screens scroll the list.
+    const rolesScroller = width <= 760 ? `document.querySelector('[data-screen-layout="split"]')` : `document.querySelector('[data-role-row]').closest('section')`;
+    await evaluate(`${rolesScroller}.scrollTop = 800`);
+    const scrollBefore = await evaluate(`${rolesScroller}.scrollTop`);
+    await evaluate(`window.__UI_QA__.stability.refresh()`);
+    const request = await evaluate(`window.__UI_QA__.stability.pending()[0]`);
+    await evaluate(`window.__UI_QA__.stability.settle(${request}, 'large')`);
+    await settleRender();
+    check(`ux26 roles large list ${width}px preserves scroll`, scrollBefore > 0 && await evaluate(`${rolesScroller}.scrollTop === ${scrollBefore}`));
+    const shortcut = await evaluate(`(() => { const b = document.querySelector('[data-topbar-tab="roles"]'); const k = b?.querySelector('kbd'); return {name:b?.textContent,key:k?.textContent,hidden:k?.getAttribute('aria-hidden'),shortcut:b?.getAttribute('aria-keyshortcuts'),title:b?.title}; })()`);
+    check(`ux26 topbar ${width}px names digit as shortcut`, shortcut.key === '0' && shortcut.hidden === 'true' && shortcut.shortcut === '0' && shortcut.title === 'roles — press 0', shortcut);
+    await screenshot(`ux26-roles-large-${width}`);
+  }
+  await viewport(1440, 900);
+  await evaluate(`window.__UI_QA__.stability.rebind('x')`);
+  await settleRender();
+  check("ux26 topbar rebinding keeps digit and live sequence", await evaluate(`document.querySelector('[data-topbar-tab="roles"]').title.includes('press 0 or') && document.querySelector('[data-topbar-tab="roles"]').title.endsWith('→ x')`));
+  await focus('[data-topbar-tab="roles"]');
+  await key('1'); await key('0');
+  check("ux26 topbar digit still navigates after rebinding", await evaluate(`document.querySelector('[data-topbar-tab="roles"]').getAttribute('aria-current') === 'page'`));
+  await evaluate(`window.__UI_QA__.stability.resetKeys()`);
+  await focus('[data-screen-probe] [data-action-chip]');
+  await buttonKey('Enter', 'Enter');
+  await waitFor(`document.querySelector('[role="dialog"]')`);
+  await evaluate(`window.__UI_QA__.stability.overlay()`);
+  await waitFor(`!document.querySelector('[role="dialog"]')`);
+  check("ux26 reducer overlay replaces contextual form", await evaluate(`document.querySelectorAll('[role="dialog"]').length === 0`));
+  await evaluate(`window.__UI_QA__.stability.refresh()`);
+  const unsupportedRequest = await evaluate(`window.__UI_QA__.stability.pending()[0]`);
+  await evaluate(`window.__UI_QA__.stability.settle(${unsupportedRequest}, 'unsupported')`);
+  await waitFor(`document.body.textContent.includes('requires a Phase 2 daemon')`);
+  check("ux26 roles unsupported stays explicit without retry", await evaluate(`!document.querySelector('[data-load-retry]') && !!document.querySelector('[data-role-row="quality/tester"]')`));
+  await evaluate(`window.__UI_QA__.stability.cycle()`);
+  await waitFor(`window.__UI_QA__.stability.pending().length === 1`);
+  const batchedRequest = await evaluate(`window.__UI_QA__.stability.pending()[0]`);
+  await evaluate(`window.__UI_QA__.stability.settle(${batchedRequest}, 'rows')`);
+  await waitFor(`document.querySelector('[data-role-row="tester"]')`);
+  check("ux26 roles batched reconnect is not lost", await evaluate(`!document.body.textContent.includes('requires a Phase 2 daemon') && !document.querySelector('[data-load-status]')`));
+
+  // The same rejected/deferred team.list drives both actual consumers.
+  for (const surface of ["teams", "roles"]) {
+    const rowsSelector = surface === "teams" ? '[data-team-row]' : '[data-role-row="quality/tester"]';
+    for (const width of [360, 768, 1440]) {
+      await viewport(width, 900);
+      await show(surface === "teams" ? "teams-stability" : "team-roles-stability");
+      await waitFor(`window.__UI_QA__.teamStability.pending().length === 1`);
+      check(`ux26 ${surface} team-list ${width}px pending is not empty`, await evaluate(`document.body.textContent.includes('loading teams') && !document.body.textContent.includes('no teams') && ${surface === "teams" ? "!document.body.textContent.includes('teams (0)')" : "true"}`));
+      await evaluate(`window.__UI_QA__.teamStability.settle(1, 'error')`);
+      await waitFor(`document.body.textContent.includes('Synthetic Teams failure')`);
+      check(`ux26 ${surface} team-list ${width}px failure offers retry`, await evaluate(`document.querySelector('[data-load-status="error"]') && document.querySelector('[data-load-retry]') && !document.body.textContent.includes('no teams')`));
+      await click('[data-load-retry]');
+      await waitFor(`window.__UI_QA__.teamStability.pending().includes(2)`);
+      check(`ux26 ${surface} team-list ${width}px retry is busy`, await evaluate(`document.querySelector('[data-load-retry]').disabled && document.querySelector('[data-load-retry]').textContent.includes('retrying')`));
+      await evaluate(`window.__UI_QA__.teamStability.settle(2, 'rows')`);
+      await waitFor(`document.querySelector(${JSON.stringify(rowsSelector)})`);
+      check(`ux26 ${surface} team-list ${width}px retry recovers`, await evaluate(`!document.querySelector('[data-load-status]')`));
+      if (surface === "roles") {
+        await click('[data-role-row="quality/tester"]');
+        await click('[data-override-toggle="model"]');
+        await evaluate(`document.querySelector('[data-override-input="model"]').focus()`);
+        await call("Input.insertText", { text: "unsaved-model" }, sessionId);
+      } else {
+        await click('[data-screen-probe] [data-action-chip]');
+        await waitFor(`document.querySelector('[role="dialog"] input')`);
+        await focus('[role="dialog"] input');
+        await call("Input.insertText", { text: "unsaved-team" }, sessionId);
+      }
+      const draftSelector = surface === "roles" ? '[data-override-input="model"]' : '[role="dialog"] input';
+      const draft = await evaluate(`document.querySelector(${JSON.stringify(draftSelector)}).value`);
+      await evaluate(`window.__UI_QA__.teamStability.refresh()`);
+      await evaluate(`window.__UI_QA__.teamStability.settle(3, 'error')`);
+      await waitFor(`document.querySelector('[data-load-status="stale"]')`);
+      check(`ux26 ${surface} team-list ${width}px stale retains rows and draft`, await evaluate(`document.querySelector(${JSON.stringify(rowsSelector)}) && document.querySelector(${JSON.stringify(draftSelector)}).value === ${JSON.stringify(draft)}`));
+      await click('[data-load-retry]');
+      await waitFor(`window.__UI_QA__.teamStability.pending().includes(4)`);
+      await evaluate(`window.__UI_QA__.teamStability.connected(false); window.__UI_QA__.teamStability.settle(4, 'large')`);
+      await settleRender();
+      check(`ux26 ${surface} team-list ${width}px disconnect discards late reply`, await evaluate(`!document.querySelector('[data-team-row="team-199"], [data-role-row="team-199/tester"]') && !!document.querySelector('[data-load-status="stale"]')`));
+      await evaluate(`window.__UI_QA__.teamStability.cycle(); window.__UI_QA__.teamStability.connected(true)`);
+      await waitFor(`window.__UI_QA__.teamStability.pending().includes(5)`);
+      check(`ux26 ${surface} team-list ${width}px batched reconnect reloads once`, await evaluate(`JSON.stringify(window.__UI_QA__.teamStability.pending()) === '[5]'`));
+      await evaluate(`window.__UI_QA__.teamStability.settle(5, 'large')`);
+      await waitFor(`document.querySelector('[data-team-row="team-199"], [data-role-row="team-199/tester"]')`);
+      check(`ux26 ${surface} team-list ${width}px refresh preserves selection and draft`, await evaluate(`document.querySelector(${JSON.stringify(draftSelector)}).value === ${JSON.stringify(draft)} && document.body.textContent.includes(${JSON.stringify(surface === "teams" ? "team · quality" : "role · quality/tester")}) && !document.querySelector('[data-load-status]')`));
+      if (surface === "teams") {
+        const masterFooter = await evaluate(`(() => {
+          const footer = document.querySelector('footer'), r = footer.getBoundingClientRect();
+          const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+          return {rect: r.toJSON(), hit: hit?.outerHTML, clear: r.top >= 0 && r.bottom <= innerHeight + 1 && footer.contains(hit)};
+        })()`);
+        check(`ux26 teams master ${width}px large list leaves footer unobstructed`, masterFooter.clear, masterFooter);
+        await evaluate(`document.querySelectorAll('[data-team-row]').item(200).focus()`);
+        for (const modifiers of [8, 0]) for (const type of ["keyDown", "keyUp"]) await call("Input.dispatchKeyEvent", {type, key: "Tab", code: "Tab", windowsVirtualKeyCode: 9, nativeVirtualKeyCode: 9, modifiers}, sessionId);
+        await settleRender();
+        const masterEvidence = await evaluate(`(() => {
+          const rows = [...document.querySelectorAll('[data-team-row]')], last = rows.at(-1);
+          const master = last.closest('section'), list = document.querySelector('[data-team-list]');
+          const r = last.getBoundingClientRect(), bounds = (list ?? master).getBoundingClientRect();
+          const screen = document.querySelector('[data-screen-probe]').getBoundingClientRect();
+          const footer = document.querySelector('footer'), f = footer.getBoundingClientRect();
+          return {count: rows.length, last: last.getAttribute('data-team-row'), focused: document.activeElement === last,
+            row: r.toJSON(), bounds: bounds.toJSON(), screen: screen.toJSON(), footer: f.toJSON(),
+            scrollTop: list?.scrollTop, clientHeight: list?.clientHeight, scrollHeight: list?.scrollHeight,
+            visible: r.top >= Math.max(bounds.top, screen.top) - 1 && r.bottom <= Math.min(bounds.bottom, screen.bottom) + 1 && r.left >= screen.left && r.right <= screen.right,
+            footerClear: f.top >= screen.bottom - 1 && f.bottom <= innerHeight + 1 && footer.contains(document.elementFromPoint(f.left + f.width / 2, f.top + f.height / 2)),
+            draft: document.querySelector(${JSON.stringify(draftSelector)}).value,
+            selected: document.querySelector('[class*="rowSelected"][data-team-row]')?.getAttribute('data-team-row')};
+        })()`);
+        if (artifactDir) writeFileSync(join(artifactDir, `ux26-teams-master-${width}.json`), JSON.stringify({before: masterFooter, after: masterEvidence}, null, 2));
+        check(`ux26 teams master ${width}px last row is keyboard reachable`, masterEvidence.count === 201 && masterEvidence.focused && masterEvidence.visible && masterEvidence.footerClear && masterEvidence.scrollTop > 0, masterEvidence);
+        check(`ux26 teams master ${width}px scrolling preserves selected team and draft`, masterEvidence.selected === 'quality' && masterEvidence.draft === draft, masterEvidence);
+        await screenshot(`ux26-teams-master-${width}`);
+        await evaluate(`window.__UI_QA__.teamStability.dismissForm()`);
+        await waitFor(`!document.querySelector('[role="dialog"]')`);
+      }
+      const listScope = surface === "teams" ? `document.querySelector('[data-teams-search]').closest('section')` : `document.querySelector('[data-screen-probe]')`;
+      const audit = await layoutAudit(listScope);
+      check(`ux26 ${surface} team-list ${width}px fits viewport`, audit.pageWidth <= width && audit.overflowing.length === 0, audit);
+      if (surface === "teams") {
+        await evaluate(`window.__UI_QA__.teamStability.detailRows(true)`);
+        await waitFor(`document.querySelectorAll('[data-team-agent]').length === 3`);
+        const headSelector = '[data-team-agent-head]';
+        await evaluate(`document.querySelector(${JSON.stringify(headSelector)}).scrollIntoView({block: 'center'})`);
+        await settleRender();
+        const detailEvidence = await evaluate(`(() => {
+          const head = document.querySelector(${JSON.stringify(headSelector)});
+          const row = document.querySelector('[data-team-agent]');
+          const ancestors = [];
+          for (let el = head.parentElement; el; el = el.parentElement) {
+            const s = getComputedStyle(el);
+            ancestors.push({tag: el.tagName, class: el.className, overflowX: s.overflowX, overflowY: s.overflowY, clientWidth: el.clientWidth, scrollWidth: el.scrollWidth, rect: el.getBoundingClientRect().toJSON()});
+          }
+          const cells = [...head.children].map((header, i) => {
+            header.scrollIntoView({block: 'nearest', inline: 'nearest'});
+            const cell = row.children[i];
+            cell.scrollIntoView({block: 'nearest', inline: 'nearest'});
+            const bounds = el => {
+              let left = 0, right = innerWidth, top = 0, bottom = innerHeight;
+              for (let p = el.parentElement; p; p = p.parentElement) {
+                const s = getComputedStyle(p), r = p.getBoundingClientRect();
+                if (s.overflowX !== 'visible') {left = Math.max(left, r.left); right = Math.min(right, r.right);}
+                if (s.overflowY !== 'visible') {top = Math.max(top, r.top); bottom = Math.min(bottom, r.bottom);}
+              }
+              const r = el.getBoundingClientRect();
+              return {rect: r.toJSON(), reachable: r.width >= 30 && r.left >= left - 1 && r.right <= right + 1 && r.top >= top - 1 && r.bottom <= bottom + 1};
+            };
+            const range = document.createRange(); range.selectNodeContents(header);
+            const text = range.getBoundingClientRect(), h = header.getBoundingClientRect();
+            return {name: header.textContent, header: bounds(header), cell: bounds(cell), headerReadable: text.left >= h.left - 1 && text.right <= h.right + 1, aligned: Math.abs(h.left - cell.getBoundingClientRect().left) <= 1};
+          });
+          return {width: innerWidth, pageWidth: document.documentElement.scrollWidth, ancestors, cells};
+        })()`);
+        if (artifactDir) writeFileSync(join(artifactDir, `ux26-teams-detail-${width}.json`), JSON.stringify(detailEvidence, null, 2));
+        check(`ux26 teams detail ${width}px headers and populated cells are reachable`, detailEvidence.pageWidth <= width && detailEvidence.cells.every(c => c.header.reachable && c.cell.reachable && c.headerReadable && c.aligned), detailEvidence);
+        await screenshot(`ux26-teams-detail-${width}`);
+        const tableSelector = '[data-team-agent-table]';
+        const beforeKeyboard = await evaluate(`(() => {
+          const table = document.querySelector(${JSON.stringify(tableSelector)});
+          table.scrollLeft = 0;
+          return {scrollable: table.scrollWidth > table.clientWidth, titleX: table.closest('section').querySelector('[class*="detailName"]').getBoundingClientRect().left};
+        })()`);
+        await focus(tableSelector);
+        // Chromium's native scroll default needs a virtual key code; a DOM-only
+        // key name exercises app handlers but does not emulate the physical key.
+        for (const type of ["keyDown", "keyUp"]) await call("Input.dispatchKeyEvent", { type, key: "ArrowRight", code: "ArrowRight", windowsVirtualKeyCode: 39, nativeVirtualKeyCode: 39 }, sessionId);
+        if (beforeKeyboard.scrollable) await waitFor(`document.querySelector(${JSON.stringify(tableSelector)}).scrollLeft > 0`);
+        const keyboardEvidence = await evaluate(`(() => {
+          const table = document.querySelector(${JSON.stringify(tableSelector)});
+          const screen = document.querySelector('[data-screen-probe]').getBoundingClientRect();
+          const detail = table.closest('section').getBoundingClientRect();
+          const stack = table.closest('[data-screen-layout]');
+          const stackRect = stack.getBoundingClientRect();
+          const stackedScroll = getComputedStyle(stack).overflowY === 'auto' && stackRect.bottom <= screen.bottom + 1;
+          const footerElement = document.querySelector('footer');
+          const footer = footerElement.getBoundingClientRect();
+          const r = table.getBoundingClientRect();
+          const inspector = document.querySelector('[data-agent-inspector]');
+          const inspectorRect = inspector.getBoundingClientRect();
+          return {focused: document.activeElement === table, label: table.getAttribute('aria-label'), scrollLeft: table.scrollLeft, titleX: table.closest('section').querySelector('[class*="detailName"]').getBoundingClientRect().left,
+            table: r.toJSON(), screen: screen.toJSON(), stack: stackRect.toJSON(), footer: footer.toJSON(), stackedScroll,
+            inspector: inspectorRect.toJSON(), inspectorFixed: !table.contains(inspector) && inspectorRect.left >= detail.left && inspectorRect.right <= detail.right,
+            withinPane: r.left >= screen.left && r.right <= screen.right && r.top >= detail.top && r.bottom <= detail.bottom && (r.bottom <= screen.bottom + 1 || stackedScroll),
+            footerClear: footer.top >= screen.bottom - 1 && footer.bottom <= innerHeight && footerElement.contains(document.elementFromPoint(footer.left + footer.width / 2, footer.top + footer.height / 2))};
+        })()`);
+        if (artifactDir) writeFileSync(join(artifactDir, `ux26-teams-detail-keyboard-${width}.json`), JSON.stringify(keyboardEvidence, null, 2));
+        check(`ux26 teams detail ${width}px keyboard scroll stays in its pane`, keyboardEvidence.focused && keyboardEvidence.label === 'Team workers' && (!beforeKeyboard.scrollable || keyboardEvidence.scrollLeft > 0) && Math.abs(keyboardEvidence.titleX - beforeKeyboard.titleX) <= 1 && keyboardEvidence.withinPane && keyboardEvidence.footerClear && keyboardEvidence.inspectorFixed, keyboardEvidence);
+        await focus('[data-team-agent]');
+        await buttonKey("Enter", "Enter");
+        await waitFor(`!document.querySelector('[data-agent-inspector]')`);
+        await buttonKey("Enter", "Enter");
+        await waitFor(`document.querySelector('[data-agent-inspector]')`);
+        check(`ux26 teams detail ${width}px keyboard still toggles the worker inspector`, await evaluate(`document.querySelector('[data-agent-inspector]').textContent.includes('Synthetic detail table task')`));
+        await evaluate(`window.__UI_QA__.teamStability.detailRows(false)`);
+      }
+      await screenshot(`ux26-${surface}-team-list-${width}`);
+    }
+    await evaluate(`window.__UI_QA__.teamStability.refresh()`);
+    await evaluate(`window.__UI_QA__.teamStability.settle(window.__UI_QA__.teamStability.pending()[0], 'empty')`);
+    await waitFor(`document.body.textContent.includes('no teams')`);
+    check(`ux26 ${surface} team-list successful empty is honest`, await evaluate(`!document.querySelector('[data-load-status]')`));
+    await evaluate(`window.__UI_QA__.teamStability.refresh()`);
+    await evaluate(`window.__UI_QA__.teamStability.settle(window.__UI_QA__.teamStability.pending()[0], 'unsupported')`);
+    await waitFor(`document.body.textContent.includes('teams require a Phase 2 daemon')`);
+    check(`ux26 ${surface} team-list unsupported has no retry`, await evaluate(`!document.querySelector('[data-load-retry]')`));
+  }
+
+  // UX26-I: actual Sources/chip/comment components, fictional gh RPCs only.
+  await viewport(1440, 900);
+  await show("issue-board");
+  await waitFor("window.__UI_QA__.issues.pending().length === 1");
+  await evaluate("document.querySelector('[data-issue-sources] summary').focus()");
+  await buttonKey("Enter", "Enter");
+  await waitFor("document.querySelector('[data-issue-sources]').open");
+  check("ux26 i sources keyboard disclosure", await evaluate("document.querySelector('[data-issue-sources]').open"));
+  check("ux26 i sources disclosure states", await evaluate("!!document.querySelector('[data-load-status=loading]') && !document.body.textContent.includes('No sources bound')"));
+  await evaluate("window.__UI_QA__.issues.settle(1, 'error')");
+  await waitFor("document.querySelector('[data-load-retry]')");
+  await click('[data-load-retry]');
+  await waitFor("window.__UI_QA__.issues.pending().includes(2)");
+  check("ux26 i source retry busy", await evaluate("document.querySelector('[data-load-retry]').disabled"));
+  await evaluate("window.__UI_QA__.issues.settle(2, 'rows')");
+  await waitFor("document.querySelector('[data-issue-chip]')");
+  check("ux26 i issue chip and changed badge", await evaluate("document.querySelector('[data-issue-chip]').textContent.includes('#123') && document.querySelector('[data-issue-chip]').textContent.includes('issue changed') && document.querySelector('[data-issue-chip]').textContent.includes('closed upstream') && document.querySelector('[data-issue-chip]').textContent.includes('awaiting review')"));
+  await evaluate("window.__UI_QA__.issues.refresh()");
+  await evaluate("window.__UI_QA__.issues.settle(3, 'error')");
+  await waitFor("document.querySelector('[data-load-status=stale]')");
+  check("ux26 i stale keeps issue rows", await evaluate("!!document.querySelector('[data-issue-chip]') && document.body.textContent.includes('demo/repo')"));
+  await evaluate("window.__UI_QA__.issues.refresh(); window.__UI_QA__.issues.cycle()");
+  await waitFor("window.__UI_QA__.issues.pending().includes(5)");
+  await evaluate("window.__UI_QA__.issues.settle(4, 'empty')");
+  await settleRender();
+  check("ux26 i reconnect discards late reply", await evaluate("document.body.textContent.includes('demo/repo') && !document.body.textContent.includes('No sources bound') && JSON.stringify(window.__UI_QA__.issues.pending()) === '[5]'"));
+  await evaluate("window.__UI_QA__.issues.settle(5, 'rows')");
+  await waitFor("!document.querySelector('[data-load-status]')");
+  await click('[data-source-id] button');
+  await waitFor("document.querySelector('[data-source-id] button').disabled");
+  check("ux26 i sync busy", await evaluate("document.querySelector('[data-source-id] button').textContent.includes('Syncing')"));
+  await evaluate("window.__UI_QA__.issues.sync('error')");
+  await waitFor("document.body.textContent.includes('Synthetic sync failure')");
+  await click('[data-source-id] button');
+  await evaluate("window.__UI_QA__.issues.sync('auth')");
+  await waitFor("window.__UI_QA__.issues.pending().includes(6)");
+  await evaluate("window.__UI_QA__.issues.settle(6, 'rows')");
+  await waitFor("document.body.textContent.includes('Run gh auth login')");
+  await waitFor("!document.querySelector('[data-source-id] button').disabled");
+  check("ux26 i sync busy error gh unauthenticated", await evaluate("!document.querySelector('[data-source-id] button').disabled && document.body.textContent.includes('gh is unauthenticated') && !document.querySelector('input[type=password]')"));
+  await evaluate("document.querySelector('[data-issue-chip] button:last-child').focus()");
+  await buttonKey("Enter", "Enter");
+  await waitFor("document.querySelector('[data-issue-comment] textarea') === document.activeElement");
+  check("ux26 i issue chip native keyboard opens comment", await evaluate("document.querySelector('[data-issue-comment] textarea') === document.activeElement"));
+  await click('[data-issue-comment] button');
+  await waitFor("document.querySelector('[data-exact-issue-preview]')");
+  check("ux26 i post comment overlay preview focus", await evaluate("document.querySelector('[data-exact-issue-preview]').textContent.includes('Fixed in fixture. Exact result text.') && document.querySelector('[data-exact-issue-preview]').textContent.includes('keep issue state') && document.querySelector('[data-issue-comment] input[type=checkbox]').disabled && window.__UI_QA__.issues.writes().length === 0"));
+  await key("Escape");
+  await waitFor("!document.querySelector('[data-issue-comment]')");
+  check("ux26 i post cancel restores focus no write", await evaluate("document.activeElement === document.querySelector('[data-issue-chip] button:last-child') && window.__UI_QA__.issues.writes().length === 0"));
+  await click('[data-issue-chip] button:last-child');
+  await waitFor("document.querySelector('[data-issue-comment] textarea')");
+  await click('[data-issue-comment] button');
+  await waitFor("document.querySelector('[data-exact-issue-preview]')");
+  await click('[data-issue-comment] button');
+  await waitFor("window.__UI_QA__.issues.writes().length === 1 && !document.querySelector('[data-issue-comment]')");
+  check("ux26 i exact confirmation writes once", await evaluate("window.__UI_QA__.issues.writes()[0].body === 'Fixed in fixture. Exact result text.' && window.__UI_QA__.issues.writes()[0].closeIssue === false"));
+  for (const width of [360, 768, 1440]) {
+    await viewport(width, 900);
+    await click('[data-issue-chip] button:last-child');
+    await waitFor("document.querySelector('[data-issue-comment]')");
+    const audit = await layoutAudit("document.querySelector('[data-issue-board]')");
+    check(`ux26 i ${width}px comment fits viewport`, audit.pageWidth <= width && audit.overflowing.length === 0, audit);
+    await screenshot(`ux26-i-issue-board-${width}`);
+    await key("Escape");
+    await waitFor("!document.querySelector('[data-issue-comment]')");
+  }
+  check("ux26 i no overflow 360 768 1440", (await layoutAudit()).pageWidth <= 1440);
+  await evaluate("window.__UI_QA__.issues.reviewAccepted()");
+  await waitFor("window.__UI_QA__.issues.pending().includes(7)");
+  await evaluate("window.__UI_QA__.issues.settle(7, 'rows')");
+  await waitFor("document.querySelector('[data-issue-chip]').textContent.includes('accepted')");
+  check("ux26 i review event refreshes board status", await evaluate("document.querySelector('[data-issue-chip]').textContent.includes('accepted') && !document.querySelector('[data-load-status]')"));
+
+  await evaluate("window.__UI_QA__.issues.outcome('uncertain')");
+  await click('[data-issue-chip] button:last-child');
+  await waitFor("document.querySelector('[data-issue-comment] textarea')");
+  await click('[data-issue-comment] button');
+  await waitFor("document.querySelector('[data-exact-issue-preview]')");
+  await click('[data-issue-comment] button');
+  await waitFor("document.querySelector('[data-issue-comment] [role=alert]') && document.querySelector('[data-issue-comment] button').disabled");
+  check("ux26 i uncertain comment blocks repeat and Escape restores focus", await evaluate("window.__UI_QA__.issues.writes().length === 2 && !document.querySelector('[data-exact-issue-preview]') && document.querySelector('[data-issue-comment] [role=alert]').textContent.includes('outcome is uncertain') && document.querySelector('[data-issue-comment] button').textContent.includes('Inspect issue on GitHub')"));
+  await key("Escape");
+  await waitFor("!document.querySelector('[data-issue-comment]') && document.activeElement === document.querySelector('[data-issue-chip] button:last-child')");
+
+  await evaluate("window.__UI_QA__.issues.outcome('partial')");
+  await click('[data-issue-chip] button:last-child');
+  await waitFor("document.querySelector('[data-issue-comment] textarea')");
+  await click('[data-issue-comment] input[type=checkbox]');
+  await click('[data-issue-comment] button');
+  await waitFor("document.querySelector('[data-exact-issue-preview]')");
+  await click('[data-issue-comment] button');
+  await waitFor("document.querySelector('[data-issue-comment] [role=alert]') && document.querySelector('[data-issue-comment] button').disabled");
+  check("ux26 i partial close keeps comment distinct and blocks repeat", await evaluate("window.__UI_QA__.issues.writes().length === 3 && window.__UI_QA__.issues.writes()[2].closeIssue === true && document.querySelector('[data-issue-comment] [role=alert]').textContent.includes('Comment posted, but closing is uncertain') && !document.querySelector('[data-exact-issue-preview]')"));
+  await key("Escape");
+  await waitFor("!document.querySelector('[data-issue-comment]')");
+
+  await evaluate("window.__UI_QA__.issues.outcome('deferred')");
+  await click('[data-issue-chip] button:last-child');
+  await waitFor("document.querySelector('[data-issue-comment] textarea')");
+  await click('[data-issue-comment] button');
+  await waitFor("document.querySelector('[data-exact-issue-preview]')");
+  await click('[data-issue-comment] button');
+  await waitFor("window.__UI_QA__.issues.writes().length === 4 && document.querySelector('[data-issue-comment] textarea').disabled");
+  await evaluate("window.__UI_QA__.issues.replaceComment()");
+  await waitFor("document.querySelector('[data-issue-comment] textarea').value === 'Replacement draft.'");
+  await evaluate("window.__UI_QA__.issues.settleWrite()");
+  await waitFor("document.querySelector('[data-issue-comment] textarea') === document.activeElement");
+  check("ux26 i late write result keeps replacement overlay", await evaluate("document.querySelector('[data-issue-comment] textarea').value === 'Replacement draft.' && !document.querySelector('[data-issue-comment] textarea').disabled && window.__UI_QA__.issues.writes().length === 4"));
+  await key("Escape");
+  await waitFor("!document.querySelector('[data-issue-comment]')");
+
   await viewport(1180, 760);
   await show("modal");
   await evaluate(`document.querySelector("[data-modal-opener]").focus(); document.querySelector("[data-modal-opener]").click()`);
@@ -861,8 +1524,8 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
   await show("teams");
   await waitFor(`document.querySelector('[data-team-row="quality"]')`);
   check("teams render list and detail", await evaluate('document.body.textContent.includes("Synthetic UI regression fixture")'));
-  const teamsLayout = await layoutAudit('document.querySelector(\'[data-ui-qa-pane="teams"]\')');
-  check("teams fit a 630px pane", teamsLayout.scopeWidth <= 630 && teamsLayout.overflowing.length === 0 && teamsLayout.scopeScrollWidth <= teamsLayout.scopeWidth + 1, teamsLayout);
+  const teamsLayout = await layoutAudit('document.querySelector(\'[data-ui-qa-pane="teams"]\')', '[data-team-agent-table]');
+  check("teams fit a 630px pane", teamsLayout.accessibleScroll && teamsLayout.scopeWidth <= 630 && teamsLayout.overflowing.length === 0 && teamsLayout.scopeScrollWidth <= teamsLayout.scopeWidth + 1, teamsLayout);
   check("teams have no hidden focusable controls", teamsLayout.hiddenInteractive.length === 0, teamsLayout);
   await screenshot("teams-narrow");
 
@@ -1143,6 +1806,68 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
   await screenshot("design-narrow");
   check("design inert parsing and preview make no resource requests", designLeaks === 0);
   check("design rejects oversize source before parsing", await evaluate(`(() => { try { window.__UI_QA__.designSanitize('a'.repeat(1048577)); return false; } catch(e) { return e.message.includes('1 MiB'); } })()`));
+  await viewport(360, 850);
+  await show("operator-settings");
+  await waitFor(`document.querySelector('[data-operator-settings]')?.textContent.includes('Off')`);
+  await evaluate(`[...document.querySelectorAll('[data-operator-settings] button')].find(b=>b.textContent==='Enable loopback panel').click()`);
+  await waitFor(`document.querySelector('[data-operator-settings]')?.textContent.includes('http://127.0.0.1:54321')`);
+  check("ux26 w settings card states", await evaluate(`document.querySelector('[data-operator-settings]').textContent.includes('Enabled · loopback') && [...document.querySelectorAll('button')].some(b=>b.textContent==='Disable panel and revoke devices')`));
+  await click('[data-operator-pair-open]');
+  await waitFor(`document.querySelector('[data-operator-pair] select')`);
+  await waitFor(`!document.querySelector('[data-operator-generate]').disabled`);
+  await click('[data-operator-generate]');
+  await waitFor(`document.querySelector('[data-operator-pair-code]')`);
+  const pairFocused = await evaluate(`document.querySelector('[role=dialog]').contains(document.activeElement) && !document.querySelector('[data-operator-pair] input[type=checkbox]').checked && document.querySelector('[data-operator-pair]').textContent.includes('Read only')`);
+  await call("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 }, sessionId);
+  await call("Input.dispatchKeyEvent", { type: "keyUp", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 }, sessionId);
+  await waitFor(`!document.querySelector('[data-operator-pair]')`);
+  check("ux26 w pair overlay focus escape", pairFocused && await evaluate(`document.activeElement === document.querySelector('[data-operator-pair-open]')`));
+  await evaluate(`document.querySelector('[data-operator-settings] details').open=true`);
+  await click('[data-operator-revoke]');
+  await waitFor(`!document.querySelector('[data-operator-revoke]')`);
+  const deviceRevoked = await evaluate(`document.querySelector('[data-operator-settings] summary').textContent.includes('0')`);
+  await show("operator-read");
+  await waitFor(`document.querySelector('[data-operator-panel]')?.textContent.includes('Synthetic worker')`);
+  let allViews = true;
+  for (const view of ['Agents','Queue','Review']) {
+    await evaluate(`[...document.querySelectorAll('nav button')].find(b=>b.textContent===${JSON.stringify(view)}).click()`);
+    await waitFor(`document.querySelector('section[aria-label="${view}"]')`);
+    allViews &&= await evaluate(`document.querySelector('section[aria-label="${view}"]').textContent.includes(${JSON.stringify(view === 'Agents' ? 'Synthetic worker' : view === 'Queue' ? 'synthetic-q' : 'Synthetic work')})`);
+  }
+  check("ux26 w panel 360 agents queue review", allViews);
+  check("ux26 w panel read scope hides controls", await evaluate(`document.querySelectorAll('[aria-label=Attention]').length === 1 && ![...document.querySelectorAll('button')].some(b=>/^(Allow|Deny|Send message|Pause|Resume|Add task|Submit answer)/.test(b.textContent)) && !document.querySelector('textarea')`));
+  await evaluate(`window.__OPERATOR_QA__.expire()`);
+  await waitFor(`document.querySelector('[data-operator-code]')`);
+  check("ux26 w session revoke and expiry state", deviceRevoked && await evaluate(`document.querySelector('[role=alert]').textContent.includes('expired or revoked') && !document.body.textContent.includes('Synthetic recent transcript')`));
+  await show("operator-control");
+  await waitFor(`document.querySelector('[data-operator-panel]')?.textContent.includes('Synthetic worker')`);
+  await evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent==='Synthetic worker').click()`);
+  await waitFor(`document.querySelector('[aria-label="Agent tail"]')?.textContent.includes('Synthetic recent transcript')`);
+  await click('[aria-label="Agent tail"] textarea');
+  await call('Input.insertText', {text:'Review before send'}, sessionId);
+  const noAutoSend = await evaluate(`window.__OPERATOR_QA__.calls().every(c=>c.method!=='agent.send')`);
+  await waitFor(`![...document.querySelectorAll('[aria-label="Agent tail"] button')].find(b=>b.textContent==='Send message').disabled`);
+  await evaluate(`[...document.querySelectorAll('[aria-label="Agent tail"] button')].find(b=>b.textContent==='Send message').click()`);
+  await waitFor(`window.__OPERATOR_QA__.calls().some(c=>c.method==='agent.send') && !document.querySelector('[aria-label="Agent tail"] textarea').value`);
+  check("ux26 w panel controls explicit send", noAutoSend && await evaluate(`window.__OPERATOR_QA__.calls().filter(c=>c.method==='agent.send').length===1 && window.__OPERATOR_QA__.calls().find(c=>c.method==='agent.send').params.text==='Review before send' && !document.querySelector('[aria-label="Agent tail"] textarea').value`));
+  let panelFits = true;
+  for (const width of [360,768,1440]) {
+    await viewport(width,850);
+    panelFits &&= await evaluate(`document.documentElement.scrollWidth <= innerWidth && [...document.querySelectorAll('button,input,textarea')].filter(e=>e.getClientRects().length).every(e=>e.getBoundingClientRect().right <= innerWidth+1 && e.getBoundingClientRect().left >= -1) && getComputedStyle(document.querySelector('[data-operator-panel]')).overflowY==='auto'`);
+    await screenshot(`ux26-w-panel-${width}`);
+  }
+  check("ux26 w no overflow 360 768 1440", panelFits);
+  await evaluate(`[...document.querySelectorAll('nav button')].find(b=>b.textContent==='Review').click()`);
+  await evaluate(`[...document.querySelectorAll('[aria-label=Review] button')].find(b=>b.textContent==='Synthetic work for review').click()`);
+  await waitFor(`document.querySelector('[data-operator-review]')`);
+  const noAutoDecision = await evaluate(`window.__OPERATOR_QA__.calls().every(c=>c.method!=='review.decide') && [...document.querySelectorAll('button')].find(b=>b.textContent==='Record review decision').disabled`);
+  await click('[data-review-summary]'); await call('Input.insertText', {text:'Please verify this synthetic review'}, sessionId);
+  await evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent==='Record review decision').click()`);
+  await waitFor(`document.querySelector('[data-operator-review]')?.textContent.includes('Changes requested')`);
+  check("ux26 w review explicit decision", noAutoDecision && await evaluate(`window.__OPERATOR_QA__.calls().filter(c=>c.method==='review.decide').length===1 && window.__OPERATOR_QA__.calls().find(c=>c.method==='review.decide').params.summary==='Please verify this synthetic review'`));
+  await evaluate(`window.__OPERATOR_QA__.replaceScope()`);
+  await waitFor(`document.querySelector('[data-operator-code]')`);
+  check("ux26 w session scope change clears view", await evaluate(`document.querySelector('[role=alert]').textContent.includes('Browser session changed') && !document.querySelector('[aria-label=Review]') && !document.querySelector('[aria-label="Agent tail"]')`));
   await show("design-error");
   await waitFor(`document.querySelector('[role="alert"]')`);
   check("design list failures are visible and retryable", await evaluate(`document.querySelector('[role="alert"]').textContent.includes('Synthetic list failure') && [...document.querySelectorAll('button')].some(b=>b.textContent==='Refresh'&&!b.disabled)`));
@@ -1184,6 +1909,31 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
   check("workspace draft restores after composer is empty", await evaluate(`window.__UI_QA__.workspaceSnapshot().composer.endsWith('Review main carefully')`));
   await toolButton("Notes"); await input('[aria-label="Operator notes"]','Local operator reminder'); await toolButton("Save notes");
   check("workspace notes save separately from transcript", await evaluate(`Object.values(window.__UI_QA__.workspaceSnapshot().data.notes).includes('Local operator reminder') && !window.__UI_QA__.workspaceSnapshot().composer.includes('operator reminder')`));
+  const privateDraft = 'Private unsaved note sk-secret123 🙂';
+  await input('[aria-label="Operator notes"]', privateDraft);
+  await focus('[data-note-share]'); await buttonKey(' ', 'Space'); await settleRender();
+  await waitFor(`document.querySelector('[data-context-share]')`);
+  check("ux26 c preview and snapshot label private note", await evaluate(`document.querySelector('[data-context-note-preview]').textContent === ${JSON.stringify(privateDraft)} && document.querySelector('[data-context-share]').textContent.includes('Immutable snapshot') && document.querySelector('[data-context-share-submit]').disabled && !!document.querySelector('[data-context-share] [role="alert"]')`));
+  await choose('Context recipient', 'ui-qa-agent');
+  await click('[aria-label="Confirm sharing secret-shaped content"]');
+  await click('[data-context-share-submit]');
+  await waitFor(`document.querySelector('[data-context-share]').textContent.includes('Snapshot shared.')`);
+  const sharedBeforeEdit = await evaluate(`window.__UI_QA__.context.snapshot().rows[0].snapshot.text`);
+  await key('Escape'); await settleRender();
+  check("ux26 c share overlay focus escape", await evaluate(`!document.querySelector('[data-context-share]') && document.activeElement.matches('[data-note-share]') && document.querySelector('[aria-label="Operator notes"]').value === ${JSON.stringify(privateDraft)}`));
+  await input('[aria-label="Operator notes"]', 'Edited private draft after sharing');
+  check("ux26 c immutable snapshot survives private edit", sharedBeforeEdit === privateDraft && await evaluate(`window.__UI_QA__.context.snapshot().rows[0].snapshot.text === ${JSON.stringify(privateDraft)} && !Object.values(window.__UI_QA__.workspaceSnapshot().data.notes).includes('Edited private draft after sharing')`));
+  let contextShareFits = true, contextShareReachable = true;
+  for (const width of [360, 768, 1440]) {
+    await viewport(width, 900); await focus('[data-note-share]'); await buttonKey('Enter', 'Enter'); await settleRender();
+    const audit = await layoutAudit(`document.querySelector('[data-context-share]').closest('[role="dialog"]')`);
+    contextShareFits = contextShareFits && audit.pageWidth <= width && audit.scopeScrollWidth <= audit.scopeWidth + 1 && audit.overflowing.length === 0;
+    await focus('[data-context-share-submit]'); await settleRender();
+    contextShareReachable = contextShareReachable && await evaluate(`(() => {const b=document.querySelector('[data-context-share-submit]');const r=b.getBoundingClientRect();const hit=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);return document.activeElement===b && !b.disabled && r.left>=0 && r.right<=innerWidth && r.bottom<=innerHeight && hit===b;})()`);
+    await screenshot(`ux26-c-note-share-${width}`); await key('Escape'); await settleRender();
+  }
+  check("ux26 c share action keyboard reachable 360 768 1440", contextShareReachable);
+  await viewport(1000, 900);
   await toolButton("Views"); await input('[aria-label="View name"]','Daily view'); await toolButton("Save current view");
   check("workspace saves fleet filter settings", await evaluate(`window.__UI_QA__.workspaceSnapshot().data.filters[0].name==='Daily view' && typeof window.__UI_QA__.workspaceSnapshot().data.filters[0].showDone==='boolean'`));
   await toolButton("Export"); await toolButton("Export Markdown");
@@ -1209,6 +1959,199 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
     }
     await screenshot(`workspace-tools-${width}`);
   }
+  // UX26-V: actual ProjectsScreen + lazy ProjectCanvas; synthetic RPC only.
+  await show("project-canvas"); await viewport(1440, 900);
+  await waitFor(`document.querySelector('[data-project-canvas-toggle]')`);
+  check("ux26 v canvas toggle and list fallback", await evaluate(`document.querySelector('[data-project-list]').getAttribute('aria-pressed')==='true' && !document.querySelector('[data-canvas-surface]')`));
+  await click('[data-project-canvas-toggle]');
+  await waitFor(`document.querySelector('[data-canvas-node="agent:canvas-a"]')`);
+  await focus('[data-canvas-surface]'); await buttonKey('ArrowRight','ArrowRight'); await buttonKey('+','+'); await settleRender();
+  await click('[data-canvas-node="agent:canvas-a"]');
+  check("ux26 v canvas keyboard pan zoom open", await evaluate(`document.querySelector('[data-canvas-surface]').dataset.canvasX !== '0' && document.querySelector('[data-canvas-zoom]').textContent==='120%' && document.querySelector('[data-canvas-selection]').dataset.canvasSelection==='agent:canvas-a' && window.__UI_QA__.canvas.snapshot().selectedAgentId==='canvas-a' && !!document.querySelector('[data-canvas-open]')`));
+  await focus('[data-canvas-surface]'); await buttonKey('Tab','Tab'); await settleRender();
+  check("ux26 v canvas native tab focus", await evaluate(`document.activeElement.hasAttribute('data-canvas-node') && document.querySelector('[data-canvas-selection]').dataset.canvasSelection===document.activeElement.dataset.canvasNode`));
+  check("ux26 v canvas relationship labels use theme color", await evaluate(`(() => { const label=document.querySelector('[data-canvas-edge="fork"] text'); return !!label && getComputedStyle(label).fill===getComputedStyle(document.querySelector('[data-project-canvas]')).color && getComputedStyle(label).fill!=='rgb(0, 0, 0)'; })()`));
+  const canvasBefore = await evaluate(`(() => {const n=document.querySelector('[data-canvas-node="agent:canvas-a"]');return {x:Number(n.dataset.canvasWorldX),y:Number(n.dataset.canvasWorldY),view:document.querySelector('[data-canvas-surface]').dataset.canvasX};})()`);
+  const canvasPoint = await pointerPoint('[data-canvas-node="agent:canvas-a"]');
+  await call("Input.dispatchMouseEvent", { type:"mousePressed", x:canvasPoint.x,y:canvasPoint.y,button:"left",clickCount:1 },sessionId);
+  await call("Input.dispatchMouseEvent", { type:"mouseMoved", x:canvasPoint.x+48,y:canvasPoint.y+24,button:"left",buttons:1 },sessionId);
+  await call("Input.dispatchMouseEvent", { type:"mouseReleased", x:canvasPoint.x+48,y:canvasPoint.y+24,button:"left",clickCount:1 },sessionId);
+  await settleRender();
+  check("ux26 v canvas scaled pointer math", await evaluate(`(() => {const n=document.querySelector('[data-canvas-node="agent:canvas-a"]');return Math.abs(Number(n.dataset.canvasWorldX)-${canvasBefore.x}-40)<1 && Math.abs(Number(n.dataset.canvasWorldY)-${canvasBefore.y}-20)<1;})()`));
+  const draggedCanvas = await evaluate(`(() => {const n=document.querySelector('[data-canvas-node="agent:canvas-a"]');return {x:Number(n.dataset.canvasWorldX),y:Number(n.dataset.canvasWorldY)};})()`);
+  await waitFor(`Math.abs((window.__UI_QA__.canvas.snapshot().layout.positions["agent:canvas-a"]?.x ?? Infinity) - ${draggedCanvas.x}) < .001 && Math.abs((window.__UI_QA__.canvas.snapshot().layout.positions["agent:canvas-a"]?.y ?? Infinity) - ${draggedCanvas.y}) < .001 && document.querySelector('[data-canvas-save]').disabled`);
+  const canvasSaved = await evaluate(`window.__UI_QA__.canvas.snapshot().layout`);
+  await click('[data-project-list]'); await waitFor(`document.querySelector('[data-canvas-list]')`);
+  check("ux26 v canvas context snapshot list labels", await evaluate(`document.querySelector('[data-canvas-list]').textContent.includes('Explicitly shared note snapshot') && document.querySelector('[data-canvas-list]').textContent.includes('active')`));
+  await click('[data-canvas-list-node="artifact:canvas-artifact"]'); await waitFor(`document.querySelector('[data-artifact-preview]')`);
+  check("ux26 v canvas artifact opens existing preview", await evaluate(`document.querySelector('[data-artifact-preview]').closest('[role="dialog"]').textContent.includes('Existing artifact')`));
+  await buttonKey('Escape','Escape'); await waitFor(`!document.querySelector('[data-artifact-preview]')`);
+  await click('[data-canvas-list-node="agent:canvas-a"]');
+  await click('[data-canvas-project-details] summary'); await waitFor(`document.querySelector('[data-canvas-project-details][open]')`);
+  check("ux26 v canvas list retains project sessions files", await evaluate(`document.querySelector('[data-canvas-project-details]').textContent.includes('files') && document.querySelector('[data-canvas-project-details]').textContent.includes('sessions')`));
+  await click('[data-canvas-project-details] summary');
+  await click('[data-project-canvas-toggle]'); await waitFor(`document.querySelector('[data-canvas-surface]')`);
+  await evaluate(`window.__UI_QA__.canvas.large()`); await click('[data-project-canvas] button'); // first button is Refresh graph
+  await settleRender();
+  check("ux26 v canvas 300 nodes truncation no overflow", await evaluate(`!!document.querySelector('[data-canvas-truncated]') && document.querySelectorAll('[data-canvas-node]').length <= 80 && document.querySelector('[data-canvas-surface]').scrollWidth <= document.querySelector('[data-canvas-surface]').clientWidth+1`));
+  check("ux26 v canvas snapshot keeps viewport selection", await evaluate(`document.querySelector('[data-canvas-selection]').dataset.canvasSelection==='agent:canvas-a' && Math.abs(Number(document.querySelector('[data-canvas-node="agent:canvas-a"]').dataset.canvasWorldX)-${canvasSaved.positions["agent:canvas-a"].x})<1 && document.querySelector('[data-canvas-surface]').dataset.canvasX===${JSON.stringify(String(canvasSaved.viewport.x))}`));
+  const callsBeforeIdle = await evaluate(`window.__UI_QA__.canvas.snapshot().calls.length`); await settleRender(); await settleRender();
+  check("ux26 v canvas bounded previews idle cheap", await evaluate(`window.__UI_QA__.canvas.snapshot().calls.length === ${callsBeforeIdle} && !window.__UI_QA__.canvas.snapshot().calls.some(c=>c.method==='agent.tail')`));
+  await input('[aria-label="Filter included canvas entities"]', "agent canvas-a"); await settleRender();
+  await click('[data-project-list]'); await waitFor(`document.querySelector('[data-canvas-list]')`);
+  check("ux26 v canvas filter list parity", await evaluate(`document.querySelectorAll('[data-canvas-list-node]').length===1 && !!document.querySelector('[data-canvas-list-node="agent:canvas-a"]') && document.querySelector('[data-canvas-filter-count]').textContent.includes('1 of 300') && document.querySelector('[data-canvas-truncated]').textContent.includes('151 additional') && !!document.querySelector('[data-canvas-selection]')`));
+  await input('[aria-label="Filter included canvas entities"]', ""); await click('[data-project-canvas-toggle]'); await waitFor(`document.querySelector('[data-canvas-surface]')`);
+  await evaluate(`window.__UI_QA__.canvas.mode('conflict')`); await focus('[data-canvas-surface]'); await buttonKey('ArrowLeft','ArrowLeft');
+  await waitFor(`document.querySelector('[data-canvas-save-error]')`);
+  check("ux26 v canvas stale save retains arrangement", await evaluate(`document.querySelector('[data-canvas-save-error]').textContent.includes('retained') && !document.querySelector('[data-canvas-save]').disabled`));
+  await click('[data-canvas-save]'); await waitFor(`!document.querySelector('[data-canvas-save-error]') && document.querySelector('[data-canvas-save]').disabled`);
+  const persistedCanvas = await evaluate(`window.__UI_QA__.canvas.snapshot().layout`);
+  await evaluate(`window.__UI_QA__.canvas.remount()`); await waitFor(`document.querySelector('[data-project-canvas-toggle]')`); await click('[data-project-canvas-toggle]'); await waitFor(`document.querySelector('[data-canvas-node="agent:canvas-a"]')`);
+  check("ux26 v canvas layout persistence after remount", await evaluate(`Number(document.querySelector('[data-canvas-node="agent:canvas-a"]').dataset.canvasWorldX)===${persistedCanvas.positions["agent:canvas-a"].x} && document.querySelector('[data-canvas-surface]').dataset.canvasX===${JSON.stringify(String(persistedCanvas.viewport.x))} && document.querySelector('[data-canvas-zoom]').textContent===${JSON.stringify(`${Math.round(persistedCanvas.viewport.zoom*100)}%`)}`));
+  await click('[data-canvas-node="agent:canvas-a"]');
+  await evaluate(`window.__UI_QA__.canvas.mode('error')`); await click('[data-project-canvas] button');
+  await waitFor(`document.querySelector('[data-load-status="stale"]')`);
+  check("ux26 v canvas error stale reconnect", await evaluate(`!!document.querySelector('[data-canvas-selection]') && !!document.querySelector('[data-load-retry]')`));
+  await evaluate(`window.__UI_QA__.canvas.mode('ok'); window.__UI_QA__.canvas.cycle()`); await waitFor(`!document.querySelector('[data-load-status="stale"]')`);
+  let canvasFits = true; const canvasAudits = [];
+  for (const width of [360,768,1440]) {
+    await viewport(width,900); await settleRender();
+    const audit = await layoutAudit('document.querySelector("[data-screen-probe]")'); canvasAudits.push({width,audit});
+    canvasFits &&= audit.pageWidth<=width+1 && await evaluate(`(() => {const f=document.querySelector('[data-project-canvas]');const footer=document.querySelector('footer');return f.scrollWidth<=f.clientWidth+1 && !!footer && footer.getBoundingClientRect().bottom<=innerHeight+1;})()`);
+    if (width===360) check("ux26 v canvas narrow falls back to list", await evaluate(`document.querySelector('[data-project-canvas-toggle]').disabled && !!document.querySelector('[data-canvas-list]') && !document.querySelector('[data-canvas-surface]') && document.querySelector('[data-project-list]').getAttribute('aria-pressed')==='true'`));
+    await screenshot(`ux26-v-canvas-${width}`);
+  }
+  check("ux26 v no overflow 360 768 1440", canvasFits, canvasAudits);
+  await focus('[data-canvas-node="agent:canvas-a"]'); await buttonKey('Enter','Enter'); await settleRender();
+  check("ux26 v canvas enter opens existing transcript", await evaluate(`window.__UI_QA__.canvas.snapshot().tab==='agents' && window.__UI_QA__.canvas.snapshot().selectedAgentId==='canvas-a'`));
+  await click('[data-project-row="canvas-second"]'); await waitFor(`document.querySelector('[data-project-canvas="canvas-second"] [data-canvas-node="agent:second-owner"]')`);
+  const switchedCanvas = await evaluate(`document.querySelector('[data-canvas-surface]').dataset.canvasX==='0' && !document.querySelector('[data-canvas-selection]') && !document.querySelector('[data-canvas-node="agent:canvas-a"]')`);
+  await click('[data-project-row="canvas-project"]'); await waitFor(`document.querySelector('[data-project-canvas="canvas-project"] [data-canvas-node="agent:canvas-a"]')`);
+  check("ux26 v canvas project switch isolates arrangement", switchedCanvas && await evaluate(`document.querySelector('[data-canvas-surface]').dataset.canvasX===${JSON.stringify(String(persistedCanvas.viewport.x))} && !document.querySelector('[data-canvas-node="agent:second-owner"]')`));
+  await click('[data-canvas-node="agent:canvas-a"]');
+  await evaluate(`window.__UI_QA__.canvas.remove()`); await click('[data-project-canvas] button'); await settleRender();
+  check("ux26 v canvas removed entity clears selection", await evaluate(`!document.querySelector('[data-canvas-node="agent:canvas-a"]') && !document.querySelector('[data-canvas-selection]')`));
+  await click('[data-project-list]'); await waitFor(`document.querySelector('[data-canvas-list]')`);
+  await focus('[data-canvas-list-node="task:canvas-task"]'); await waitFor(`document.querySelector('[data-task-inspector]')`);
+  check("ux26 v canvas task selects exact entity", await evaluate(`document.querySelector('[data-task-inspector]').textContent.includes('Existing task selected from canvas') && !document.querySelector('[data-task-inspector]').textContent.includes('Newer task must not be selected')`));
+  await buttonKey('Enter','Enter'); await waitFor(`document.querySelector('[data-review-room]')`);
+  check("ux26 v canvas task opens established evidence", await evaluate(`document.querySelector('[data-review-room]').textContent.includes('canvas-task')`));
+  await show("conversation-fork");
+  await viewport(1000, 900);
+  await input('[data-composer] textarea', "Original composer draft");
+  const forkSeq = await evaluate(`window.__UI_QA__.fork.snapshot().seq`);
+  const forkMenu = `[data-message-actions][data-completed-seq="${forkSeq}"]`;
+  await click(`${forkMenu} summary`);
+  await click(`${forkMenu} button`);
+  await waitFor(`document.querySelector('[data-fork-native-reason]')`);
+  check("ux26 f fork overlay capability labels", await evaluate(`document.querySelector('[data-fork-form]').textContent.includes('Snapshot handoff') && document.querySelector('[data-fork-form]').textContent.includes('synthetic-codex') && document.querySelector('[data-fork-submit]').disabled`));
+  check("ux26 f native disabled with reason", await evaluate(`document.querySelector('[name="fork-mode"][value="native"]').disabled && document.querySelector('[data-fork-native-reason]').textContent.includes('unverified')`));
+  await key("Escape"); await settleRender();
+  check("ux26 f overlay focus escape", await evaluate(`!document.querySelector('[data-fork-form]') && document.activeElement.matches('[data-message-actions] button')`));
+  await click(`${forkMenu} button`);
+  await input('[aria-label="Branch intended task"]', "Inspect the alternative; do not repeat original side effects");
+  await evaluate(`window.__UI_QA__.fork.cycle()`); await settleRender();
+  check("ux26 f reconnect retains intended task", await evaluate(`document.querySelector('[aria-label="Branch intended task"]').value.includes('Inspect the alternative') && !document.querySelector('[data-fork-submit]').disabled && window.__UI_QA__.fork.snapshot().calls.filter(c=>c.method==='agent.forkCapabilities').length===3`));
+  let forkFits = true; const forkAudits = [];
+  for (const width of [360, 768, 1440]) {
+    await viewport(width, 900); await settleRender(); await focus('[data-fork-form] input[type=checkbox]'); await buttonKey("Tab", "Tab"); await settleRender();
+    const audit = await layoutAudit('document.querySelector("[data-fork-form]")');
+    const fits = await evaluate(`(() => { const b=document.querySelector('[data-fork-submit]'),r=b.getBoundingClientRect();return r.left>=0 && r.right<=innerWidth && r.bottom<=innerHeight && document.elementFromPoint(r.left+r.width/2,r.top+r.height/2)===b; })()`);
+    forkFits = forkFits && audit.pageWidth<=width && audit.scopeScrollWidth<=audit.scopeWidth+1 && audit.overflowing.length===0 && fits;
+    forkAudits.push({width,audit,fits}); await screenshot(`ux26-f-dialog-${width}`);
+  }
+  await viewport(1000,900); await click('[data-fork-submit]');
+  await waitFor(`document.querySelector('[data-fork-notice]')`);
+  check("ux26 f fork keeps selection and draft", await evaluate(`window.__UI_QA__.fork.snapshot().selected==='ui-qa-agent' && window.__UI_QA__.fork.snapshot().draft==='Original composer draft' && !!document.querySelector('[data-fork-notice]') && !document.querySelector('[data-fork-form]')`));
+  check("ux26 f selected boundary no duplicate execution", await evaluate(`(() => {const s=window.__UI_QA__.fork.snapshot(),calls=s.calls.filter(c=>c.method==='agent.fork');return calls.length===1 && calls[0].params.upToSeq===s.seq && calls[0].params.task.includes('Inspect the alternative') && calls[0].params.mode==='snapshot';})()`));
+  await click('[data-fork-notice] button');
+  await click('button[title="agent detail"]');
+  await waitFor(`document.querySelector('[data-fork-lineage]')`);
+  check("ux26 f lineage chip no overflow", await evaluate(`document.querySelector('[data-fork-lineage]').textContent.includes('ui-qa-agent') && document.querySelector('[data-fork-lineage]').textContent.includes('snapshot')`));
+  let composerReachable = true;
+  for (const width of [360,768,1440]) {
+    await viewport(width,900);
+    await evaluate(`document.querySelector('[data-composer] textarea').scrollIntoView({block:'nearest'})`); await settleRender();
+    composerReachable = composerReachable && await evaluate(`(() => {const e=document.querySelector('[data-composer] textarea'),r=e.getBoundingClientRect();return r.width>0 && r.right<=innerWidth && r.bottom<=innerHeight && document.elementFromPoint(r.left+r.width/2,r.top+r.height/2)===e;})()`);
+  }
+  check("ux26 f no overflow 360 768 1440", forkFits && composerReachable, forkAudits);
+  await viewport(1000,900);
+
+  await show("context-links");
+  await waitFor(`document.querySelector('[data-context-links]')`);
+  await input('[data-composer] textarea', 'Context composer draft');
+  await focus('[data-context-links] summary'); await buttonKey(' ', 'Space'); await settleRender();
+  await waitFor(`document.querySelector('[data-context-link]')`);
+  await focus('[data-context-add]'); await buttonKey('Enter','Enter'); await settleRender();
+  await waitFor(`document.querySelector('[data-context-share]')`);
+  await key('Escape'); await settleRender();
+  check("ux26 c add overlay keeps inspector and restores opener", await evaluate(`!!document.querySelector('[data-context-links]') && document.activeElement.matches('[data-context-add]') && document.querySelector('[data-composer] textarea').value==='Context composer draft' && !document.querySelector('[data-spawn-card]')`));
+  const contextActive = await evaluate(`document.querySelector('[data-context-links]').textContent.includes('active') && !document.querySelector('[data-context-body]') && document.querySelector('[data-context-link]').textContent.includes('source')`);
+  check("ux26 c native disclosure owns space", await evaluate(`!document.querySelector('[data-spawn-card]') && document.querySelector('[data-context-links]').open`));
+  const contextPointerTarget = await evaluate(`(() => {const b=document.querySelector('[data-context-read]');b.scrollIntoView({block:'nearest'});const r=b.getBoundingClientRect();return document.elementFromPoint(r.left+r.width/2,r.top+r.height/2)===b;})()`);
+  await click('[data-context-read]'); await settleRender();
+  await waitFor(`document.querySelector('[data-context-body]')`);
+  check("ux26 c pointer reads snapshot", contextPointerTarget && await evaluate(`window.__UI_QA__.context.snapshot().calls.some(c=>c.method==='contextlink.get') && !document.querySelector('[data-spawn-card]')`));
+  await screenshot('ux26-c-read');
+  const contextRead = await evaluate(`document.querySelector('[data-context-body]').textContent.includes(${JSON.stringify(privateDraft)})`);
+  await evaluate(`document.querySelector('[data-composer] textarea').setSelectionRange(2,7)`);
+  await click('[data-context-refresh]'); await settleRender();
+  check("ux26 c keyboard and selection preserved", await evaluate(`document.querySelector('[data-context-links]').open && document.querySelector('[data-composer] textarea').selectionStart===2 && document.querySelector('[data-composer] textarea').selectionEnd===7 && window.__UI_QA__.context.snapshot().selectedAgentId==='ui-qa-agent'`));
+  check("ux26 c draft preserved on links update", await evaluate(`document.querySelector('[data-composer] textarea').value==='Context composer draft' && !document.querySelector('[data-context-body]')`));
+  let contextFits = contextShareFits; const contextAudits = [];
+  for (const width of [360,768,1440]) {
+    await viewport(width, 900); const audit = await layoutAudit('document.querySelector("[data-screen-probe]")');
+    await evaluate(`document.querySelector('[data-composer] textarea').scrollIntoView({block:'nearest'})`); await settleRender();
+    const composerReachable = await evaluate(`(() => { const el=document.querySelector('[data-composer] textarea'); const r=el.getBoundingClientRect();const hit=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2); return r.width>0 && r.bottom<=innerHeight && (hit===el || el.contains(hit)); })()`);
+    contextFits = contextFits && audit.pageWidth<=width && audit.scopeScrollWidth<=audit.scopeWidth+1 && audit.overflowing.length===0 && composerReachable;
+    contextAudits.push({width,audit,composerReachable}); await screenshot(`ux26-c-context-${width}`);
+  }
+  check("ux26 c no overflow 360 768 1440", contextFits, contextAudits);
+  await viewport(1000,900);
+  await evaluate(`window.__UI_QA__.context.mode('error')`); await click('[data-context-refresh]');
+  await waitFor(`document.querySelector('[data-context-links] [data-load-status="stale"]')`);
+  const contextStale = await evaluate(`!!document.querySelector('[data-context-link]') && document.querySelector('[data-composer] textarea').value==='Context composer draft'`);
+  await evaluate(`window.__UI_QA__.context.mode('ok')`); await click('[data-context-links] [data-load-retry]'); await settleRender();
+  await click('[data-context-read]'); await waitFor(`document.querySelector('[data-context-body]')`);
+  await click('[data-context-revoke]'); await waitFor(`document.querySelector('[data-context-link]').textContent.includes('revoked')`);
+  const contextRevoked = await evaluate(`!document.querySelector('[data-context-body]') && document.querySelector('[data-context-read]').disabled && window.__UI_QA__.context.snapshot().rows[0].snapshot.text === undefined`);
+  await evaluate(`window.__UI_QA__.context.mode('unsupported')`); await click('[data-context-refresh]');
+  await waitFor(`document.querySelector('[data-context-links]').textContent.includes('unavailable for this daemon')`);
+  const contextUnsupported = await evaluate(`!document.querySelector('[data-context-links] [data-load-retry]')`);
+  check("ux26 c links disclosure states", contextActive && contextRead && contextStale && contextRevoked && contextUnsupported);
+  await viewport(1000, 900); await show("context-links"); await waitFor(`document.querySelector('[data-context-links]')`);
+  await input('[data-composer] textarea', 'Escape ownership draft');
+  await focus('[data-context-links] summary'); await buttonKey('Enter','Enter'); await settleRender();
+  await focus('[data-context-add]'); await buttonKey('Enter','Enter'); await waitFor(`document.querySelector('[data-context-share]')`);
+  await key('Escape'); await settleRender();
+  const firstContextEscape = await evaluate(`!!document.querySelector('[data-context-links]') && document.activeElement.matches('[data-context-add]') && document.querySelector('[data-composer] textarea').value==='Escape ownership draft'`);
+  await key('Escape'); await settleRender();
+  if (artifactDir) writeFileSync(join(artifactDir, 'ux26-c-next-escape.json'), JSON.stringify(await evaluate(`({first:${firstContextEscape},state:window.__UI_QA__.context.snapshot(),detailPresent:!!document.querySelector('[data-context-links]'),textarea:document.querySelector('[data-composer] textarea')?.value,focus:document.activeElement?.outerHTML})`), null, 2));
+  check("ux26 c next escape follows existing agents chain", firstContextEscape && await evaluate(`window.__UI_QA__.context.snapshot().detail===null && !window.__UI_QA__.context.snapshot().escapeOwns && document.querySelector('[data-composer] textarea').value==='Escape ownership draft'`));
+  await show("context-links"); await waitFor(`document.querySelector('[data-context-links]')`);
+  await focus('[data-context-links] summary'); await buttonKey('Enter','Enter'); await settleRender(); await click('[data-context-add]'); await waitFor(`document.querySelector('[data-context-share]')`);
+  await evaluate(`window.__UI_QA__.context.replace()`); await settleRender();
+  check("ux26 c registered share replacement resets exact target", await evaluate(`document.querySelectorAll('[data-context-share]').length===1 && document.querySelector('[aria-label="Context recipient"]').value==='resource-fleet-1' && document.querySelector('[aria-label="Context source"]').value==='resource-fleet-1'`));
+  const callsBeforeSwitch = await evaluate(`window.__UI_QA__.context.snapshot().calls.filter(c=>c.method==='contextlink.create').length`);
+  await evaluate(`window.__UI_QA__.context.select('resource-fleet-1')`); await settleRender();
+  check("ux26 c agent switch dismisses registered share without stale commit", await evaluate(`!document.querySelector('[data-context-share]') && window.__UI_QA__.context.snapshot().calls.filter(c=>c.method==='contextlink.create').length===${callsBeforeSwitch}`));
+  await show("context-links"); await waitFor(`document.querySelector('[data-context-links]')`);
+  await focus('[data-context-links] summary'); await buttonKey('Enter','Enter'); await settleRender(); await click('[data-context-add]'); await waitFor(`document.querySelector('[data-context-share]')`);
+  await evaluate(`window.__UI_QA__.context.competing()`); await settleRender();
+  check("ux26 c replacement releases share escape ownership", await evaluate(`!document.querySelector('[data-context-share]') && !!document.querySelector('[data-spawn-card]')`));
+  await key('Escape'); await settleRender();
+  if (artifactDir) writeFileSync(join(artifactDir, 'ux26-c-replacement-escape.json'), JSON.stringify(await evaluate(`({state:window.__UI_QA__.context.snapshot(),spawnPresent:!!document.querySelector('[data-spawn-card]')})`), null, 2));
+  const normalEscapeDetailFirst = await evaluate(`window.__UI_QA__.context.snapshot().detail===null && !window.__UI_QA__.context.snapshot().escapeOwns && window.__UI_QA__.context.snapshot().spawn`);
+  await key('Escape'); await settleRender();
+  check("ux26 c normal agents escape after replacement", normalEscapeDetailFirst && await evaluate(`!document.querySelector('[data-spawn-card]') && !window.__UI_QA__.context.snapshot().spawn`));
+  await show("workspace-tools"); await toolButton("Notes");
+  if (artifactDir) writeFileSync(join(artifactDir, 'ux26-c-local-note-open.json'), JSON.stringify(await evaluate(`({html:document.body.innerHTML, selected:window.__UI_QA__.context.snapshot().selectedAgentId})`), null, 2));
+  await waitFor(`document.querySelector('[aria-label="Operator notes"]')`);
+  await input('[aria-label="Operator notes"]', 'Switch cancellation draft'); await click('[data-note-share]'); await waitFor(`document.querySelector('[data-context-share]')`);
+  await evaluate(`window.__UI_QA__.context.select(window.__UI_QA__.context.snapshot().selectedAgentId==='ui-qa-agent'?'resource-fleet-1':'ui-qa-agent')`); await settleRender();
+  check("ux26 c agent switch dismisses local note share", await evaluate(`!document.querySelector('[data-context-share]')`));
+
+
 
   for (const width of [390, 768, 1440]) {
     await viewport(width, 900);
@@ -1272,7 +2215,7 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
   };
   const groupIds = () => evaluate(`[...document.querySelectorAll('[data-group-box]')].map(el=>el.dataset.groupBox)`);
   await dragRow('[data-group-drag="two"]', '[data-group-box="one"]');
-  check("inspector groups reorder by dragging header", JSON.stringify(await groupIds()) === JSON.stringify(['two','one']));
+  check("inspector groups reorder by dragging header", JSON.stringify(await groupIds()) === JSON.stringify(['two','one']), { groupIds: await groupIds() });
   const dragInfo = await dragRow('[data-agent-row="sort-b"]', '[data-agent-row="sort-a"]');
   const members = await evaluate(`[...document.querySelectorAll('[data-group-box="one"] [data-agent-row]')].map(el=>el.dataset.agentRow)`);
   check("inspector agent reorder preserves subtree and quote payload", JSON.stringify(members) === JSON.stringify(['sort-b','sort-a','sort-child']) && dragInfo.agentMime === 'sort-b' && (dragInfo.operations & 17) === 17, { members, dragInfo });
@@ -1280,7 +2223,7 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
   check("inspector ungrouped agents reorder", await evaluate(`!!(document.querySelector('[data-agent-row="sort-v"]').compareDocumentPosition(document.querySelector('[data-agent-row="sort-u"]')) & Node.DOCUMENT_POSITION_FOLLOWING)`));
   await show("topbar"); await show("group-order");
   await waitFor(`document.querySelector('[data-group-box="one"] [data-agent-row="sort-child"]')`);
-  check("inspector ordering survives remount", JSON.stringify(await groupIds()) === JSON.stringify(['two','one']) && await evaluate(`document.querySelector('[data-group-box="one"] [data-agent-row]').dataset.agentRow === 'sort-b'`));
+  check("inspector ordering survives remount", JSON.stringify(await groupIds()) === JSON.stringify(['two','one']) && await evaluate(`document.querySelector('[data-group-box="one"] [data-agent-row]').dataset.agentRow === 'sort-b'`), { groupIds: await groupIds() });
   await dragRow('[data-agent-row="sort-child"]', '[data-ungroup-drop]');
   await waitFor(`document.querySelector('[data-agent-row="sort-child"]') && !document.querySelector('[data-group-box="one"] [data-agent-row="sort-child"]')`);
   check("inspector drag removes inherited group membership", await evaluate(`window.__UI_QA__.groupMoves().some(move=>move.agentId==='sort-child' && move.groups.length===0) && !document.querySelector('[data-agent-row="sort-child"]').closest('[data-group-box]')`));
@@ -1316,6 +2259,8 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
   await waitFor(`document.querySelector('[data-inspected-workflow="shadow:workflow-owner:new"]')`);
   check("workflow transcript links open the exact running run by keyboard", await evaluate(`document.querySelector('[data-inspected-workflow="shadow:workflow-owner:new"]').textContent.includes('running') && !document.querySelector('[data-inspected-workflow="shadow:workflow-owner:old"]')`));
 
+  await probeWorkspaceRecovery({ check, show, evaluate, waitFor, click, key, viewport, screenshot, settleRender, artifactDir });
+    await probeWorkspaceScale({ check, show, evaluate, waitFor, click, key, viewport, screenshot, settleRender, artifactDir });
   if (artifactDir) console.log(`UI browser screenshots: ${artifactDir}`);
   } finally {
     try { cdp?.close(); } finally {
@@ -1324,5 +2269,13 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
       }
     }
   }
-}, { requiredCheckIds: REQUIRED_CHECK_IDS.ui });
+}, { requiredCheckIds: process.env.CHIMERA_BROWSER_GATE_RECOVERY_ONLY === "1"
+  ? REQUIRED_CHECK_IDS.ui.filter(id => id.startsWith("ui.ux26-qa-") || id === "ui.network-guard-blocks-external-fetch-and-websocket")
+  : process.env.CHIMERA_BROWSER_GATE_GROUPS_ONLY === "1"
+  ? REQUIRED_CHECK_IDS.ui.filter(id => id.startsWith("ui.inspector-registry-") || id === "ui.network-guard-blocks-external-fetch-and-websocket")
+  : process.env.CHIMERA_BROWSER_GATE_TEAMS_FORM_ONLY === "1"
+  ? REQUIRED_CHECK_IDS.ui.filter(id => id.startsWith("ui.ux26-teams-form-") || id === "ui.network-guard-blocks-external-fetch-and-websocket")
+  : process.env.CHIMERA_BROWSER_GATE_IMAGE_ONLY === "1"
+  ? REQUIRED_CHECK_IDS.ui.filter(id => id.startsWith("ui.output-") || id === "ui.network-guard-blocks-external-fetch-and-websocket")
+  : REQUIRED_CHECK_IDS.ui });
 process.exitCode = suiteExitCode;

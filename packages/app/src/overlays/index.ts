@@ -23,3 +23,8 @@ import "../components/CheckpointsCard";
 // FILE-PATH-LINKS: the transcript path-click file viewer
 import "../components/PathViewerCard";
 export {};
+
+import "../components/ContextLinkShareOverlay";
+import "../components/IssueCommentCard";
+
+import "../components/ForkAgentOverlay";

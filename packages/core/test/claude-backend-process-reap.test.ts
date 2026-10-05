@@ -85,6 +85,7 @@ describe("AGENT-PROCESS-NOT-REAPED: real OS process-tree termination", () => {
 
     const spawned = getSpawned();
     expect(spawned?.pid).toBeTypeOf("number");
+    expect(handle.processPid).toBe(spawned?.pid);
     const grandchildPid = await waitForGrandchildPid(spawned!, 5000);
     expect(isAlive(spawned!.pid!)).toBe(true);
     expect(isAlive(grandchildPid)).toBe(true);
@@ -93,6 +94,7 @@ describe("AGENT-PROCESS-NOT-REAPED: real OS process-tree termination", () => {
 
     expect(await waitUntilDead(spawned!.pid!, 3000)).toBe(true);
     expect(await waitUntilDead(grandchildPid, 3000)).toBe(true);
+    await vi.waitFor(() => expect(handle.processPid).toBeNull());
   }, 15000);
 
   it("a NATURAL turn completion (no explicit kill()) still terminates the process tree — the exact gap measured live: terminal records with days-old live processes", async () => {

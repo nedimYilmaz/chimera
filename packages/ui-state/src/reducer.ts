@@ -1,5 +1,6 @@
+import { ForkLineageSchema } from "@chimera/protocol";
 import { mcpListenerTransitions } from "./mcpListener.js";
-import { ATTENTION_EVENT_KINDS, parseAgentAddress, type AccountQuotaWindow, type ContentBlock, type NormalizedEvent, type TaskState } from "@chimera/protocol";
+import { ATTENTION_EVENT_KINDS, parseAgentAddress, ToolOutputImagesSchema, ToolOutputImageWarningsSchema, type ToolOutputImageWarning, type AccountQuotaWindow, type ContentBlock, type NormalizedEvent, type TaskState } from "@chimera/protocol";
 import { EVENT_BUFFER_MAX, initialState, NO_PROJECT_CONDUCTOR_KEY, TAB_ORDER, TOOLS_BUFFER_MAX, TRANSCRIPT_BUFFER_MAX, type Action, type AgentQuestion, type AgentRecordLite, type AgentView, type BackgroundTaskItem, type DeepLink, type Image, type McpServerView, type SlashCommandView, type TokenUsage, type TranscriptItem, type UiState } from "./types.js";
 import { applyFlowEvent } from "./flow.js";
 import { filterOrderForUnseen, isUnseen } from "./seen.js";
@@ -394,6 +395,7 @@ function reconcileAgentOrder(agents: Record<string, AgentView>, order: string[])
         treeId: a.treeId,
         depth: a.depth,
         parentId: a.parentId,
+        forkLineage: a.forkLineage,
         originConductorId: a.originConductorId,
         membership: a.membership,
       };
@@ -1234,6 +1236,8 @@ function projectEvent(state: UiState, e: NormalizedEvent, stampTs = false): UiSt
       agent.toolSurfaceEstimate = undefined;
       agent.toolSurfaceCacheWriteTokens = undefined;
       agent.toolSurfaceServers = undefined;
+      const forkLineage = ForkLineageSchema.safeParse(e.data["forkLineage"]);
+      if (forkLineage.success) agent.forkLineage = forkLineage.data;
       if (typeof e.data["model"] === "string" && !e.data["model"].startsWith("<")) agent.model = e.data["model"] as string;
       // CTX-METER-LIVE-FORWARD: core stamps the record's current effectiveContextLimit onto
       // every agent_started (see supervisor.ts's onEvent data-enrichment) -- fold it the same
@@ -1479,9 +1483,9 @@ function projectEvent(state: UiState, e: NormalizedEvent, stampTs = false): UiSt
         // TRANSCRIPT-EVICT-OLD: `seq` always comes from the streaming item's own BIRTH
         // seq (last.seq), never this finalizing event's — same "never advance a row's
         // stamped seq" rule evictTranscriptFront() relies on.
-        agent.transcript[lastIdx] = { role: "assistant", text, streaming: false, seq: last.seq, ...(last.ts !== undefined ? { ts: last.ts } : (at.ts !== undefined ? { ts: at.ts } : {})) };
+        agent.transcript[lastIdx] = { role: "assistant", text, streaming: false, seq: last.seq, completedSeq: e.seq, ...(last.ts !== undefined ? { ts: last.ts } : (at.ts !== undefined ? { ts: at.ts } : {})) };
       } else {
-        agent.transcript.push({ role: "assistant", text, streaming: false, ...at });
+        agent.transcript.push({ role: "assistant", text, streaming: false, completedSeq: e.seq, ...at });
       }
       break;
     }
@@ -1583,8 +1587,17 @@ function projectEvent(state: UiState, e: NormalizedEvent, stampTs = false): UiSt
     case "tool_result": {
       const nativeToolId = e.data["toolId"] ?? e.data["toolUseId"];
       const toolId = typeof nativeToolId === "string" ? nativeToolId : undefined;
+      const parsedImages = ToolOutputImagesSchema.safeParse(e.data["images"]);
+      const parsedWarnings = ToolOutputImageWarningsSchema.safeParse(e.data["imageOutputWarnings"]);
+      const imageFields = {
+        ...(parsedImages.success && parsedImages.data.length ? { images: parsedImages.data } : {}),
+        ...(!parsedImages.success && e.data["images"] !== undefined
+          ? { imageOutputWarnings: ["invalid-or-unsupported" as ToolOutputImageWarning] }
+          : parsedWarnings.success && parsedWarnings.data.length ? { imageOutputWarnings: parsedWarnings.data } : {}),
+      };
+      const anonymousImageOutput = toolId === undefined && !!(imageFields.images || imageFields.imageOutputWarnings);
       for (let i = agent.tools.length - 1; i >= 0; i--) {
-        if (agent.tools[i]!.status === "called" && (toolId === undefined || agent.tools[i]!.toolId === toolId)) {
+        if (!anonymousImageOutput && agent.tools[i]!.status === "called" && (toolId === undefined || agent.tools[i]!.toolId === toolId)) {
           agent.tools[i] = { ...agent.tools[i]!, status: "done" };
           break;
         }
@@ -1601,12 +1614,20 @@ function projectEvent(state: UiState, e: NormalizedEvent, stampTs = false): UiSt
       // both exist.
       const rawResult = e.data["result"] !== undefined ? e.data["result"] : e.data["output"];
       const result = rawResult !== undefined ? boundToolResult(String(rawResult)) : undefined;
+      let matched = false;
       for (let i = agent.transcript.length - 1; i >= 0; i--) {
         const item = agent.transcript[i]!;
-        if (item.role !== "tool" || item.status !== "called") continue;
+        if (anonymousImageOutput || item.role !== "tool" || item.status !== "called") continue;
         if (toolId !== undefined && item.toolId !== toolId) continue;
-        agent.transcript[i] = { ...item, status: "done", ...(result !== undefined ? { result } : {}) };
+        agent.transcript[i] = { ...item, status: "done", ...(result !== undefined ? { result } : {}), ...imageFields };
+        matched = true;
         break;
+      }
+      // A reconnect may load the result without its start (or evict an old start).
+      // Only image-bearing results need an orphan row; never attach to another tool.
+      if (!matched && (imageFields.images || imageFields.imageOutputWarnings)
+        && !agent.transcript.some(item => item.role === "tool" && toolId !== undefined && item.toolId === toolId)) {
+        agent.transcript.push({ role: "tool", toolName: String(e.data["toolName"] ?? "image_output"), status: "done", ...(toolId !== undefined ? { toolId } : {}), ...(result !== undefined ? { result } : {}), ...imageFields, ...at });
       }
       // Native-CLI-parity Phase 1 (Task N2): ADDITIVE, after the existing
       // tools/transcript patches above (which must stay byte-identical).
@@ -1990,6 +2011,8 @@ function projectEvent(state: UiState, e: NormalizedEvent, stampTs = false): UiSt
       break;
     }
     case "status": {
+      const forkLineage = ForkLineageSchema.safeParse(e.data["forkLineage"]);
+      if (forkLineage.success) agent.forkLineage = forkLineage.data;
       // Older daemons persisted completion only in raw catch-all events. Replaying
       // that evidence repairs existing running rows without rewriting history.
       if (e.data["sdkEvent"] === "task_notification" && e.raw && typeof e.raw === "object") {
@@ -2661,6 +2684,7 @@ export function reduce(state: UiState, action: Action): UiState {
           // `null` (an actual "no parent"/"no project" value) must overwrite a
           // prior value; only a genuinely absent field (older daemon) falls back.
           parentId: r.parentId !== undefined ? r.parentId : prev.parentId,
+          forkLineage: r.forkLineage ?? prev.forkLineage,
           projectId: r.projectId !== undefined ? r.projectId : prev.projectId,
           // WD Stage 1 (coverage B2): a remote record's id is engine-qualified
           // ("<engineId>/<localId>", the same key qualifiedAgentId builds on the event

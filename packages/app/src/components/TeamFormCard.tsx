@@ -179,7 +179,7 @@ export function TeamFormCard({ mode = "create", initial, rolesLocked = false, on
 
   return (
     <OverlayCard width={620} align="center" onClose={requestClose} escGuard={() => confirmClose}>
-      <div onKeyDown={onKeyDown}>
+      <div className={styles.form} onKeyDown={onKeyDown}>
         <OverlayCardHeader
           title={editing ? `edit team · ${values.name}` : "create team"}
           hint={error ? <span className={styles.error}>{error}</span> : "↑↓ fields · enter next · esc cancel"}

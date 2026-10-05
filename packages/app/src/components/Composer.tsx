@@ -811,10 +811,18 @@ export function Composer() {
           {local.composeText.length > 0 ? (
             <span className={styles.growHint}>{rows}/{MAX_ROWS} lines · grows with content</span>
           ) : null}
-          {appStore.getState().agents[resolveActiveTargets(appStore.getState(), local.target)[0] ?? ""]?.provider !== "codex" && <PushToTalkControl
+          <PushToTalkControl
+            draftOwner={draftOwner}
             agentId={resolveActiveTargets(appStore.getState(), local.target)[0] ?? null}
-            onSend={(text) => void commands.sendComposed(local.target, text)}
-          />}
+            onInsert={(text) => {
+              const current = composerLocal.getState().composeText;
+              const pos = inputRef.current?.selectionStart ?? current.length;
+              const end = inputRef.current?.selectionEnd ?? pos;
+              const next = current.slice(0, pos) + text + current.slice(end);
+              setText(next);
+              requestAnimationFrame(() => { inputRef.current?.focus(); inputRef.current?.setSelectionRange(pos + text.length, pos + text.length); });
+            }}
+          />
           <NativeVoiceControl
             agentId={resolveActiveTargets(appStore.getState(), local.target)[0] ?? null}
             onSend={(text) => void commands.sendComposed(local.target, text)}

@@ -1,0 +1,17 @@
+#!/usr/bin/env node
+const fs = require('node:fs');
+const path = require('node:path');
+const fixture = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixture.json'), 'utf8'));
+const args = process.argv.slice(2);
+if (fixture.failure) { process.stderr.write(fixture.failure); process.exit(1); }
+if (args[1] === 'list') process.stdout.write(JSON.stringify(fixture.issues));
+else if (args[1] === 'view') process.stdout.write(JSON.stringify(fixture.issues.find(i => i.number === Number(args[2]))));
+else {
+  let body = ''; process.stdin.setEncoding('utf8');
+  process.stdin.on('data', data => body += data);
+  process.stdin.on('end', () => {
+    fs.appendFileSync(path.join(__dirname, 'writes.jsonl'), JSON.stringify({args, body}) + '\n');
+    // The upstream accepted the write, but its response was lost: a retry would duplicate it.
+    if (fixture.writeFailures?.[args[1]]) { process.stderr.write(fixture.writeFailures[args[1]]); process.exitCode = 1; }
+  });
+}

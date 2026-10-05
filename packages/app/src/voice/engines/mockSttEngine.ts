@@ -18,7 +18,7 @@ declare global {
 }
 
 function mockSeamActive(): boolean {
-  return typeof window !== "undefined" && !!window.__CHIMERA_MOCK__;
+  return import.meta.env.DEV && typeof window !== "undefined" && !!window.__CHIMERA_MOCK__;
 }
 
 export function createMockSttEngine(): SpeechEngine {

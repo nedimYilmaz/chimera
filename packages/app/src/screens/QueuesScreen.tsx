@@ -1,3 +1,4 @@
+import { IssueSources, IssueChip } from "../components/IssueSources";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { type UiState } from "@chimera/ui-state";
 import { onRowKeyDown } from "../a11y";
@@ -866,6 +867,7 @@ export function QueuesScreen() {
                 </span>
               </div>
             </div>
+            {detailName && <IssueSources key={detailName} queue={detailName} onCreated={() => setQueueQuery("")} />}
             <SearchBox
               value={taskQuery}
               onChange={setTaskQuery}
@@ -995,6 +997,7 @@ export function QueuesScreen() {
                       </div>
                       <div className={styles.colPrompt}>
                         <span className={selected ? undefined : styles.softName}>{t.prompt}</span>
+                        {detailName && <IssueChip queue={detailName} taskId={t.taskId} />}
                         {t.state === "failed" && t.error !== null && (
                           <span className={styles.toneDanger}> ✗ {t.error}</span>
                         )}

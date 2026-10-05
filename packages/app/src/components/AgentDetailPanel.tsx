@@ -1,3 +1,7 @@
+import { openConversationFork } from "../state/conversationFork";
+import { ForkLineageChip } from "./ForkAgentOverlay";
+import { ContextLinks } from "./ContextLinks";
+import { AgentResources } from "./AgentResources";
 import { ContextLimitsInfo } from "./ContextLimitsInfo";
 import { useState, type ReactNode } from "react";
 import type { AgentGroup } from "@chimera/protocol";
@@ -93,6 +97,9 @@ export function AgentDetailPanel({
           ✕ close
         </button>
       </div>
+      <div><button type="button" onClick={e => { e.currentTarget.focus(); openConversationFork(agent.agentId); }}>Branch conversation…</button><ForkLineageChip lineage={agent.forkLineage} /></div>
+      <ContextLinks key={`context-${agent.agentId}`} agentId={agent.agentId} />
+      <AgentResources key={agent.agentId} agentId={agent.agentId} />
       <Row label="state">
         <span>
           {view.state} <span className={styles.meta}>— {view.activity}</span>
