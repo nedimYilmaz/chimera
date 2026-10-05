@@ -1,5 +1,5 @@
 {
-  "notice": "These videos film the real Chimera UI against a SCRIPTED FIXTURE daemon with fictional 'Atlas website' data. They are not a live workspace, not a recording of agents working, and not a performance measurement.",
+  "notice": "The first film is original illustrated animation explaining Chimera capability families. The eleven interface demos film the real Chimera UI against a SCRIPTED FIXTURE daemon with fictional 'Atlas website' data. None records agents executing work or measures performance.",
   "productBaseRevision": "4b26d30a9acef38e104105b512a4e86bf46acec7",
   "productBaseTree": "c61cf10706fbaa6e7e4fe80ed9d8f365f554b199",
   "capturedAt": "2026-10-05T19:36:02.724Z",
@@ -8,7 +8,8 @@
   "captureSourceRevisions": [
     "4b26d30a9acef38e104105b512a4e86bf46acec7",
     "7b1ac1f6888e8f711442d9fe048f246b11be9897",
-    "8c088dc0377ee8aeacbbd40f154ca38109f9c043"
+    "8c088dc0377ee8aeacbbd40f154ca38109f9c043",
+    "1e873f8a908c96d5a9e40d73bc10733b70688aa1"
   ],
   "sourceTreeDirty": false,
   "finalRecapture": "Captured from the committed product and fixture source snapshot recorded above; each clip retains its exact capture revision.",
@@ -23,7 +24,7 @@
     "fps": 15,
     "viewport": "1280x800",
     "clockFrozenAt": "2026-01-12T09:30:00.000Z",
-    "note": "Video time is frame index / fps. Pointer glides, typing cadence and holds are scripted, so durations say nothing about live latency."
+    "note": "Video time is frame index / fps. Pointer glides, typing cadence and holds are scripted, so durations say nothing about live latency. This timeline describes the eleven interface demos only; the illustrated overview carries its own 30fps 1600x1000 timeline."
   },
   "presentation": {
     "persistentDemoLabel": false,
@@ -60,6 +61,301 @@
   "reproduce": "node scripts/marketing-video.mjs --capture",
   "determinism": "Compare two captures with: node scripts/marketing-video-verify.mjs --compare <dirA> <dirB> (decoded start/middle/end hashes; also reports full-sequence equality; container bytes are not promised identical).",
   "clips": [
+    {
+      "id": "product-overview",
+      "title": "Your agents. One workspace.",
+      "kind": "illustrated-animation",
+      "captureSourceRevision": "1e873f8a908c96d5a9e40d73bc10733b70688aa1",
+      "captureSourceTree": "24c3f88b3dfb454aa4aa68de06ed6d22e7e908a8",
+      "sourceTreeDirty": false,
+      "durationSeconds": 90,
+      "frames": 2700,
+      "width": 1600,
+      "height": 1000,
+      "fps": 30,
+      "scenario": "An illustrated overview of Chimera capability families",
+      "notice": "Conceptual illustration, not a recording of agents working. Worktrees isolate git changes, not processes. Snapshot branches are explicit saved context, not native provider session forks. Desktop control is macOS only; platform and provider capabilities vary. See the feature guide for availability. No usage or performance figures are shown.",
+      "rendering": "Deterministic original Canvas motion graphics; no real product components or live workspace.",
+      "colorEncoding": {
+        "range": "limited",
+        "matrix": "bt470bg",
+        "input": "full-range Canvas JPEG"
+      },
+      "capturedWith": {
+        "browser": "Chrome/154.0.8037.93",
+        "ffmpeg": "ffmpeg version 9.0.2-https://www.martin-riedl.de Copyright (c) 2000-2026 the FFmpeg developers",
+        "mp4Encoder": "libx264 H.264",
+        "webmEncoder": "libvpx VP8"
+      },
+      "readability": {
+        "headlinePxAt360": 17.55,
+        "captionPxAt360": 13.05,
+        "captionPxAt390": 14.1375,
+        "safeRegions": {
+          "caption": {
+            "fontPx": 58,
+            "centerY": 650,
+            "maxBottomY": 690,
+            "maxWidth": 1440
+          },
+          "diagram": {
+            "left": 80,
+            "top": 235,
+            "right": 1520,
+            "bottom": 600
+          },
+          "notice": "The full 58px caption stays above source y690 (168.2px at 390px). Diagrams are compressed and clipped above y600; native captions sit below the burned beat and above controls."
+        },
+        "openingDescriptor": "A desktop workspace\nfor Claude and Codex.",
+        "notice": "Large chapter headlines remain readable at phone width. Expand for secondary diagram labels; native captions and text steps carry the complete wording."
+      },
+      "steps": [
+        {
+          "atSeconds": 0,
+          "text": "A desktop workspace for your agents.\nClaude and Codex, together."
+        },
+        {
+          "atSeconds": 8,
+          "text": "Claude and Codex, together.\nA conductor for your project.\nTeams, roles and groups.\nEach agent, its own git worktree."
+        },
+        {
+          "atSeconds": 19,
+          "text": "Give tasks clear dependencies.\nRetry work. Schedule the next run.\nBring issues into your queue."
+        },
+        {
+          "atSeconds": 32,
+          "text": "Search your shared memory.\nFollow the links between notes.\nShare an explicit snapshot.\nA new session pulls the context."
+        },
+        {
+          "atSeconds": 44,
+          "text": "Discover and inspect MCP tools.\nReview trust before connecting.\nScope secret grants per agent.\nChoose each agent’s permissions."
+        },
+        {
+          "atSeconds": 57,
+          "text": "Read files. Inspect the diff.\nStage changes for review.\nReview findings and evidence.\nBranch with a context snapshot."
+        },
+        {
+          "atSeconds": 70,
+          "text": "Canvas connects the work.\nWatch CPU, RAM and context.\nBrowser and macOS desktop control.\nSpeak with local dictation."
+        },
+        {
+          "atSeconds": 82,
+          "text": "Open source. Early access.\nExplore on GitHub."
+        }
+      ],
+      "chapters": [
+        {
+          "start": 0,
+          "end": 8,
+          "key": "assemble",
+          "title": "Your agents.\nOne workspace.",
+          "caption": "A desktop workspace for your agents.\nClaude and Codex, together.",
+          "motion": "Scattered session cards fly along curved paths into a single workspace; logo resolves.",
+          "beats": [
+            {
+              "at": 0,
+              "text": "A desktop workspace for your agents."
+            },
+            {
+              "at": 4,
+              "text": "Claude and Codex, together."
+            }
+          ]
+        },
+        {
+          "start": 8,
+          "end": 19,
+          "key": "agents",
+          "title": "A team around your project.",
+          "caption": "Claude and Codex, together.\nA conductor for your project.\nTeams, roles and groups.\nEach agent, its own git worktree.",
+          "motion": "Provider cards enter from opposing sides, role lanes unfold, conductor links draw, independent worktree branches extend.",
+          "beats": [
+            {
+              "at": 0,
+              "text": "Claude and Codex, together."
+            },
+            {
+              "at": 3,
+              "text": "A conductor for your project."
+            },
+            {
+              "at": 6,
+              "text": "Teams, roles and groups."
+            },
+            {
+              "at": 8,
+              "text": "Each agent, its own git worktree."
+            }
+          ]
+        },
+        {
+          "start": 19,
+          "end": 32,
+          "key": "queue",
+          "title": "Give the work a path.",
+          "caption": "Give tasks clear dependencies.\nRetry work. Schedule the next run.\nBring issues into your queue.",
+          "motion": "Issue and schedule cards feed three assembling lanes; task cards traverse drawn dependency edges; retry loops resolve.",
+          "beats": [
+            {
+              "at": 0,
+              "text": "Give tasks clear dependencies."
+            },
+            {
+              "at": 4,
+              "text": "Retry work. Schedule the next run."
+            },
+            {
+              "at": 8,
+              "text": "Bring issues into your queue."
+            }
+          ]
+        },
+        {
+          "start": 32,
+          "end": 44,
+          "key": "memory",
+          "title": "Keep the thread.",
+          "caption": "Search your shared memory.\nFollow the links between notes.\nShare an explicit snapshot.\nA new session pulls the context.",
+          "motion": "Notes orbit a search hub, links connect, a selected note becomes a snapshot packet that travels to a new session.",
+          "beats": [
+            {
+              "at": 0,
+              "text": "Search your shared memory."
+            },
+            {
+              "at": 3,
+              "text": "Follow the links between notes."
+            },
+            {
+              "at": 6,
+              "text": "Share an explicit snapshot."
+            },
+            {
+              "at": 9,
+              "text": "A new session pulls the context."
+            }
+          ]
+        },
+        {
+          "start": 44,
+          "end": 57,
+          "key": "tools",
+          "title": "Connect tools. Keep control.",
+          "caption": "Discover and inspect MCP tools.\nReview trust before connecting.\nScope secret grants per agent.\nChoose each agent’s permissions.",
+          "motion": "Tool cards approach a central connector; permission rings and scoped grant paths assemble; masked secret card stays sealed.",
+          "beats": [
+            {
+              "at": 0,
+              "text": "Discover and inspect MCP tools."
+            },
+            {
+              "at": 3,
+              "text": "Review trust before connecting."
+            },
+            {
+              "at": 7,
+              "text": "Scope secret grants per agent."
+            },
+            {
+              "at": 10,
+              "text": "Choose each agent’s permissions."
+            }
+          ]
+        },
+        {
+          "start": 57,
+          "end": 70,
+          "key": "review",
+          "title": "From edits to reviewed work.",
+          "caption": "Read files. Inspect the diff.\nStage changes for review.\nReview findings and evidence.\nBranch with a context snapshot.",
+          "motion": "A worktree opens into a code diff, lines draw, staged edits travel to review, labelled snapshot branches fan out.",
+          "beats": [
+            {
+              "at": 0,
+              "text": "Read files. Inspect the diff."
+            },
+            {
+              "at": 3,
+              "text": "Stage changes for review."
+            },
+            {
+              "at": 6,
+              "text": "Review findings and evidence."
+            },
+            {
+              "at": 9,
+              "text": "Branch with a context snapshot."
+            }
+          ]
+        },
+        {
+          "start": 70,
+          "end": 82,
+          "key": "see",
+          "title": "See the whole picture.",
+          "caption": "Canvas connects the work.\nWatch CPU, RAM and context.\nBrowser and macOS desktop control.\nSpeak with local dictation.",
+          "motion": "A project network resolves through a gentle camera pan; resource meters draw; browser, macOS desktop and dictation satellites connect.",
+          "beats": [
+            {
+              "at": 0,
+              "text": "Canvas connects the work."
+            },
+            {
+              "at": 3,
+              "text": "Watch CPU, RAM and context."
+            },
+            {
+              "at": 6,
+              "text": "Browser and macOS desktop control."
+            },
+            {
+              "at": 9,
+              "text": "Speak with local dictation."
+            }
+          ]
+        },
+        {
+          "start": 82,
+          "end": 90,
+          "key": "close",
+          "title": "Your agents.\nOne workspace.",
+          "caption": "Open source. Early access.\nExplore on GitHub.",
+          "motion": "Feature families reassemble around the Chimera logo, settle into a balanced workspace, then reveal the GitHub end card.",
+          "beats": [
+            {
+              "at": 0,
+              "text": "Open source. Early access."
+            },
+            {
+              "at": 4,
+              "text": "Explore on GitHub."
+            }
+          ]
+        }
+      ],
+      "files": {
+        "mp4": {
+          "file": "chimera-product-overview.mp4",
+          "bytes": 5107010,
+          "codec": "h264"
+        },
+        "webm": {
+          "file": "chimera-product-overview.webm",
+          "bytes": 10129444,
+          "codec": "vp8"
+        },
+        "poster": "chimera-product-overview.poster.jpg",
+        "captions": "chimera-product-overview.vtt",
+        "steps": "chimera-product-overview.steps.txt"
+      },
+      "hashes": {
+        "contentHash": "8f8d26dab3e7ccdc8cffc11c2a19cd3c27508ca14013bea1a194f069944165d5",
+        "mp4FileSha256": "d0c0d753a139094e2707e1fc5eda5a070a02ebcc8e8725295b98d76bc425297a",
+        "mp4DecodedHash": "3f9b4a106a071ed55e06cea3f0a1863a3e9741bf03bf639556f71911266a21c6",
+        "webmFileSha256": "6cd3aaf270244b938ce4d17be36f90b464de351466d51c179f13f51c5f9b1a0e",
+        "webmDecodedHash": "d4cea784250d04be376b2ee467414e372428c9ee42c366768b90e3c866c3d33e"
+      }
+    },
     {
       "id": "team-worker-overview",
       "headerFit": {

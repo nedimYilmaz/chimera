@@ -42,8 +42,9 @@ for (const clip of provenance.clips) for (const format of ['mp4','webm']) {
   const probe = JSON.parse(execFileSync(ffprobe,['-v','error','-show_streams','-show_format','-of','json',join(dir,clip.files[format].file)],{encoding:'utf8'}));
   const video = probe.streams.find(s=>s.codec_type==='video');
   assert.equal(video.codec_name,format==='mp4'?'h264':'vp8');
-  assert.equal(video.width,1280); assert.equal(video.height,800);
-  assert.equal(video.r_frame_rate,'15/1');
+  assert.equal(video.width,clip.width??1280); assert.equal(video.height,clip.height??800);
+  assert.equal(video.r_frame_rate,`${clip.fps??15}/1`);
+  if(clip.id==='product-overview'){assert.equal(video.pix_fmt,'yuv420p');assert.equal(video.color_range,'tv');assert.equal(video.color_space,'bt470bg');}
   assert.ok(Math.abs(Number(probe.format.duration)-clip.durationSeconds)<.15);
   assert.equal(Number(probe.format.size),clip.files[format].bytes);
   assert.ok(Number(probe.format.size)<15*1024*1024);
@@ -104,12 +105,13 @@ try {
   await call('Page.navigate',{url:`${origin}/chimera/review`});
   for(let i=0;i<100 && !await evaluate('Boolean(document.getElementById("v"))');i++) await new Promise(r=>setTimeout(r,50));
   const checks=[];
+  const overviewCaptionChecks=[];
   for(const clip of provenance.clips) {
-    assert.ok(clip.durationSeconds>=15 && clip.durationSeconds<=40, `${clip.id}: pacing`);
+    assert.ok(clip.id==='product-overview' ? clip.durationSeconds>=80 && clip.durationSeconds<=95 : clip.durationSeconds>=15 && clip.durationSeconds<=40, `${clip.id}: pacing`);
     const vtt=readFileSync(join(dir,clip.files.captions),'utf8');
     const cues=[...vtt.matchAll(/(\d\d):(\d\d):(\d\d\.\d+) --> (\d\d):(\d\d):(\d\d\.\d+)/g)].map(m=>[Number(m[1])*3600+Number(m[2])*60+Number(m[3]),Number(m[4])*3600+Number(m[5])*60+Number(m[6])]);
     assert.ok(cues.length>0);
-    for(let i=0;i<cues.length;i++) assert.ok(cues[i][0]<cues[i][1] && cues[i][1]<=clip.durationSeconds+.001 && (!i || cues[i][0]>=cues[i-1][1]), `${clip.id}: caption timing`);
+    for(let i=0;i<cues.length;i++) assert.ok(cues[i][0]<cues[i][1] && cues[i][1]<=clip.durationSeconds+.001 && (!i || (clip.id==='product-overview'?cues[i][0]>cues[i-1][1]:cues[i][0]>=cues[i-1][1])), `${clip.id}: caption timing`);
     for(const format of ['webm','mp4']) {
       if(!clip.files[format]) continue;
       const src=`assets/videos/${clip.files[format].file}`;
@@ -124,22 +126,44 @@ try {
         return {width:v.videoWidth,height:v.videoHeight,duration:v.duration,advanced:v.currentTime>before+.1,decoded:v.getVideoPlaybackQuality().totalVideoFrames,captionCount,src:v.currentSrc};
       })()`);
       assert.equal(result.captionCount,cues.length);
-      assert.equal(result.width,1280); assert.equal(result.height,800);
+      assert.equal(result.width,clip.width??1280); assert.equal(result.height,clip.height??800);
       assert.ok(Math.abs(result.duration-clip.durationSeconds)<.15 && result.advanced && result.decoded>0, `${clip.id}/${format}: playback`);
+      if(clip.id==='product-overview') {
+        for(const chapter of clip.chapters) for(const beat of chapter.beats) {
+          const time=chapter.start+beat.at;
+          const current=await evaluate(`(async()=>{const v=document.getElementById('v');await new Promise((r,j)=>{v.onseeked=r;v.currentTime=${time};if(!v.seeking)r();setTimeout(()=>j(Error('beat seek timeout')),10000)});await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));return [...v.textTracks[0].activeCues].map(c=>c.text);})()`);
+          assert.deepEqual(current,[beat.text],`overview/${format}/${time}: exactly current beat`);
+          overviewCaptionChecks.push({format,time,current});
+        }
+      }
       const samples=[['start',0],['middle',clip.durationSeconds/2],['end',clip.durationSeconds-.15]];
+      if(format==='webm' && clip.id==='product-overview') {
+        for(const chapter of clip.chapters) {samples.push([`${chapter.key}-transition`,Math.min(chapter.start+.4,clip.durationSeconds-.1)],[`${chapter.key}-hold`,chapter.start+(chapter.end-chapter.start)*.7]);}
+      }
       if(format==='webm') {
         samples.push(['opening-motion',.333],['chapter-motion',(clip.steps[0]?.atSeconds??2)+.133],['closing-motion',clip.durationSeconds-1.667]);
         const camera=clip.motion?.[0];
         if(camera) samples.push(['camera-mid',camera.atSeconds+.333],['camera-settled',camera.atSeconds+.733]);
       }
-      for(const [label,t] of (args.includes('--skip-frame-review')?[]:samples)) {
+      for(const [label,t] of samples) {
         await evaluate(`(async()=>{const v=document.getElementById('v');await new Promise((resolve,reject)=>{v.onseeked=()=>requestAnimationFrame(()=>requestAnimationFrame(resolve));v.currentTime=${t};if(!v.seeking && v.readyState>=2)requestAnimationFrame(resolve);setTimeout(()=>reject(new Error('seek timeout')),10000)});})()`);
-        for(const width of [1280,390]) {
+        for(const width of (args.includes('--skip-frame-review')?[]:[1280,390])) {
           await call('Emulation.setDeviceMetricsOverride',{width,height:Math.round(width*800/1280),deviceScaleFactor:1,mobile:false});
           await evaluate('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
           const shot=await call('Page.captureScreenshot',{format:'png'});
           writeFileSync(join(out,`${clip.id}-${format}-${label}-${width}.png`),Buffer.from(shot.data,'base64'));
         }
+      }
+      if(clip.id==='product-overview') {
+        await call('Emulation.setDeviceMetricsOverride',{width:390,height:244,deviceScaleFactor:1,mobile:false});
+        await evaluate(`document.getElementById('v').textTracks[0].mode='showing'`);
+        for(const t of [4,28.1,53.1,66.1,78.4,87.6]) {
+          await evaluate(`(async()=>{const v=document.getElementById('v');await new Promise((r,j)=>{v.onseeked=r;v.currentTime=${t};setTimeout(()=>j(Error('native review seek')),10000)});})()`);
+          await call('Input.dispatchMouseEvent',{type:'mouseMoved',x:195,y:224});await new Promise(r=>setTimeout(r,120));
+          assert.equal(await evaluate(`document.getElementById('v').textTracks[0].activeCues.length`),1);
+          const shot=await call('Page.captureScreenshot',{format:'png'});writeFileSync(join(out,`overview-${format}-native-${t}-390.png`),Buffer.from(shot.data,'base64'));
+        }
+        await evaluate(`document.getElementById('v').textTracks[0].mode='hidden'`);
       }
       checks.push({id:`${clip.id}/${format}`,status:'passed',...result,captions:cues.length});
       console.log(`${clip.id}/${format}: decoded, played, sought start/middle/end through /chimera/ relative asset paths`);
@@ -154,6 +178,8 @@ try {
     for(let i=0;i<100 && !await evaluate(`Boolean(document.querySelector('#demos video'))`);i++) await new Promise(r=>setTimeout(r,50));
     await evaluate(`document.fonts.ready`);
     const layout=await evaluate(`(() => ({count:document.querySelectorAll('video').length, overflow:document.documentElement.scrollWidth>innerWidth+1, screenshotLinks:document.querySelectorAll('[data-zoom]').length, controls:[...document.querySelectorAll('video')].every(v=>v.controls && !v.autoplay && v.preload==='none' && v.playsInline), sources:[...document.querySelectorAll('source,track')].map(s=>s.src) }))()`);
+    const hero=await evaluate(`(() => {const first=document.querySelector('video'),figure=first.closest('figure');return {id:figure.id,captionDefault:first.querySelector('track').default,captionMode:first.textTracks[0].mode,contextAnchor:Boolean(document.querySelector('#context-handoff video')),width:first.getBoundingClientRect().width};})()`);
+    assert.equal(hero.id,'product-overview');assert.equal(hero.captionDefault,false);assert.equal(hero.captionMode,'disabled');assert.ok(hero.contextAnchor);
     const darkTextContrast=await evaluate(`(() => {
       const linear=n=>{n/=255;return n<=.04045?n/12.92:((n+.055)/1.055)**2.4;};
       const luminance=rgb=>rgb.map(linear).reduce((sum,n,i)=>sum+n*[.2126,.7152,.0722][i],0);
@@ -180,13 +206,17 @@ try {
         return {advanced,seeked:Math.abs(v.currentTime-v.duration/2)<.15,captions:v.textTracks[0].cues.length,visibleCues:v.textTracks[0].activeCues.length};
       })()`);
       assert.ok(result.advanced && result.seeked && result.captions>0 && result.visibleCues>0,`${width}/${clip.id}: inline playback/captions/seek`);
+      // Twelve retained decoders can exhaust an owned headless browser across viewport passes.
+      // Keep the first pair for the simultaneous-play probe; other players can return to posters.
+      if(!provenance.clips.slice(0,2).some(c=>c.id===clip.id)) await evaluate(`(() => {const v=document.querySelector('#${clip.id} video');const sources=[...v.querySelectorAll('source')].map(s=>[s,s.getAttribute('src')]);sources.forEach(([s])=>s.removeAttribute('src'));v.load();sources.forEach(([s,src])=>s.setAttribute('src',src));})()`);
+
     }
     const oneAtATime=await evaluate(`(async()=>{const [a,b]=document.querySelectorAll('video');await a.play();await b.play();await new Promise(r=>setTimeout(r,60));const ok=a.paused&&!b.paused;b.pause();return ok;})()`);
     assert.ok(oneAtATime);
     await evaluate(`scrollTo(0,0)`);
     const shot=await call('Page.captureScreenshot',{format:'png',captureBeyondViewport:true});
     writeFileSync(join(out,`homepage-${width}.png`),Buffer.from(shot.data,'base64'));
-    homepageChecks.push({width,status:'passed',players:layout.count,oneAtATime,noEagerLoads:true,darkTextContrast});
+    homepageChecks.push({width,status:'passed',players:layout.count,oneAtATime,noEagerLoads:true,darkTextContrast,hero});
     console.log(`homepage ${width}: all ${layout.count} inline players played, sought and loaded captions; no overflow or eager media`);
   }
   console.log('homepage responsive playback complete; checking keyboard and compatibility fragments');
@@ -199,6 +229,19 @@ try {
     keyboardPlayer=await evaluate(`document.activeElement?.tagName==='VIDEO'`);
   }
   assert.ok(keyboardPlayer,'native video keyboard focus');
+  await evaluate(`(() => {const v=document.querySelector('video');v.pause();v.focus();v.currentTime=1;return true;})()`);
+  for(const type of ['keyDown','keyUp']) await call('Input.dispatchKeyEvent',{type,key:' ',code:'Space',windowsVirtualKeyCode:32});
+  await new Promise(r=>setTimeout(r,250));
+  assert.ok(await evaluate(`!document.querySelector('video').paused`),'native Space playback');
+  await evaluate(`(async()=>{const v=document.querySelector('video');v.pause();await new Promise(r=>{v.onseeked=r;v.currentTime=1;if(!v.seeking)r();})})()`);
+  const beforeArrow=await evaluate(`document.querySelector('video').currentTime`);
+  for(const type of ['keyDown','keyUp']) await call('Input.dispatchKeyEvent',{type,key:'ArrowRight',code:'ArrowRight',windowsVirtualKeyCode:39,nativeVirtualKeyCode:process.platform==='darwin'?124:39});
+  await new Promise(r=>setTimeout(r,200));
+  const keyboardSeek=await evaluate(`document.querySelector('video').currentTime`)-beforeArrow;
+  // Native Chromium seeks by 1% of duration: 0.9 seconds for the overview.
+  assert.ok(keyboardSeek>=.5,'native ArrowRight seek while paused');
+  await evaluate(`document.querySelector('video').pause()`);
+
   for(const clip of provenance.clips) {
     await call('Page.navigate',{url:`${origin}/chimera/videos.html#${clip.id}`});
     for(let i=0;i<100 && !await evaluate(`location.pathname.endsWith('/index.html') && location.hash==='#${clip.id}'`);i++) await new Promise(r=>setTimeout(r,30));
@@ -228,8 +271,8 @@ try {
     }
     checks.push({id:`homepage/reduced-motion/nojs-${nojs}`,status:'passed',...alternatives});
   }
-  checks.push({id:'homepage/responsive/inline-playback/keyboard/legacy-fragments',status:'passed',widths:homepageChecks,keyboardPlayer});
-  const report={frameReview:args.includes('--skip-frame-review')?'Retained prior start/middle/end and transition review; media bytes unchanged':'Start/middle/end and transition screenshots generated this run',browser:(await cdp.call('Browser.getVersion')).product,ffprobe:{version:ffprobeVersion,checks:mediaChecks},scope:'Local static server under /chimera/ project Pages prefix; deployed Pages not exercised',checks};
+  checks.push({id:'homepage/responsive/inline-playback/keyboard/legacy-fragments',status:'passed',widths:homepageChecks,keyboardPlayer,nativeSpacePlayback:true,nativeArrowRightSeekSeconds:keyboardSeek});
+  const report={overviewCaptionChecks,frameReview:args.includes('--skip-frame-review')?'Decoded start/middle/end and chapter transitions sought; screenshots omitted':'Start/middle/end and transition screenshots generated this run',browser:(await cdp.call('Browser.getVersion')).product,ffprobe:{version:ffprobeVersion,checks:mediaChecks},scope:'Local static server under /chimera/ project Pages prefix; deployed Pages not exercised',checks};
   writeFileSync(join(dir,'verification.json'),JSON.stringify(report,null,2)+'\n');
 } finally {
   await cdp?.close(); await terminateOwnedProcess(chrome); await new Promise(r=>server.close(r)); await removeScratchDirectory(scratch);

@@ -1,13 +1,13 @@
 # Usage video provenance
 
-> These videos film the real Chimera UI against a SCRIPTED FIXTURE daemon with fictional 'Atlas website' data. They are not a live workspace, not a recording of agents working, and not a performance measurement.
+> The first film is original illustrated animation explaining Chimera capability families. The eleven interface demos film the real Chimera UI against a SCRIPTED FIXTURE daemon with fictional 'Atlas website' data. None records agents executing work or measures performance.
 
 - Captured from source revision `4b26d30a9acef38e104105b512a4e86bf46acec7`. Product/capture source snapshot: 4b26d30a9acef38e104105b512a4e86bf46acec7; tree c61cf10706fbaa6e7e4fe80ed9d8f365f554b199.
 - Browser: Chrome/154.0.8037.93. Encoders: libvpx VP8 → WebM; AVFoundation H.264 → MP4 (macOS only, best effort). Final verification requires FFprobe; capture probes come from `ffmpeg -i` and AVAssetReader.
 - Timeline: 15 fps fixed, 1280×800, page clock frozen at 2026-01-12T09:30:00.000Z. Durations are not performance evidence.
 - Reproduce: `node scripts/marketing-video.mjs --capture`
 
-## Real vs scripted
+## Interface demos: real vs scripted
 
 - Real: The production React components: TopBar, Teams, Roles, Queues/Schedules, Settings/MCP/Secrets, Memory, agent inspector/ContextLinks/Resources, Projects/Canvas, ComputerUseMonitor and Footer on the production app store/reducer
 - Real: Every click, keystroke and focus change is a real input event dispatched into that UI through the browser's DevTools protocol
@@ -34,3 +34,14 @@
 | chimera-resource-diagnostics | 22.2s | 333 | 2148 KiB | 2441 KiB | read-only resource attribution and capped admission; fictional metrics | 8c088dc0377ee8aeacbbd40f154ca38109f9c043 |
 | chimera-project-canvas | 25.0s | 375 | 1898 KiB | 2155 KiB | existing project entities in Canvas; synthetic relationship metadata | 8c088dc0377ee8aeacbbd40f154ca38109f9c043 |
 | chimera-desktop-preview | 23.4s | 351 | 2184 KiB | 2666 KiB | real desktop monitor with synthetic target; no real desktop control | 8c088dc0377ee8aeacbbd40f154ca38109f9c043 |
+
+## Illustrated product overview
+
+Original Canvas animation, not real product UI. Conceptual illustration, not a recording of agents working. Worktrees isolate git changes, not processes. Snapshot branches are explicit saved context, not native provider session forks. Desktop control is macOS only; platform and provider capabilities vary. See the feature guide for availability. No usage or performance figures are shown.
+
+- Exact scene/capture source: `1e873f8a908c96d5a9e40d73bc10733b70688aa1`, tree `24c3f88b3dfb454aa4aa68de06ed6d22e7e908a8`; clean committed source.
+- 90 seconds, 2700 frames, 30fps, 1600×1000, silent H.264 MP4 (5107010 bytes) and VP8 WebM (10129444 bytes).
+- Browser: Chrome/154.0.8037.93. Encoders: libx264 and libvpx; ffmpeg version 9.0.2-https://www.martin-riedl.de Copyright (c) 2000-2026 the FFmpeg developers.
+- Source: scripts/overview/story.json, scene.mjs and capture.mjs. Reproduce with `node scripts/overview/capture.mjs --out=/tmp/chimera-overview-final`.
+- The eleven original films, their per-clip records and their assets were preserved. Their 15fps collection timeline above does not apply to this overview.
+- Container SHA256 and complete decoded-frame hashes are recorded in the new clip entry. No second-capture pixel identity or live-provider claim.

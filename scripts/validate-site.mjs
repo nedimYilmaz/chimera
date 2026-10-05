@@ -196,14 +196,15 @@ for (const page of pages) {
 if (existsSync(join(root,'site/videos.html'))) {
   try {
     const provenance = JSON.parse(read('site/assets/videos/provenance.json'));
-    if (provenance.clips.length !== 11) fail('videos: expected eleven homepage clips');
+    if (provenance.clips[0]?.id !== 'product-overview') fail('videos: product overview must be first');
+    if (provenance.clips.length !== 12) fail('videos: expected twelve homepage clips');
     if (provenance.sourceTreeDirty) fail('videos: fixture capture source was dirty');
     if (provenance.presentation?.persistentDemoLabel !== false) fail('videos: presentation must omit persistent demo labels');
     if (!/fictional/i.test(provenance.notice ?? '') || !/scripted/i.test(provenance.notice ?? '') || !provenance.fixtureVsReal?.scripted?.some(line => /synthetic.*desktop|desktop.*synthetic/i.test(line))) fail('videos: missing fictional, scripted or synthetic desktop provenance');
     if (!/^[0-9a-f]{40}$/.test(provenance.sourceRevision ?? '')) fail('videos: missing exact source revision');
     for (const clip of provenance.clips) {
       if (!/^[0-9a-f]{40}$/.test(clip.captureSourceRevision ?? '')) fail(`videos: ${clip.id} missing exact capture revision`);
-      if (clip.durationSeconds < 15 || clip.durationSeconds > 40) fail(`videos: ${clip.id} pacing`);
+      if (clip.id === 'product-overview' ? clip.durationSeconds < 80 || clip.durationSeconds > 95 || clip.kind !== 'illustrated-animation' : clip.durationSeconds < 15 || clip.durationSeconds > 40) fail(`videos: ${clip.id} pacing`);
       for (const format of ['webm','mp4']) {
         const f = clip.files[format]; if (!f) { fail(`videos: ${clip.id} missing ${format}`); continue; }
         checkRepoPath(`site/assets/videos/${f.file}`,`videos:${clip.id}`);

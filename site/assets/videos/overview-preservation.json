@@ -1,0 +1,128 @@
+{
+  "baseRevision": "c0958386573fdead2babcf4c8c32b61eb01b03b2",
+  "originalClips": 11,
+  "unchangedAssets": 55,
+  "checks": [
+    {
+      "id": "team-worker-overview",
+      "recordBytesUnchanged": true,
+      "assetBytesUnchanged": [
+        "chimera-team-worker-overview.mp4",
+        "chimera-team-worker-overview.webm",
+        "chimera-team-worker-overview.poster.jpg",
+        "chimera-team-worker-overview.vtt",
+        "chimera-team-worker-overview.steps.txt"
+      ]
+    },
+    {
+      "id": "role-library-binding",
+      "recordBytesUnchanged": true,
+      "assetBytesUnchanged": [
+        "chimera-role-library-binding.mp4",
+        "chimera-role-library-binding.webm",
+        "chimera-role-library-binding.poster.jpg",
+        "chimera-role-library-binding.vtt",
+        "chimera-role-library-binding.steps.txt"
+      ]
+    },
+    {
+      "id": "schedule-run-history",
+      "recordBytesUnchanged": true,
+      "assetBytesUnchanged": [
+        "chimera-schedule-run-history.mp4",
+        "chimera-schedule-run-history.webm",
+        "chimera-schedule-run-history.poster.jpg",
+        "chimera-schedule-run-history.vtt",
+        "chimera-schedule-run-history.steps.txt"
+      ]
+    },
+    {
+      "id": "mcp-tool-inspection",
+      "recordBytesUnchanged": true,
+      "assetBytesUnchanged": [
+        "chimera-mcp-tool-inspection.mp4",
+        "chimera-mcp-tool-inspection.webm",
+        "chimera-mcp-tool-inspection.poster.jpg",
+        "chimera-mcp-tool-inspection.vtt",
+        "chimera-mcp-tool-inspection.steps.txt"
+      ]
+    },
+    {
+      "id": "secret-access-inspection",
+      "recordBytesUnchanged": true,
+      "assetBytesUnchanged": [
+        "chimera-secret-access-inspection.mp4",
+        "chimera-secret-access-inspection.webm",
+        "chimera-secret-access-inspection.poster.jpg",
+        "chimera-secret-access-inspection.vtt",
+        "chimera-secret-access-inspection.steps.txt"
+      ]
+    },
+    {
+      "id": "team-queue-lifecycle",
+      "recordBytesUnchanged": true,
+      "assetBytesUnchanged": [
+        "chimera-team-queue-lifecycle.mp4",
+        "chimera-team-queue-lifecycle.webm",
+        "chimera-team-queue-lifecycle.poster.jpg",
+        "chimera-team-queue-lifecycle.vtt",
+        "chimera-team-queue-lifecycle.steps.txt"
+      ]
+    },
+    {
+      "id": "memory-search-link",
+      "recordBytesUnchanged": true,
+      "assetBytesUnchanged": [
+        "chimera-memory-search-link.mp4",
+        "chimera-memory-search-link.webm",
+        "chimera-memory-search-link.poster.jpg",
+        "chimera-memory-search-link.vtt",
+        "chimera-memory-search-link.steps.txt"
+      ]
+    },
+    {
+      "id": "context-handoff",
+      "recordBytesUnchanged": true,
+      "assetBytesUnchanged": [
+        "chimera-context-handoff.mp4",
+        "chimera-context-handoff.webm",
+        "chimera-context-handoff.poster.jpg",
+        "chimera-context-handoff.vtt",
+        "chimera-context-handoff.steps.txt"
+      ]
+    },
+    {
+      "id": "resource-diagnostics",
+      "recordBytesUnchanged": true,
+      "assetBytesUnchanged": [
+        "chimera-resource-diagnostics.mp4",
+        "chimera-resource-diagnostics.webm",
+        "chimera-resource-diagnostics.poster.jpg",
+        "chimera-resource-diagnostics.vtt",
+        "chimera-resource-diagnostics.steps.txt"
+      ]
+    },
+    {
+      "id": "project-canvas",
+      "recordBytesUnchanged": true,
+      "assetBytesUnchanged": [
+        "chimera-project-canvas.mp4",
+        "chimera-project-canvas.webm",
+        "chimera-project-canvas.poster.jpg",
+        "chimera-project-canvas.vtt",
+        "chimera-project-canvas.steps.txt"
+      ]
+    },
+    {
+      "id": "desktop-preview",
+      "recordBytesUnchanged": true,
+      "assetBytesUnchanged": [
+        "chimera-desktop-preview.mp4",
+        "chimera-desktop-preview.webm",
+        "chimera-desktop-preview.poster.jpg",
+        "chimera-desktop-preview.vtt",
+        "chimera-desktop-preview.steps.txt"
+      ]
+    }
+  ]
+}

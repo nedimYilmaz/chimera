@@ -1,0 +1,394 @@
+{
+  "captureSourceRevision": "1e873f8a908c96d5a9e40d73bc10733b70688aa1",
+  "captureSourceTree": "24c3f88b3dfb454aa4aa68de06ed6d22e7e908a8",
+  "decodedFrames": [
+    {
+      "chapter": "assemble",
+      "label": "transition",
+      "time": 0.4,
+      "format": "mp4",
+      "frame": "assemble-transition-mp4-390.png",
+      "sha256": "7f2e175507328c62954b0e8323c92235ffd9751fb43e083e80ae06c7049e1e0a"
+    },
+    {
+      "chapter": "assemble",
+      "label": "hold",
+      "time": 5.6,
+      "format": "mp4",
+      "frame": "assemble-hold-mp4-390.png",
+      "sha256": "6e6bff5d72ae1097693930b97d17ea5100b4a724cf0f5d8fb6e87352a2ec9480"
+    },
+    {
+      "chapter": "assemble",
+      "label": "late",
+      "time": 7.9,
+      "format": "mp4",
+      "frame": "assemble-late-mp4-390.png",
+      "sha256": "ae5d5bb230be691cb1546dad04d50ea9896cf517ab47b621f0da8153633f5c25"
+    },
+    {
+      "chapter": "agents",
+      "label": "transition",
+      "time": 8.4,
+      "format": "mp4",
+      "frame": "agents-transition-mp4-390.png",
+      "sha256": "6381e444e77c8c26fb8b14dde439709de53c6e6de2dbf4a7c24ac2646f4ddd38"
+    },
+    {
+      "chapter": "agents",
+      "label": "hold",
+      "time": 15.7,
+      "format": "mp4",
+      "frame": "agents-hold-mp4-390.png",
+      "sha256": "a7330f7b114f7ed1965e0d65b784a99c0011a1107754acf3bc0c21187cf6e0b6"
+    },
+    {
+      "chapter": "agents",
+      "label": "late",
+      "time": 18.9,
+      "format": "mp4",
+      "frame": "agents-late-mp4-390.png",
+      "sha256": "0aba3402bdd8303eece96e50011d16871698a1b154ef82aaa95db14fbd25e9e6"
+    },
+    {
+      "chapter": "queue",
+      "label": "transition",
+      "time": 19.4,
+      "format": "mp4",
+      "frame": "queue-transition-mp4-390.png",
+      "sha256": "61bebb3a484b3cad8bd52198949a6354aeffa2a7f583344ad183b415020965eb"
+    },
+    {
+      "chapter": "queue",
+      "label": "hold",
+      "time": 28.1,
+      "format": "mp4",
+      "frame": "queue-hold-mp4-390.png",
+      "sha256": "94ef3abb032b8bb01f10e9d4a5a5350549cd720eb9451e3032c5dba66af69c0a"
+    },
+    {
+      "chapter": "queue",
+      "label": "late",
+      "time": 31.9,
+      "format": "mp4",
+      "frame": "queue-late-mp4-390.png",
+      "sha256": "6380d1fac34e66f2aa0bb418f7a3a310a776df44e852079e41539f4aa3fb3ec1"
+    },
+    {
+      "chapter": "memory",
+      "label": "transition",
+      "time": 32.4,
+      "format": "mp4",
+      "frame": "memory-transition-mp4-390.png",
+      "sha256": "2d3714e0e7ca6501227474dbfeefb8da4c05571e06fd85c4de24c971c559136b"
+    },
+    {
+      "chapter": "memory",
+      "label": "hold",
+      "time": 40.4,
+      "format": "mp4",
+      "frame": "memory-hold-mp4-390.png",
+      "sha256": "30c1154d0cbcbcb448e573a230ae40f7116af092e4a58d20cfb30c857908d106"
+    },
+    {
+      "chapter": "memory",
+      "label": "late",
+      "time": 43.9,
+      "format": "mp4",
+      "frame": "memory-late-mp4-390.png",
+      "sha256": "fbdecb1a870334eb8a51c4f3e1f86e5bffb9479c5ecbf2e998692127822de2df"
+    },
+    {
+      "chapter": "tools",
+      "label": "transition",
+      "time": 44.4,
+      "format": "mp4",
+      "frame": "tools-transition-mp4-390.png",
+      "sha256": "dc0c9f0b788b2d2052f5bfbf9163a5adf3a7ec90939014ebed2fd4474eaf7cb3"
+    },
+    {
+      "chapter": "tools",
+      "label": "hold",
+      "time": 53.1,
+      "format": "mp4",
+      "frame": "tools-hold-mp4-390.png",
+      "sha256": "180811821cca27ea0288aa792cae106b9243bd1ac7e642ac5685a78ae08a9c0b"
+    },
+    {
+      "chapter": "tools",
+      "label": "late",
+      "time": 56.9,
+      "format": "mp4",
+      "frame": "tools-late-mp4-390.png",
+      "sha256": "fa37d2ca0fdfd844a6545ffce66506cbe228b39ef219ada80cc09f3136267d00"
+    },
+    {
+      "chapter": "review",
+      "label": "transition",
+      "time": 57.4,
+      "format": "mp4",
+      "frame": "review-transition-mp4-390.png",
+      "sha256": "40af0c5749c5aba0285578f206721f81b30990d79227de4c603f9666a583b348"
+    },
+    {
+      "chapter": "review",
+      "label": "hold",
+      "time": 66.1,
+      "format": "mp4",
+      "frame": "review-hold-mp4-390.png",
+      "sha256": "61dd011421442bb3de9faf4c5583450a136f2aae50688f994d2fcb183da5a6a6"
+    },
+    {
+      "chapter": "review",
+      "label": "late",
+      "time": 69.9,
+      "format": "mp4",
+      "frame": "review-late-mp4-390.png",
+      "sha256": "f60ce3cc47a13ca0c0809f75d166121c9a4d5828efa3d1e113048a658328b930"
+    },
+    {
+      "chapter": "see",
+      "label": "transition",
+      "time": 70.4,
+      "format": "mp4",
+      "frame": "see-transition-mp4-390.png",
+      "sha256": "9843bdc21612968b17e492d37d6ab0ae21fa457000b3419056a18107c38e3e31"
+    },
+    {
+      "chapter": "see",
+      "label": "hold",
+      "time": 78.4,
+      "format": "mp4",
+      "frame": "see-hold-mp4-390.png",
+      "sha256": "ab7115afb5b2ece9b16179b86a97f86b155b2e11dc7387b41f45f509b1cb1c4d"
+    },
+    {
+      "chapter": "see",
+      "label": "late",
+      "time": 81.9,
+      "format": "mp4",
+      "frame": "see-late-mp4-390.png",
+      "sha256": "cd3f5280bb38c573b6ae77bb9dae8de1c9c33452ea3aab3ab7ea049f14adb6a9"
+    },
+    {
+      "chapter": "close",
+      "label": "transition",
+      "time": 82.4,
+      "format": "mp4",
+      "frame": "close-transition-mp4-390.png",
+      "sha256": "77a7a550fc5acf0d0433934352a341a4e86d5ee537410595399d525d2973cf9e"
+    },
+    {
+      "chapter": "close",
+      "label": "hold",
+      "time": 87.6,
+      "format": "mp4",
+      "frame": "close-hold-mp4-390.png",
+      "sha256": "d730ff82ef631d7bce1276a849916a507103d73d7a641d3933cb8fd0688006bf"
+    },
+    {
+      "chapter": "close",
+      "label": "late",
+      "time": 89.9,
+      "format": "mp4",
+      "frame": "close-late-mp4-390.png",
+      "sha256": "321b0fb93e7fa8dbf714852faa8a3c75a19949d6fcf2f75632110c435df26a25"
+    },
+    {
+      "chapter": "assemble",
+      "label": "transition",
+      "time": 0.4,
+      "format": "webm",
+      "frame": "assemble-transition-webm-390.png",
+      "sha256": "3f73a6de2144415d004d5fbe01ac25e79b711dcf0825e942a2ce290b51e2cc1d"
+    },
+    {
+      "chapter": "assemble",
+      "label": "hold",
+      "time": 5.6,
+      "format": "webm",
+      "frame": "assemble-hold-webm-390.png",
+      "sha256": "13f9f4d183ed87bcb960635a3afd97d71d1b1f16d359f7a178ffef200a78794b"
+    },
+    {
+      "chapter": "assemble",
+      "label": "late",
+      "time": 7.9,
+      "format": "webm",
+      "frame": "assemble-late-webm-390.png",
+      "sha256": "50c998760d3d94668699c74769510b949417f4071844bbac655fce29bdfd08f9"
+    },
+    {
+      "chapter": "agents",
+      "label": "transition",
+      "time": 8.4,
+      "format": "webm",
+      "frame": "agents-transition-webm-390.png",
+      "sha256": "2334a46881a95f8e3d0db8dbf267058404c2d45345243b5e5d111c2736ef42f0"
+    },
+    {
+      "chapter": "agents",
+      "label": "hold",
+      "time": 15.7,
+      "format": "webm",
+      "frame": "agents-hold-webm-390.png",
+      "sha256": "d21fd8f2e1a27049e8ba0bb5492ad38497260c4bee13011de04def546f38072f"
+    },
+    {
+      "chapter": "agents",
+      "label": "late",
+      "time": 18.9,
+      "format": "webm",
+      "frame": "agents-late-webm-390.png",
+      "sha256": "0a025f6817469d7a040d28508b036d1ee978f89f4dc5676e587d69076367deb9"
+    },
+    {
+      "chapter": "queue",
+      "label": "transition",
+      "time": 19.4,
+      "format": "webm",
+      "frame": "queue-transition-webm-390.png",
+      "sha256": "173636ff69abf5f273c8f6c9c054a374ed74227321feecb3b8f1a5eb67a8caf7"
+    },
+    {
+      "chapter": "queue",
+      "label": "hold",
+      "time": 28.1,
+      "format": "webm",
+      "frame": "queue-hold-webm-390.png",
+      "sha256": "ad6fb318a44f4e0957e30521f148652cc8fd413a78ee90e25515fea1a82535c4"
+    },
+    {
+      "chapter": "queue",
+      "label": "late",
+      "time": 31.9,
+      "format": "webm",
+      "frame": "queue-late-webm-390.png",
+      "sha256": "11bf0dbb8741ae24555ad3b09fd1134f245c3d95321fde0638cf184c616352eb"
+    },
+    {
+      "chapter": "memory",
+      "label": "transition",
+      "time": 32.4,
+      "format": "webm",
+      "frame": "memory-transition-webm-390.png",
+      "sha256": "c82c2df030b3805f922e3da33fa0b2638b85305d755bcdb635b59250b0f65dd4"
+    },
+    {
+      "chapter": "memory",
+      "label": "hold",
+      "time": 40.4,
+      "format": "webm",
+      "frame": "memory-hold-webm-390.png",
+      "sha256": "43c0abe050ed4f227ddefe67cfee4641ddd068a19825a5639bb935e7227ca68e"
+    },
+    {
+      "chapter": "memory",
+      "label": "late",
+      "time": 43.9,
+      "format": "webm",
+      "frame": "memory-late-webm-390.png",
+      "sha256": "c28a50bd2819f9aa5e088fa81e4431cf6348063dbaf2e3848f3a8bc6ee689268"
+    },
+    {
+      "chapter": "tools",
+      "label": "transition",
+      "time": 44.4,
+      "format": "webm",
+      "frame": "tools-transition-webm-390.png",
+      "sha256": "44c2989f5491203a410561d3f7602a3c310123d5050670a73d41cb0c9f2dbd74"
+    },
+    {
+      "chapter": "tools",
+      "label": "hold",
+      "time": 53.1,
+      "format": "webm",
+      "frame": "tools-hold-webm-390.png",
+      "sha256": "da2a40162ecf4717433b7e47502f8ed3f5775614c42783f460892dd862b4db1b"
+    },
+    {
+      "chapter": "tools",
+      "label": "late",
+      "time": 56.9,
+      "format": "webm",
+      "frame": "tools-late-webm-390.png",
+      "sha256": "d9251b26a42fefc2140023850bdd47ccb714a2ce022f591ea7065201c3adf2f0"
+    },
+    {
+      "chapter": "review",
+      "label": "transition",
+      "time": 57.4,
+      "format": "webm",
+      "frame": "review-transition-webm-390.png",
+      "sha256": "56213e43a2a1f9a928cd797998a340f433c9a0a44e9369ccf509d4bfb95d713c"
+    },
+    {
+      "chapter": "review",
+      "label": "hold",
+      "time": 66.1,
+      "format": "webm",
+      "frame": "review-hold-webm-390.png",
+      "sha256": "47d159e8c04c0e137df5d32fdfdeabfd5ab7fadf209035db011c545546add219"
+    },
+    {
+      "chapter": "review",
+      "label": "late",
+      "time": 69.9,
+      "format": "webm",
+      "frame": "review-late-webm-390.png",
+      "sha256": "b09aa2f2a0e0bf5400a9484fbcb21347b8dffe82ecad1675608246fc0307121b"
+    },
+    {
+      "chapter": "see",
+      "label": "transition",
+      "time": 70.4,
+      "format": "webm",
+      "frame": "see-transition-webm-390.png",
+      "sha256": "f65cd848a6620ef4ff05f18f6cb9dbc43dee602eecee36999c9ac201b90cef5f"
+    },
+    {
+      "chapter": "see",
+      "label": "hold",
+      "time": 78.4,
+      "format": "webm",
+      "frame": "see-hold-webm-390.png",
+      "sha256": "8d1ce213d58900ea2a24cc2993d8adc49176075115b27a85044cfccb75cc8135"
+    },
+    {
+      "chapter": "see",
+      "label": "late",
+      "time": 81.9,
+      "format": "webm",
+      "frame": "see-late-webm-390.png",
+      "sha256": "7944e765380cef8d64aa84626be55d54eac379584cb9a490c03e7519bda64fa1"
+    },
+    {
+      "chapter": "close",
+      "label": "transition",
+      "time": 82.4,
+      "format": "webm",
+      "frame": "close-transition-webm-390.png",
+      "sha256": "0f3d2b839bb076ca2493b02ea2b32ad15b7168a0440e0c5376daeb945e2f63d5"
+    },
+    {
+      "chapter": "close",
+      "label": "hold",
+      "time": 87.6,
+      "format": "webm",
+      "frame": "close-hold-webm-390.png",
+      "sha256": "6c6b985b75ec03d50a88c681c9ccd301a47d9761ade20ddf7d87e6a5d0509322"
+    },
+    {
+      "chapter": "close",
+      "label": "late",
+      "time": 89.9,
+      "format": "webm",
+      "frame": "close-late-webm-390.png",
+      "sha256": "475d081377f1d12351e356319ad98622c2b901faf6aa2109002888c4dfd6affe"
+    }
+  ],
+  "contactSheets": {
+    "mp4": "chapters-mp4-390-contact.png",
+    "webm": "chapters-webm-390-contact.png"
+  }
+}

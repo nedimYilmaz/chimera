@@ -1,9 +1,554 @@
 {
-  "frameReview": "Retained prior start/middle/end and transition review; media bytes unchanged",
+  "overviewCaptionChecks": [
+    {
+      "format": "webm",
+      "time": 0,
+      "current": [
+        "A desktop workspace for your agents."
+      ]
+    },
+    {
+      "format": "webm",
+      "time": 4,
+      "current": [
+        "Claude and Codex, together."
+      ]
+    },
+    {
+      "format": "webm",
+      "time": 8,
+      "current": [
+        "Claude and Codex, together."
+      ]
+    },
+    {
+      "format": "webm",
+      "time": 11,
+      "current": [
+        "A conductor for your project."
+      ]
+    },
+    {
+      "format": "webm",
+      "time": 14,
+      "current": [
+        "Teams, roles and groups."
+      ]
+    },
+    {
+      "format": "webm",
+      "time": 16,
+      "current": [
+        "Each agent, its own git worktree."
+      ]
+    },
+    {
+      "format": "webm",
+      "time": 19,
+      "current": [
+        "Give tasks clear dependencies."
+      ]
+    },
+    {
+      "format": "webm",
+      "time": 23,
+      "current": [
+        "Retry work. Schedule the next run."
+      ]
+    },
+    {
+      "format": "webm",
+      "time": 27,
+      "current": [
+        "Bring issues into your queue."
+      ]
+    },
+    {
+      "format": "webm",
+      "time": 32,
+      "current": [
+        "Search your shared memory."
+      ]
+    },
+    {
+      "format": "webm",
+      "time": 35,
+      "current": [
+        "Follow the links between notes."
+      ]
+    },
+    {
+      "format": "webm",
+      "time": 38,
+      "current": [
+        "Share an explicit snapshot."
+      ]
+    },
+    {
+      "format": "webm",
+      "time": 41,
+      "current": [
+        "A new session pulls the context."
+      ]
+    },
+    {
+      "format": "webm",
+      "time": 44,
+      "current": [
+        "Discover and inspect MCP tools."
+      ]
+    },
+    {
+      "format": "webm",
+      "time": 47,
+      "current": [
+        "Review trust before connecting."
+      ]
+    },
+    {
+      "format": "webm",
+      "time": 51,
+      "current": [
+        "Scope secret grants per agent."
+      ]
+    },
+    {
+      "format": "webm",
+      "time": 54,
+      "current": [
+        "Choose each agent’s permissions."
+      ]
+    },
+    {
+      "format": "webm",
+      "time": 57,
+      "current": [
+        "Read files. Inspect the diff."
+      ]
+    },
+    {
+      "format": "webm",
+      "time": 60,
+      "current": [
+        "Stage changes for review."
+      ]
+    },
+    {
+      "format": "webm",
+      "time": 63,
+      "current": [
+        "Review findings and evidence."
+      ]
+    },
+    {
+      "format": "webm",
+      "time": 66,
+      "current": [
+        "Branch with a context snapshot."
+      ]
+    },
+    {
+      "format": "webm",
+      "time": 70,
+      "current": [
+        "Canvas connects the work."
+      ]
+    },
+    {
+      "format": "webm",
+      "time": 73,
+      "current": [
+        "Watch CPU, RAM and context."
+      ]
+    },
+    {
+      "format": "webm",
+      "time": 76,
+      "current": [
+        "Browser and macOS desktop control."
+      ]
+    },
+    {
+      "format": "webm",
+      "time": 79,
+      "current": [
+        "Speak with local dictation."
+      ]
+    },
+    {
+      "format": "webm",
+      "time": 82,
+      "current": [
+        "Open source. Early access."
+      ]
+    },
+    {
+      "format": "webm",
+      "time": 86,
+      "current": [
+        "Explore on GitHub."
+      ]
+    },
+    {
+      "format": "mp4",
+      "time": 0,
+      "current": [
+        "A desktop workspace for your agents."
+      ]
+    },
+    {
+      "format": "mp4",
+      "time": 4,
+      "current": [
+        "Claude and Codex, together."
+      ]
+    },
+    {
+      "format": "mp4",
+      "time": 8,
+      "current": [
+        "Claude and Codex, together."
+      ]
+    },
+    {
+      "format": "mp4",
+      "time": 11,
+      "current": [
+        "A conductor for your project."
+      ]
+    },
+    {
+      "format": "mp4",
+      "time": 14,
+      "current": [
+        "Teams, roles and groups."
+      ]
+    },
+    {
+      "format": "mp4",
+      "time": 16,
+      "current": [
+        "Each agent, its own git worktree."
+      ]
+    },
+    {
+      "format": "mp4",
+      "time": 19,
+      "current": [
+        "Give tasks clear dependencies."
+      ]
+    },
+    {
+      "format": "mp4",
+      "time": 23,
+      "current": [
+        "Retry work. Schedule the next run."
+      ]
+    },
+    {
+      "format": "mp4",
+      "time": 27,
+      "current": [
+        "Bring issues into your queue."
+      ]
+    },
+    {
+      "format": "mp4",
+      "time": 32,
+      "current": [
+        "Search your shared memory."
+      ]
+    },
+    {
+      "format": "mp4",
+      "time": 35,
+      "current": [
+        "Follow the links between notes."
+      ]
+    },
+    {
+      "format": "mp4",
+      "time": 38,
+      "current": [
+        "Share an explicit snapshot."
+      ]
+    },
+    {
+      "format": "mp4",
+      "time": 41,
+      "current": [
+        "A new session pulls the context."
+      ]
+    },
+    {
+      "format": "mp4",
+      "time": 44,
+      "current": [
+        "Discover and inspect MCP tools."
+      ]
+    },
+    {
+      "format": "mp4",
+      "time": 47,
+      "current": [
+        "Review trust before connecting."
+      ]
+    },
+    {
+      "format": "mp4",
+      "time": 51,
+      "current": [
+        "Scope secret grants per agent."
+      ]
+    },
+    {
+      "format": "mp4",
+      "time": 54,
+      "current": [
+        "Choose each agent’s permissions."
+      ]
+    },
+    {
+      "format": "mp4",
+      "time": 57,
+      "current": [
+        "Read files. Inspect the diff."
+      ]
+    },
+    {
+      "format": "mp4",
+      "time": 60,
+      "current": [
+        "Stage changes for review."
+      ]
+    },
+    {
+      "format": "mp4",
+      "time": 63,
+      "current": [
+        "Review findings and evidence."
+      ]
+    },
+    {
+      "format": "mp4",
+      "time": 66,
+      "current": [
+        "Branch with a context snapshot."
+      ]
+    },
+    {
+      "format": "mp4",
+      "time": 70,
+      "current": [
+        "Canvas connects the work."
+      ]
+    },
+    {
+      "format": "mp4",
+      "time": 73,
+      "current": [
+        "Watch CPU, RAM and context."
+      ]
+    },
+    {
+      "format": "mp4",
+      "time": 76,
+      "current": [
+        "Browser and macOS desktop control."
+      ]
+    },
+    {
+      "format": "mp4",
+      "time": 79,
+      "current": [
+        "Speak with local dictation."
+      ]
+    },
+    {
+      "format": "mp4",
+      "time": 82,
+      "current": [
+        "Open source. Early access."
+      ]
+    },
+    {
+      "format": "mp4",
+      "time": 86,
+      "current": [
+        "Explore on GitHub."
+      ]
+    }
+  ],
+  "frameReview": "Decoded start/middle/end and chapter transitions sought; screenshots omitted",
   "browser": "Chrome/154.0.8037.93",
   "ffprobe": {
     "version": "ffprobe version 9.0.2-https://www.martin-riedl.de Copyright (c) 2007-2026 the FFmpeg developers",
     "checks": [
+      {
+        "id": "product-overview/mp4",
+        "status": "passed",
+        "streams": [
+          {
+            "index": 0,
+            "codec_name": "h264",
+            "codec_long_name": "H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10",
+            "profile": "High",
+            "codec_type": "video",
+            "codec_tag_string": "avc1",
+            "codec_tag": "0x31637661",
+            "mime_codec_string": "avc1.640028",
+            "width": 1600,
+            "height": 1000,
+            "coded_width": 1600,
+            "coded_height": 1000,
+            "has_b_frames": 2,
+            "sample_aspect_ratio": "1:1",
+            "display_aspect_ratio": "8:5",
+            "pix_fmt": "yuv420p",
+            "level": 40,
+            "color_range": "tv",
+            "color_space": "bt470bg",
+            "chroma_location": "left",
+            "field_order": "progressive",
+            "is_avc": "true",
+            "nal_length_size": "4",
+            "id": "0x1",
+            "r_frame_rate": "30/1",
+            "avg_frame_rate": "30/1",
+            "time_base": "1/15360",
+            "start_pts": 0,
+            "start_time": "0.000000",
+            "duration_ts": 1382400,
+            "duration": "90.000000",
+            "bit_rate": "451108",
+            "bits_per_raw_sample": "8",
+            "nb_frames": "2700",
+            "extradata_size": 50,
+            "disposition": {
+              "default": 1,
+              "dub": 0,
+              "original": 0,
+              "comment": 0,
+              "lyrics": 0,
+              "karaoke": 0,
+              "forced": 0,
+              "hearing_impaired": 0,
+              "visual_impaired": 0,
+              "clean_effects": 0,
+              "attached_pic": 0,
+              "timed_thumbnails": 0,
+              "non_diegetic": 0,
+              "captions": 0,
+              "descriptions": 0,
+              "metadata": 0,
+              "dependent": 0,
+              "still_image": 0,
+              "multilayer": 0
+            },
+            "tags": {
+              "language": "und",
+              "handler_name": "VideoHandler",
+              "encoder": "Lavc63.1.102 libx264"
+            },
+            "side_data_list": [
+              {
+                "side_data_type": "ICC Profile"
+              }
+            ]
+          }
+        ],
+        "format": {
+          "nb_streams": 1,
+          "nb_programs": 0,
+          "nb_stream_groups": 0,
+          "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+          "format_long_name": "QuickTime / MOV",
+          "start_time": "0.000000",
+          "duration": "90.000000",
+          "size": "5107010",
+          "bit_rate": "453956",
+          "probe_score": 100,
+          "tags": {
+            "major_brand": "isom",
+            "minor_version": "512",
+            "compatible_brands": "isomiso2avc1mp41",
+            "encoder": "Lavf63.1.102"
+          }
+        }
+      },
+      {
+        "id": "product-overview/webm",
+        "status": "passed",
+        "streams": [
+          {
+            "index": 0,
+            "codec_name": "vp8",
+            "codec_long_name": "On2 VP8",
+            "profile": "0",
+            "codec_type": "video",
+            "codec_tag_string": "[0][0][0][0]",
+            "codec_tag": "0x0000",
+            "mime_codec_string": "vp8",
+            "width": 1600,
+            "height": 1000,
+            "coded_width": 1600,
+            "coded_height": 1000,
+            "has_b_frames": 0,
+            "sample_aspect_ratio": "1:1",
+            "display_aspect_ratio": "8:5",
+            "pix_fmt": "yuv420p",
+            "level": -99,
+            "color_range": "tv",
+            "color_space": "bt470bg",
+            "field_order": "progressive",
+            "r_frame_rate": "30/1",
+            "avg_frame_rate": "30/1",
+            "time_base": "1/1000",
+            "start_pts": 0,
+            "start_time": "0.000000",
+            "disposition": {
+              "default": 0,
+              "dub": 0,
+              "original": 0,
+              "comment": 0,
+              "lyrics": 0,
+              "karaoke": 0,
+              "forced": 0,
+              "hearing_impaired": 0,
+              "visual_impaired": 0,
+              "clean_effects": 0,
+              "attached_pic": 0,
+              "timed_thumbnails": 0,
+              "non_diegetic": 0,
+              "captions": 0,
+              "descriptions": 0,
+              "metadata": 0,
+              "dependent": 0,
+              "still_image": 0,
+              "multilayer": 0
+            },
+            "tags": {
+              "ENCODER": "Lavc63.1.102 libvpx",
+              "DURATION": "00:01:30.000000000"
+            }
+          }
+        ],
+        "format": {
+          "nb_streams": 1,
+          "nb_programs": 0,
+          "nb_stream_groups": 0,
+          "format_name": "matroska,webm",
+          "format_long_name": "Matroska / WebM",
+          "start_time": "0.000000",
+          "duration": "90.000000",
+          "size": "10129444",
+          "bit_rate": "900395",
+          "probe_score": 100,
+          "tags": {
+            "ENCODER": "Lavf63.1.102"
+          }
+        }
+      },
       {
         "id": "team-worker-overview/mp4",
         "status": "passed",
@@ -1703,6 +2248,30 @@
   "scope": "Local static server under /chimera/ project Pages prefix; deployed Pages not exercised",
   "checks": [
     {
+      "id": "product-overview/webm",
+      "status": "passed",
+      "width": 1600,
+      "height": 1000,
+      "duration": 90,
+      "advanced": true,
+      "decoded": 25,
+      "captionCount": 27,
+      "src": "http://127.0.0.1:60347/chimera/assets/videos/chimera-product-overview.webm",
+      "captions": 27
+    },
+    {
+      "id": "product-overview/mp4",
+      "status": "passed",
+      "width": 1600,
+      "height": 1000,
+      "duration": 90,
+      "advanced": true,
+      "decoded": 21,
+      "captionCount": 27,
+      "src": "http://127.0.0.1:60347/chimera/assets/videos/chimera-product-overview.mp4",
+      "captions": 27
+    },
+    {
       "id": "team-worker-overview/webm",
       "status": "passed",
       "width": 1280,
@@ -1711,7 +2280,7 @@
       "advanced": true,
       "decoded": 15,
       "captionCount": 3,
-      "src": "http://127.0.0.1:57044/chimera/assets/videos/chimera-team-worker-overview.webm",
+      "src": "http://127.0.0.1:60347/chimera/assets/videos/chimera-team-worker-overview.webm",
       "captions": 3
     },
     {
@@ -1721,9 +2290,9 @@
       "height": 800,
       "duration": 22.866667,
       "advanced": true,
-      "decoded": 14,
+      "decoded": 15,
       "captionCount": 3,
-      "src": "http://127.0.0.1:57044/chimera/assets/videos/chimera-team-worker-overview.mp4",
+      "src": "http://127.0.0.1:60347/chimera/assets/videos/chimera-team-worker-overview.mp4",
       "captions": 3
     },
     {
@@ -1735,7 +2304,7 @@
       "advanced": true,
       "decoded": 15,
       "captionCount": 3,
-      "src": "http://127.0.0.1:57044/chimera/assets/videos/chimera-role-library-binding.webm",
+      "src": "http://127.0.0.1:60347/chimera/assets/videos/chimera-role-library-binding.webm",
       "captions": 3
     },
     {
@@ -1745,9 +2314,9 @@
       "height": 800,
       "duration": 22.266667,
       "advanced": true,
-      "decoded": 15,
+      "decoded": 16,
       "captionCount": 3,
-      "src": "http://127.0.0.1:57044/chimera/assets/videos/chimera-role-library-binding.mp4",
+      "src": "http://127.0.0.1:60347/chimera/assets/videos/chimera-role-library-binding.mp4",
       "captions": 3
     },
     {
@@ -1757,9 +2326,9 @@
       "height": 800,
       "duration": 22.4,
       "advanced": true,
-      "decoded": 15,
+      "decoded": 14,
       "captionCount": 3,
-      "src": "http://127.0.0.1:57044/chimera/assets/videos/chimera-schedule-run-history.webm",
+      "src": "http://127.0.0.1:60347/chimera/assets/videos/chimera-schedule-run-history.webm",
       "captions": 3
     },
     {
@@ -1769,9 +2338,9 @@
       "height": 800,
       "duration": 22.4,
       "advanced": true,
-      "decoded": 14,
+      "decoded": 15,
       "captionCount": 3,
-      "src": "http://127.0.0.1:57044/chimera/assets/videos/chimera-schedule-run-history.mp4",
+      "src": "http://127.0.0.1:60347/chimera/assets/videos/chimera-schedule-run-history.mp4",
       "captions": 3
     },
     {
@@ -1781,9 +2350,9 @@
       "height": 800,
       "duration": 23.667,
       "advanced": true,
-      "decoded": 15,
+      "decoded": 14,
       "captionCount": 3,
-      "src": "http://127.0.0.1:57044/chimera/assets/videos/chimera-mcp-tool-inspection.webm",
+      "src": "http://127.0.0.1:60347/chimera/assets/videos/chimera-mcp-tool-inspection.webm",
       "captions": 3
     },
     {
@@ -1793,9 +2362,9 @@
       "height": 800,
       "duration": 23.666667,
       "advanced": true,
-      "decoded": 17,
+      "decoded": 16,
       "captionCount": 3,
-      "src": "http://127.0.0.1:57044/chimera/assets/videos/chimera-mcp-tool-inspection.mp4",
+      "src": "http://127.0.0.1:60347/chimera/assets/videos/chimera-mcp-tool-inspection.mp4",
       "captions": 3
     },
     {
@@ -1805,9 +2374,9 @@
       "height": 800,
       "duration": 24.8,
       "advanced": true,
-      "decoded": 15,
+      "decoded": 14,
       "captionCount": 3,
-      "src": "http://127.0.0.1:57044/chimera/assets/videos/chimera-secret-access-inspection.webm",
+      "src": "http://127.0.0.1:60347/chimera/assets/videos/chimera-secret-access-inspection.webm",
       "captions": 3
     },
     {
@@ -1817,9 +2386,9 @@
       "height": 800,
       "duration": 24.8,
       "advanced": true,
-      "decoded": 14,
+      "decoded": 17,
       "captionCount": 3,
-      "src": "http://127.0.0.1:57044/chimera/assets/videos/chimera-secret-access-inspection.mp4",
+      "src": "http://127.0.0.1:60347/chimera/assets/videos/chimera-secret-access-inspection.mp4",
       "captions": 3
     },
     {
@@ -1829,9 +2398,9 @@
       "height": 800,
       "duration": 36.8,
       "advanced": true,
-      "decoded": 13,
+      "decoded": 16,
       "captionCount": 9,
-      "src": "http://127.0.0.1:57044/chimera/assets/videos/chimera-team-queue-lifecycle.webm",
+      "src": "http://127.0.0.1:60347/chimera/assets/videos/chimera-team-queue-lifecycle.webm",
       "captions": 9
     },
     {
@@ -1843,7 +2412,7 @@
       "advanced": true,
       "decoded": 15,
       "captionCount": 9,
-      "src": "http://127.0.0.1:57044/chimera/assets/videos/chimera-team-queue-lifecycle.mp4",
+      "src": "http://127.0.0.1:60347/chimera/assets/videos/chimera-team-queue-lifecycle.mp4",
       "captions": 9
     },
     {
@@ -1853,9 +2422,9 @@
       "height": 800,
       "duration": 26.734,
       "advanced": true,
-      "decoded": 14,
+      "decoded": 15,
       "captionCount": 6,
-      "src": "http://127.0.0.1:57044/chimera/assets/videos/chimera-memory-search-link.webm",
+      "src": "http://127.0.0.1:60347/chimera/assets/videos/chimera-memory-search-link.webm",
       "captions": 6
     },
     {
@@ -1865,9 +2434,9 @@
       "height": 800,
       "duration": 26.733333,
       "advanced": true,
-      "decoded": 14,
+      "decoded": 15,
       "captionCount": 6,
-      "src": "http://127.0.0.1:57044/chimera/assets/videos/chimera-memory-search-link.mp4",
+      "src": "http://127.0.0.1:60347/chimera/assets/videos/chimera-memory-search-link.mp4",
       "captions": 6
     },
     {
@@ -1879,7 +2448,7 @@
       "advanced": true,
       "decoded": 15,
       "captionCount": 4,
-      "src": "http://127.0.0.1:57044/chimera/assets/videos/chimera-context-handoff.webm",
+      "src": "http://127.0.0.1:60347/chimera/assets/videos/chimera-context-handoff.webm",
       "captions": 4
     },
     {
@@ -1889,9 +2458,9 @@
       "height": 800,
       "duration": 28.4,
       "advanced": true,
-      "decoded": 17,
+      "decoded": 15,
       "captionCount": 4,
-      "src": "http://127.0.0.1:57044/chimera/assets/videos/chimera-context-handoff.mp4",
+      "src": "http://127.0.0.1:60347/chimera/assets/videos/chimera-context-handoff.mp4",
       "captions": 4
     },
     {
@@ -1903,7 +2472,7 @@
       "advanced": true,
       "decoded": 15,
       "captionCount": 4,
-      "src": "http://127.0.0.1:57044/chimera/assets/videos/chimera-resource-diagnostics.webm",
+      "src": "http://127.0.0.1:60347/chimera/assets/videos/chimera-resource-diagnostics.webm",
       "captions": 4
     },
     {
@@ -1913,9 +2482,9 @@
       "height": 800,
       "duration": 22.2,
       "advanced": true,
-      "decoded": 14,
+      "decoded": 17,
       "captionCount": 4,
-      "src": "http://127.0.0.1:57044/chimera/assets/videos/chimera-resource-diagnostics.mp4",
+      "src": "http://127.0.0.1:60347/chimera/assets/videos/chimera-resource-diagnostics.mp4",
       "captions": 4
     },
     {
@@ -1927,7 +2496,7 @@
       "advanced": true,
       "decoded": 14,
       "captionCount": 5,
-      "src": "http://127.0.0.1:57044/chimera/assets/videos/chimera-project-canvas.webm",
+      "src": "http://127.0.0.1:60347/chimera/assets/videos/chimera-project-canvas.webm",
       "captions": 5
     },
     {
@@ -1939,7 +2508,7 @@
       "advanced": true,
       "decoded": 16,
       "captionCount": 5,
-      "src": "http://127.0.0.1:57044/chimera/assets/videos/chimera-project-canvas.mp4",
+      "src": "http://127.0.0.1:60347/chimera/assets/videos/chimera-project-canvas.mp4",
       "captions": 5
     },
     {
@@ -1949,9 +2518,9 @@
       "height": 800,
       "duration": 23.4,
       "advanced": true,
-      "decoded": 14,
+      "decoded": 15,
       "captionCount": 4,
-      "src": "http://127.0.0.1:57044/chimera/assets/videos/chimera-desktop-preview.webm",
+      "src": "http://127.0.0.1:60347/chimera/assets/videos/chimera-desktop-preview.webm",
       "captions": 4
     },
     {
@@ -1963,24 +2532,24 @@
       "advanced": true,
       "decoded": 14,
       "captionCount": 4,
-      "src": "http://127.0.0.1:57044/chimera/assets/videos/chimera-desktop-preview.mp4",
+      "src": "http://127.0.0.1:60347/chimera/assets/videos/chimera-desktop-preview.mp4",
       "captions": 4
     },
     {
       "id": "homepage/reduced-motion/nojs-false",
       "status": "passed",
-      "count": 11,
+      "count": 12,
       "reduced": true,
       "controls": true,
-      "links": 11
+      "links": 12
     },
     {
       "id": "homepage/reduced-motion/nojs-true",
       "status": "passed",
-      "count": 11,
+      "count": 12,
       "reduced": true,
       "controls": true,
-      "links": 11
+      "links": 12
     },
     {
       "id": "homepage/responsive/inline-playback/keyboard/legacy-fragments",
@@ -1989,37 +2558,67 @@
         {
           "width": 360,
           "status": "passed",
-          "players": 11,
+          "players": 12,
           "oneAtATime": true,
           "noEagerLoads": true,
-          "darkTextContrast": 10.243751988228105
+          "darkTextContrast": 10.243751988228105,
+          "hero": {
+            "id": "product-overview",
+            "captionDefault": false,
+            "captionMode": "disabled",
+            "contextAnchor": true,
+            "width": 320
+          }
         },
         {
           "width": 390,
           "status": "passed",
-          "players": 11,
+          "players": 12,
           "oneAtATime": true,
           "noEagerLoads": true,
-          "darkTextContrast": 10.243751988228105
+          "darkTextContrast": 10.243751988228105,
+          "hero": {
+            "id": "product-overview",
+            "captionDefault": false,
+            "captionMode": "disabled",
+            "contextAnchor": true,
+            "width": 350
+          }
         },
         {
           "width": 768,
           "status": "passed",
-          "players": 11,
+          "players": 12,
           "oneAtATime": true,
           "noEagerLoads": true,
-          "darkTextContrast": 10.243751988228105
+          "darkTextContrast": 10.243751988228105,
+          "hero": {
+            "id": "product-overview",
+            "captionDefault": false,
+            "captionMode": "disabled",
+            "contextAnchor": true,
+            "width": 706.546875
+          }
         },
         {
           "width": 1440,
           "status": "passed",
-          "players": 11,
+          "players": 12,
           "oneAtATime": true,
           "noEagerLoads": true,
-          "darkTextContrast": 10.243751988228105
+          "darkTextContrast": 10.243751988228105,
+          "hero": {
+            "id": "product-overview",
+            "captionDefault": false,
+            "captionMode": "disabled",
+            "contextAnchor": true,
+            "width": 1240
+          }
         }
       ],
-      "keyboardPlayer": true
+      "keyboardPlayer": true,
+      "nativeSpacePlayback": true,
+      "nativeArrowRightSeekSeconds": 0.8999999999999999
     }
   ]
 }

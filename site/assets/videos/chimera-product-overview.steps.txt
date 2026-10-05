@@ -1,0 +1,59 @@
+Your agents. One workspace.
+90 seconds · original illustrated animation · silent
+
+0–8s: Your agents. One workspace.
+A desktop workspace for your agents.
+Claude and Codex, together.
+Scattered session cards fly along curved paths into a single workspace; logo resolves.
+
+8–19s: A team around your project.
+Claude and Codex, together.
+A conductor for your project.
+Teams, roles and groups.
+Each agent, its own git worktree.
+Provider cards enter from opposing sides, role lanes unfold, conductor links draw, independent worktree branches extend.
+
+19–32s: Give the work a path.
+Give tasks clear dependencies.
+Retry work. Schedule the next run.
+Bring issues into your queue.
+Issue and schedule cards feed three assembling lanes; task cards traverse drawn dependency edges; retry loops resolve.
+
+32–44s: Keep the thread.
+Search your shared memory.
+Follow the links between notes.
+Share an explicit snapshot.
+A new session pulls the context.
+Notes orbit a search hub, links connect, a selected note becomes a snapshot packet that travels to a new session.
+
+44–57s: Connect tools. Keep control.
+Discover and inspect MCP tools.
+Review trust before connecting.
+Scope secret grants per agent.
+Choose each agent’s permissions.
+Tool cards approach a central connector; permission rings and scoped grant paths assemble; masked secret card stays sealed.
+
+57–70s: From edits to reviewed work.
+Read files. Inspect the diff.
+Stage changes for review.
+Review findings and evidence.
+Branch with a context snapshot.
+A worktree opens into a code diff, lines draw, staged edits travel to review, labelled snapshot branches fan out.
+
+70–82s: See the whole picture.
+Canvas connects the work.
+Watch CPU, RAM and context.
+Browser and macOS desktop control.
+Speak with local dictation.
+A project network resolves through a gentle camera pan; resource meters draw; browser, macOS desktop and dictation satellites connect.
+
+82–90s: Your agents. One workspace.
+Open source. Early access.
+Explore on GitHub.
+Feature families reassemble around the Chimera logo, settle into a balanced workspace, then reveal the GitHub end card.
+
+Conceptual illustration, not a recording of agents working. Worktrees isolate git changes, not processes. Snapshot branches are explicit saved context, not native provider session forks. Desktop control is macOS only; platform and provider capabilities vary. See the feature guide for availability. No usage or performance figures are shown.
+
+Explore on GitHub: https://github.com/nedimyilmaz/chimera
+Feature guide: https://nedimyilmaz.github.io/chimera/features.html
+How made: https://nedimyilmaz.github.io/chimera/how-made.html#videos

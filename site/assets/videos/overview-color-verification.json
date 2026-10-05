@@ -1,0 +1,189 @@
+{
+  "captureSourceRevision": "1e873f8a908c96d5a9e40d73bc10733b70688aa1",
+  "captureSourceTree": "24c3f88b3dfb454aa4aa68de06ed6d22e7e908a8",
+  "metadata": {
+    "mp4": {
+      "pix_fmt": "yuv420p",
+      "color_range": "tv",
+      "color_space": "bt470bg"
+    },
+    "webm": {
+      "pix_fmt": "yuv420p",
+      "color_range": "tv",
+      "color_space": "bt470bg"
+    }
+  },
+  "thresholdPerChannel": 8,
+  "checks": [
+    {
+      "time": 30,
+      "name": "cream",
+      "region": {
+        "x": 8,
+        "y": 920,
+        "width": 16,
+        "height": 16
+      },
+      "source": [
+        244,
+        241,
+        234
+      ],
+      "decoded": {
+        "mp4": {
+          "rgb": [
+            244,
+            240,
+            235
+          ],
+          "maxChannelError": 1
+        },
+        "webm": {
+          "rgb": [
+            243,
+            241,
+            237
+          ],
+          "maxChannelError": 3
+        }
+      },
+      "crossCodecError": 2
+    },
+    {
+      "time": 30,
+      "name": "queue panel",
+      "region": {
+        "x": 130,
+        "y": 455,
+        "width": 16,
+        "height": 16
+      },
+      "source": [
+        27,
+        29.996,
+        35.98
+      ],
+      "decoded": {
+        "mp4": {
+          "rgb": [
+            27.984,
+            28.984,
+            37.938
+          ],
+          "maxChannelError": 1.958
+        },
+        "webm": {
+          "rgb": [
+            27.93,
+            28.93,
+            37.93
+          ],
+          "maxChannelError": 1.95
+        }
+      },
+      "crossCodecError": 0.054
+    },
+    {
+      "time": 30,
+      "name": "task card",
+      "region": {
+        "x": 400,
+        "y": 396,
+        "width": 16,
+        "height": 16
+      },
+      "source": [
+        34.074,
+        38.074,
+        45.164
+      ],
+      "decoded": {
+        "mp4": {
+          "rgb": [
+            35.105,
+            38.043,
+            46.797
+          ],
+          "maxChannelError": 1.633
+        },
+        "webm": {
+          "rgb": [
+            34.887,
+            37.887,
+            46.027
+          ],
+          "maxChannelError": 0.863
+        }
+      },
+      "crossCodecError": 0.77
+    },
+    {
+      "time": 54,
+      "name": "graphite background",
+      "region": {
+        "x": 8,
+        "y": 920,
+        "width": 16,
+        "height": 16
+      },
+      "source": [
+        20,
+        22,
+        26
+      ],
+      "decoded": {
+        "mp4": {
+          "rgb": [
+            22,
+            21,
+            26
+          ],
+          "maxChannelError": 2
+        },
+        "webm": {
+          "rgb": [
+            24,
+            21,
+            24
+          ],
+          "maxChannelError": 4
+        }
+      },
+      "crossCodecError": 2
+    },
+    {
+      "time": 54,
+      "name": "tool card",
+      "region": {
+        "x": 185,
+        "y": 327,
+        "width": 16,
+        "height": 16
+      },
+      "source": [
+        32,
+        36,
+        43
+      ],
+      "decoded": {
+        "mp4": {
+          "rgb": [
+            33,
+            36,
+            44
+          ],
+          "maxChannelError": 1
+        },
+        "webm": {
+          "rgb": [
+            33,
+            36,
+            44
+          ],
+          "maxChannelError": 1
+        }
+      },
+      "crossCodecError": 0
+    }
+  ]
+}
