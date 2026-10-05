@@ -112,7 +112,7 @@ function checkPage(htmlPath) {
   if (h1s !== 1) fail(`${htmlPath}: expected exactly one <h1>, found ${h1s}`);
 
   const canonical = /<link[^>]+rel="canonical"[^>]+href="([^"]+)"/i.exec(html)?.[1];
-  const expected = `${PAGES}${htmlPath === "site/index.html" ? "" : htmlPath.slice("site/".length)}`;
+  const expected = `${PAGES}${["site/index.html", "site/videos.html"].includes(htmlPath) ? "" : htmlPath.slice("site/".length)}`;
   if (canonical && canonical !== expected) fail(`${htmlPath}: canonical is ${canonical}, expected ${expected}`);
 
   for (const m of html.matchAll(/<img\b[^>]*>/gi)) {
@@ -196,7 +196,7 @@ for (const page of pages) {
 if (existsSync(join(root,'site/videos.html'))) {
   try {
     const provenance = JSON.parse(read('site/assets/videos/provenance.json'));
-    if (provenance.clips.length < 5 || provenance.clips.length > 7) fail('videos: expected 5–7 clips');
+    if (provenance.clips.length !== 11) fail('videos: expected eleven homepage clips');
     if (provenance.sourceTreeDirty) fail('videos: fixture capture source was dirty');
     if (provenance.presentation?.persistentDemoLabel !== false) fail('videos: presentation must omit persistent demo labels');
     if (!/fictional/i.test(provenance.notice ?? '') || !/scripted/i.test(provenance.notice ?? '') || !provenance.fixtureVsReal?.scripted?.some(line => /synthetic.*desktop|desktop.*synthetic/i.test(line))) fail('videos: missing fictional, scripted or synthetic desktop provenance');
@@ -211,7 +211,7 @@ if (existsSync(join(root,'site/videos.html'))) {
         if (existsSync(file) && (statSync(file).size !== f.bytes || f.bytes > 15*1024*1024)) fail(`videos: ${f.file} size mismatch or over 15 MiB`);
       }
       for (const name of ['poster','captions','steps']) checkRepoPath(`site/assets/videos/${clip.files[name]}`,`videos:${clip.id}`);
-      if (!idsByPage.get('site/videos.html')?.includes(clip.id)) fail(`videos: ${clip.id} missing player`);
+      if (!idsByPage.get('site/index.html')?.includes(clip.id)) fail(`videos: ${clip.id} missing player`);
     }
   } catch (e) { fail(`videos: ${e.message}`); }
 }

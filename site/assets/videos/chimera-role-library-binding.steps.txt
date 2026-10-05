@@ -1,0 +1,6 @@
+Inspect a reusable role
+Library settings and team bindings
+
+[0:02] 1 · Open the role library
+[0:07] 2 · Select builder and inspect its settings
+[0:11] 3 · Inspect the team's builder binding

@@ -1,11 +1,12 @@
 {
   "notice": "These videos film the real Chimera UI against a SCRIPTED FIXTURE daemon with fictional 'Atlas website' data. They are not a live workspace, not a recording of agents working, and not a performance measurement.",
-  "productBaseRevision": "7b1ac1f6888e8f711442d9fe048f246b11be9897",
-  "productBaseTree": "b16b42bfc2695a4a219796554d48d9c561d6c63a",
-  "capturedAt": "2026-10-05T18:44:34.074Z",
-  "sourceRevision": "7b1ac1f6888e8f711442d9fe048f246b11be9897",
+  "productBaseRevision": "4b26d30a9acef38e104105b512a4e86bf46acec7",
+  "productBaseTree": "c61cf10706fbaa6e7e4fe80ed9d8f365f554b199",
+  "capturedAt": "2026-10-05T19:36:02.724Z",
+  "sourceRevision": "4b26d30a9acef38e104105b512a4e86bf46acec7",
   "sourceRevisionMeaning": "Collection assembly/capture pipeline revision; each clip carries its own exact captureSourceRevision.",
   "captureSourceRevisions": [
+    "4b26d30a9acef38e104105b512a4e86bf46acec7",
     "7b1ac1f6888e8f711442d9fe048f246b11be9897",
     "8c088dc0377ee8aeacbbd40f154ca38109f9c043"
   ],
@@ -30,7 +31,7 @@
   },
   "fixtureVsReal": {
     "real": [
-      "The production React components: TopBar, Queues, Memory, agent inspector/ContextLinks/Resources, Projects/Canvas, ComputerUseMonitor and Footer on the production app store/reducer",
+      "The production React components: TopBar, Teams, Roles, Queues/Schedules, Settings/MCP/Secrets, Memory, agent inspector/ContextLinks/Resources, Projects/Canvas, ComputerUseMonitor and Footer on the production app store/reducer",
       "Every click, keystroke and focus change is a real input event dispatched into that UI through the browser's DevTools protocol",
       "Queue and memory screens refetch through their own coordination-event refresh path"
     ],
@@ -59,6 +60,496 @@
   "reproduce": "node scripts/marketing-video.mjs --capture",
   "determinism": "Compare two captures with: node scripts/marketing-video-verify.mjs --compare <dirA> <dirB> (decoded start/middle/end hashes; also reports full-sequence equality; container bytes are not promised identical).",
   "clips": [
+    {
+      "id": "team-worker-overview",
+      "headerFit": {
+        "width": 821,
+        "height": 67,
+        "metricsWidth": 360.890625,
+        "withinHeader": true,
+        "detailsClosed": true,
+        "resourceText": "CPU 15.5%RAM 232 MiB"
+      },
+      "captureSourceRevision": "4b26d30a9acef38e104105b512a4e86bf46acec7",
+      "capturedAt": "2026-10-05T19:32:54.030Z",
+      "title": "See who is on the team",
+      "scenario": "inspect the Atlas team and one worker",
+      "durationSeconds": 22.867,
+      "frames": 343,
+      "uniqueFrames": 65,
+      "uiFontPx": null,
+      "motion": [
+        {
+          "atSeconds": 13.466666666666667,
+          "scale": 1.2,
+          "x": -255.99999999999994,
+          "y": -144.79999999999995
+        },
+        {
+          "atSeconds": 18.2,
+          "x": 0,
+          "y": 0,
+          "scale": 1
+        }
+      ],
+      "files": {
+        "webm": {
+          "file": "chimera-team-worker-overview.webm",
+          "bytes": 2453731
+        },
+        "mp4": {
+          "file": "chimera-team-worker-overview.mp4",
+          "bytes": 2854588
+        },
+        "poster": "chimera-team-worker-overview.poster.jpg",
+        "captions": "chimera-team-worker-overview.vtt",
+        "steps": "chimera-team-worker-overview.steps.txt"
+      },
+      "steps": [
+        {
+          "atSeconds": 2.6,
+          "text": "1 · Open Teams"
+        },
+        {
+          "atSeconds": 6.2,
+          "text": "2 · Select atlas: its queue and roles"
+        },
+        {
+          "atSeconds": 11.467,
+          "text": "3 · Inspect a worker in the team"
+        }
+      ],
+      "probes": {
+        "webm": {
+          "tool": "ffmpeg -i banner (ffprobe is not installed)",
+          "durationSeconds": 22.87,
+          "codec": "vp8",
+          "pixelFormat": "yuv420p",
+          "width": 1280,
+          "height": 800,
+          "fps": 15
+        },
+        "mp4": {
+          "decoder": "AVAssetReader",
+          "codec": "avc1",
+          "width": 1280,
+          "height": 800,
+          "durationSeconds": 22.867,
+          "decodedFrames": 343
+        }
+      },
+      "hashes": {
+        "contentHash": "18c8e73dec49f0cbfa55b31f0ff2c9b2902f3e60cca2cf20ab3f5c77e1e726cc",
+        "webmDecodedHash": "942c5670706a2131127d4c27cf76a14320ea01ccf6081cb22c852cc9ae3c9b2b",
+        "webmSampledFrames": [
+          {
+            "index": 0,
+            "sha256": "658a9128a46c9028d2fa5009fc4a3e5ec7ec769da88002b0c323b6bf4980894f"
+          },
+          {
+            "index": 171,
+            "sha256": "bac1353698d8e8cdd661c5efd04bd498c9c09af56ea5d7eaafdd4bcd387d1ac4"
+          },
+          {
+            "index": 342,
+            "sha256": "d9e7ca3df163be55d04f7f7336a560d92d3af0e70fe3ec00d756a631eafb8075"
+          }
+        ],
+        "mp4DecodedHash": "f37d70c7ee46505ac63f33d8d172476d46fbc20cc7d3a769d9104c381cfa5b6c"
+      }
+    },
+    {
+      "id": "role-library-binding",
+      "headerFit": {
+        "width": 821,
+        "height": 67,
+        "metricsWidth": 360.890625,
+        "withinHeader": true,
+        "detailsClosed": true,
+        "resourceText": "CPU 15.5%RAM 232 MiB"
+      },
+      "captureSourceRevision": "4b26d30a9acef38e104105b512a4e86bf46acec7",
+      "capturedAt": "2026-10-05T19:33:36.194Z",
+      "title": "Inspect a reusable role",
+      "scenario": "compare a library role with its Atlas team binding",
+      "durationSeconds": 22.267,
+      "frames": 334,
+      "uniqueFrames": 66,
+      "uiFontPx": null,
+      "motion": [
+        {
+          "atSeconds": 12.866666666666667,
+          "scale": 1.15,
+          "x": 0,
+          "y": -108.59999999999994
+        },
+        {
+          "atSeconds": 17.6,
+          "x": 0,
+          "y": 0,
+          "scale": 1
+        }
+      ],
+      "files": {
+        "webm": {
+          "file": "chimera-role-library-binding.webm",
+          "bytes": 2268618
+        },
+        "mp4": {
+          "file": "chimera-role-library-binding.mp4",
+          "bytes": 2701194
+        },
+        "poster": "chimera-role-library-binding.poster.jpg",
+        "captions": "chimera-role-library-binding.vtt",
+        "steps": "chimera-role-library-binding.steps.txt"
+      },
+      "steps": [
+        {
+          "atSeconds": 2.6,
+          "text": "1 · Open the role library"
+        },
+        {
+          "atSeconds": 7.133,
+          "text": "2 · Select builder and inspect its settings"
+        },
+        {
+          "atSeconds": 11.667,
+          "text": "3 · Inspect the team's builder binding"
+        }
+      ],
+      "probes": {
+        "webm": {
+          "tool": "ffmpeg -i banner (ffprobe is not installed)",
+          "durationSeconds": 22.27,
+          "codec": "vp8",
+          "pixelFormat": "yuv420p",
+          "width": 1280,
+          "height": 800,
+          "fps": 15
+        },
+        "mp4": {
+          "decoder": "AVAssetReader",
+          "codec": "avc1",
+          "width": 1280,
+          "height": 800,
+          "durationSeconds": 22.267,
+          "decodedFrames": 334
+        }
+      },
+      "hashes": {
+        "contentHash": "cb78fa8799d526d7ae0eaf4ec08b174cd8486d92ab6ebc73adbe6e342fdfcb8d",
+        "webmDecodedHash": "a93b3869db36a346b99560f521d0b07e8b50d66e92ff8a56df10029736101318",
+        "webmSampledFrames": [
+          {
+            "index": 0,
+            "sha256": "b2642334ca80daf03a0fd4fde7cdd6958327fc602122a15de9c4066a4301ed33"
+          },
+          {
+            "index": 167,
+            "sha256": "13360f0b4f71ae473718793e910e81370b796306f8031b27ce479f14c7767285"
+          },
+          {
+            "index": 333,
+            "sha256": "860f0894cb8c1c0918b6040765a925ba099843c571a8b71e061632e95876e9f1"
+          }
+        ],
+        "mp4DecodedHash": "0bafbba52e847ea614200d689a4e92c61824dbeada21f50fcda41db6debd3498"
+      }
+    },
+    {
+      "id": "schedule-run-history",
+      "headerFit": {
+        "width": 821,
+        "height": 67,
+        "metricsWidth": 360.890625,
+        "withinHeader": true,
+        "detailsClosed": true,
+        "resourceText": "CPU 15.5%RAM 232 MiB"
+      },
+      "captureSourceRevision": "4b26d30a9acef38e104105b512a4e86bf46acec7",
+      "capturedAt": "2026-10-05T19:34:24.333Z",
+      "title": "Trace a scheduled run",
+      "scenario": "inspect the Atlas accessibility schedule and filter run history",
+      "durationSeconds": 22.4,
+      "frames": 336,
+      "uniqueFrames": 65,
+      "uiFontPx": null,
+      "motion": [
+        {
+          "atSeconds": 13,
+          "scale": 1.2,
+          "x": -180.19999999999993,
+          "y": -56.5
+        },
+        {
+          "atSeconds": 17.733333333333334,
+          "x": 0,
+          "y": 0,
+          "scale": 1
+        }
+      ],
+      "files": {
+        "webm": {
+          "file": "chimera-schedule-run-history.webm",
+          "bytes": 2564961
+        },
+        "mp4": {
+          "file": "chimera-schedule-run-history.mp4",
+          "bytes": 3056946
+        },
+        "poster": "chimera-schedule-run-history.poster.jpg",
+        "captions": "chimera-schedule-run-history.vtt",
+        "steps": "chimera-schedule-run-history.steps.txt"
+      },
+      "steps": [
+        {
+          "atSeconds": 2.6,
+          "text": "1 · Open queues and schedules"
+        },
+        {
+          "atSeconds": 6.2,
+          "text": "2 · Select the accessibility sweep"
+        },
+        {
+          "atSeconds": 10.8,
+          "text": "3 · Find the failed preview run"
+        }
+      ],
+      "probes": {
+        "webm": {
+          "tool": "ffmpeg -i banner (ffprobe is not installed)",
+          "durationSeconds": 22.4,
+          "codec": "vp8",
+          "pixelFormat": "yuv420p",
+          "width": 1280,
+          "height": 800,
+          "fps": 15
+        },
+        "mp4": {
+          "decoder": "AVAssetReader",
+          "codec": "avc1",
+          "width": 1280,
+          "height": 800,
+          "durationSeconds": 22.4,
+          "decodedFrames": 336
+        }
+      },
+      "hashes": {
+        "contentHash": "9e7494890f5ab0eed5de7f7a81fc0c6ebf91f88573c149171589fc9ed314841b",
+        "webmDecodedHash": "dfeaf8be100c560007a5de1b738f228c3023b362c99da50e6ce8d991abe832c0",
+        "webmSampledFrames": [
+          {
+            "index": 0,
+            "sha256": "bbffb3902e3d5ed8ff637ddfc45cd41b82dc9330696b5f54f7457a9218633803"
+          },
+          {
+            "index": 168,
+            "sha256": "a58c7ab95564f22f129714d388809834b70c37b64e801369033b710d56247188"
+          },
+          {
+            "index": 335,
+            "sha256": "0f5fb0359cfb7b81436788e29e813fcf01c628cc3353218a48631265123e5d82"
+          }
+        ],
+        "mp4DecodedHash": "46e722ac34e19884a31dcc6229df2c4cdd0bab5f651ceb07a3af6aef5e236610"
+      }
+    },
+    {
+      "id": "mcp-tool-inspection",
+      "headerFit": {
+        "width": 821,
+        "height": 67,
+        "metricsWidth": 360.890625,
+        "withinHeader": true,
+        "detailsClosed": true,
+        "resourceText": "CPU 15.5%RAM 232 MiB"
+      },
+      "captureSourceRevision": "4b26d30a9acef38e104105b512a4e86bf46acec7",
+      "capturedAt": "2026-10-05T19:35:07.613Z",
+      "title": "Inspect a connected tool server",
+      "scenario": "open the fictional Atlas docs server tool list",
+      "durationSeconds": 23.667,
+      "frames": 355,
+      "uniqueFrames": 68,
+      "uiFontPx": null,
+      "motion": [
+        {
+          "atSeconds": 13.266666666666667,
+          "scale": 1.2,
+          "x": -255.99999999999994,
+          "y": -144.79999999999995
+        },
+        {
+          "atSeconds": 18,
+          "x": 0,
+          "y": 0,
+          "scale": 1
+        }
+      ],
+      "files": {
+        "webm": {
+          "file": "chimera-mcp-tool-inspection.webm",
+          "bytes": 2703466
+        },
+        "mp4": {
+          "file": "chimera-mcp-tool-inspection.mp4",
+          "bytes": 3131754
+        },
+        "poster": "chimera-mcp-tool-inspection.poster.jpg",
+        "captions": "chimera-mcp-tool-inspection.vtt",
+        "steps": "chimera-mcp-tool-inspection.steps.txt"
+      },
+      "steps": [
+        {
+          "atSeconds": 2.6,
+          "text": "1 · Open Settings"
+        },
+        {
+          "atSeconds": 8.467,
+          "text": "2 · Inspect the Atlas docs server"
+        },
+        {
+          "atSeconds": 13,
+          "text": "3 · Read the tools before using them"
+        }
+      ],
+      "probes": {
+        "webm": {
+          "tool": "ffmpeg -i banner (ffprobe is not installed)",
+          "durationSeconds": 23.67,
+          "codec": "vp8",
+          "pixelFormat": "yuv420p",
+          "width": 1280,
+          "height": 800,
+          "fps": 15
+        },
+        "mp4": {
+          "decoder": "AVAssetReader",
+          "codec": "avc1",
+          "width": 1280,
+          "height": 800,
+          "durationSeconds": 23.667,
+          "decodedFrames": 355
+        }
+      },
+      "hashes": {
+        "contentHash": "000892bc9b7d3208506fcc72d84dee5678415d10051e329d5bca76f67d9bb410",
+        "webmDecodedHash": "52559a3f6d1968679d94666ab27199b26751a3fbc4a4c60edf1bad67daeb9fd3",
+        "webmSampledFrames": [
+          {
+            "index": 0,
+            "sha256": "06535b9d6783548e3fffcaae22b24b81056a2a722e505b0962cc4e6e286923fc"
+          },
+          {
+            "index": 177,
+            "sha256": "c8369baa86081e7f656d0a6e383303e47df224651f7768c94238d36e9fe97b4b"
+          },
+          {
+            "index": 354,
+            "sha256": "47d7bfd63c255ec0f550de2337799a590241552e15824b300ff23972da59df07"
+          }
+        ],
+        "mp4DecodedHash": "bc7ccf3ff387588bee387509c87edcaa248cc0b6308233802b1c540879c3043e"
+      }
+    },
+    {
+      "id": "secret-access-inspection",
+      "headerFit": {
+        "width": 821,
+        "height": 67,
+        "metricsWidth": 360.890625,
+        "withinHeader": true,
+        "detailsClosed": true,
+        "resourceText": "CPU 15.5%RAM 232 MiB"
+      },
+      "captureSourceRevision": "4b26d30a9acef38e104105b512a4e86bf46acec7",
+      "capturedAt": "2026-10-05T19:36:02.684Z",
+      "title": "Inspect secret access",
+      "scenario": "search fictional secret metadata and inspect access controls without revealing values",
+      "durationSeconds": 24.8,
+      "frames": 372,
+      "uniqueFrames": 74,
+      "uiFontPx": null,
+      "motion": [
+        {
+          "atSeconds": 15.4,
+          "scale": 1.15,
+          "x": -191.9999999999999,
+          "y": -108.59999999999994
+        },
+        {
+          "atSeconds": 20.133333333333333,
+          "x": 0,
+          "y": 0,
+          "scale": 1
+        }
+      ],
+      "files": {
+        "webm": {
+          "file": "chimera-secret-access-inspection.webm",
+          "bytes": 2587577
+        },
+        "mp4": {
+          "file": "chimera-secret-access-inspection.mp4",
+          "bytes": 2925855
+        },
+        "poster": "chimera-secret-access-inspection.poster.jpg",
+        "captions": "chimera-secret-access-inspection.vtt",
+        "steps": "chimera-secret-access-inspection.steps.txt"
+      },
+      "steps": [
+        {
+          "atSeconds": 2.6,
+          "text": "1 · Open the secret store"
+        },
+        {
+          "atSeconds": 8.467,
+          "text": "2 · Find the staging token by name"
+        },
+        {
+          "atSeconds": 14.2,
+          "text": "3 · Inspect its explicit access controls"
+        }
+      ],
+      "probes": {
+        "webm": {
+          "tool": "ffmpeg -i banner (ffprobe is not installed)",
+          "durationSeconds": 24.8,
+          "codec": "vp8",
+          "pixelFormat": "yuv420p",
+          "width": 1280,
+          "height": 800,
+          "fps": 15
+        },
+        "mp4": {
+          "decoder": "AVAssetReader",
+          "codec": "avc1",
+          "width": 1280,
+          "height": 800,
+          "durationSeconds": 24.8,
+          "decodedFrames": 372
+        }
+      },
+      "hashes": {
+        "contentHash": "2ac194e110ea210fc520301610a52df4fd38d6da2bd627bfe343d3c8cf3ccfb9",
+        "webmDecodedHash": "baf25e44704af941c330574cb918d273fd1d91c755e9ac32e9c359b70a3cddeb",
+        "webmSampledFrames": [
+          {
+            "index": 0,
+            "sha256": "bc115043fb8b952bcf437482eb0a7933b70f0846459900bda17626215e2948ca"
+          },
+          {
+            "index": 186,
+            "sha256": "189146966a1238bf2e9a48d15d54372e28e84f2dfea87637426e42f30f5f1f17"
+          },
+          {
+            "index": 371,
+            "sha256": "481a3c3692015c8e7de39b368fa8ec8e3a1b225fe2c08949b9895074ca88b1ac"
+          }
+        ],
+        "mp4DecodedHash": "e129461b12d11f6ff5b2cfbe2733f3a7bef6948bc129e3dd9ece7981fc47d690"
+      }
+    },
     {
       "id": "team-queue-lifecycle",
       "headerFit": {

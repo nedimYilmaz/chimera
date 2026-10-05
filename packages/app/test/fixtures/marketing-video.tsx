@@ -13,7 +13,7 @@ installVideoHooks(appStore as never);
 // on a TopBar tab would change the highlighted tab but not the screen. The film needs real tab clicks,
 // so route the store's activeTab back into the stage. show() itself dispatches selectTab (to the same
 // tab), which is why the last routed tab is remembered instead of re-showing on every notification.
-const viewForTab: Record<string, string> = { queues: "queue", memory: "memory", teams: "teams", agents: "workspace", projects: "projects", roles: "roles" };
+const viewForTab: Record<string, string> = { queues: "queue", memory: "memory", teams: "teams", agents: "workspace", projects: "projects", roles: "roles", settings: "mcp-store" };
 const stage = (window as unknown as { __MARKETING__: { show(view: string): void } }).__MARKETING__;
 let routed = appStore.getState().activeTab as string;
 appStore.subscribe(() => {

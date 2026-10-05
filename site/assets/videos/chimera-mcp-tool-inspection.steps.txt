@@ -1,0 +1,6 @@
+Inspect a connected tool server
+MCP server status and available tools
+
+[0:02] 1 · Open Settings
+[0:08] 2 · Inspect the Atlas docs server
+[0:13] 3 · Read the tools before using them

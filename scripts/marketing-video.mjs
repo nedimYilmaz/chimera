@@ -67,7 +67,7 @@ const clock = (seconds) => {
 // What the viewer is told is real and what is scripted - copied into provenance and the storyboard.
 const FIXTURE_VS_REAL = {
   real: [
-    "The production React components: TopBar, Queues, Memory, agent inspector/ContextLinks/Resources, Projects/Canvas, ComputerUseMonitor and Footer on the production app store/reducer",
+    "The production React components: TopBar, Teams, Roles, Queues/Schedules, Settings/MCP/Secrets, Memory, agent inspector/ContextLinks/Resources, Projects/Canvas, ComputerUseMonitor and Footer on the production app store/reducer",
     "Every click, keystroke and focus change is a real input event dispatched into that UI through the browser's DevTools protocol",
     "Queue and memory screens refetch through their own coordination-event refresh path",
   ],
@@ -86,6 +86,79 @@ const PRODUCT_BASE = git("rev-parse", "HEAD");
 const PRODUCT_TREE = git("rev-parse", "HEAD^{tree}");
 if (!serveOnly && !preflight && git("status", "--porcelain")) throw new Error("Final capture requires a clean committed source tree; use --out outside the repository for combined screenshot/video captures.");
 const CLIPS = [
+  {
+    id: "team-worker-overview", title: "See who is on the team", subtitle: "Team queue, roles and live workers", scenario: "inspect the Atlas team and one worker",
+    async run(rec) {
+      await rec.title(this.title, this.subtitle, 2.6);
+      await rec.caption("1 · Open Teams"); await rec.click('[data-topbar-tab="teams"]');
+      await rec.expect(`document.querySelector('[data-team-row="atlas"]')`, "team list"); await rec.hold(2);
+      await rec.caption("2 · Select atlas: its queue and roles"); await rec.click('[data-team-row="atlas-docs"]'); await rec.click('[data-team-row="atlas"]');
+      await rec.expect(`document.querySelector('[data-team-agent-table]')`, "team workers"); await rec.hold(3);
+      await rec.caption("3 · Inspect a worker in the team");
+      const worker = await rec.evaluate(`document.querySelectorAll('[data-team-agent]')[1]?.dataset.teamAgent`);
+      await rec.reveal(`[data-team-agent="${worker}"]`); await rec.click(`[data-team-agent="${worker}"]`);
+      await rec.expect(`document.querySelector('[data-agent-inspector]')`, "worker inspector");
+      await rec.reveal('[data-agent-inspector]'); await rec.focus('[data-agent-inspector]', 1.2); await rec.poster(true); await rec.hold(4);
+      await rec.resetCamera(); await rec.hold(2);
+    }
+  },
+  {
+    id: "role-library-binding", title: "Inspect a reusable role", subtitle: "Library settings and team bindings", scenario: "compare a library role with its Atlas team binding",
+    async run(rec) {
+      await rec.title(this.title, this.subtitle, 2.6);
+      await rec.caption("1 · Open the role library"); await rec.click('[data-tab-overflow]'); await rec.click('[data-topbar-overflow-tab="roles"]');
+      await rec.expect(`document.querySelector('[data-role-row="builder"]')`, "library role"); await rec.hold(2);
+      await rec.caption("2 · Select builder and inspect its settings"); await rec.click('[data-role-row="builder"]');
+      await rec.expect(`document.querySelector('[data-spawn-with-role]')`, "role details"); await rec.hold(3);
+      await rec.caption("3 · Inspect the team's builder binding"); await rec.reveal('[data-role-row="atlas/builder"]'); await rec.click('[data-role-row="atlas/builder"]');
+      await rec.expect(`document.querySelector('[data-team-role-remove]')`, "team role details");
+      await rec.focus('[data-team-role-remove]', 1.15); await rec.poster(true); await rec.hold(4);
+      await rec.resetCamera(); await rec.hold(2);
+    }
+  },
+  {
+    id: "schedule-run-history", title: "Trace a scheduled run", subtitle: "Schedule targets and run history", scenario: "inspect the Atlas accessibility schedule and filter run history",
+    async run(rec) {
+      await rec.title(this.title, this.subtitle, 2.6);
+      await rec.caption("1 · Open queues and schedules"); await rec.click('[data-topbar-tab="queues"]');
+      await rec.expect(`document.querySelector('[data-job-row="atlas-a11y-sweep"]')`, "schedule list"); await rec.hold(2);
+      await rec.caption("2 · Select the accessibility sweep"); await rec.reveal('[data-job-row="atlas-a11y-sweep"]'); await rec.click('[data-job-row="atlas-a11y-sweep"]');
+      await rec.expect(`document.querySelector('[aria-label="search run history"]')`, "run history"); await rec.hold(3);
+      await rec.caption("3 · Find the failed preview run"); await rec.click('[aria-label="search run history"]'); await rec.type("504", 3);
+      await rec.expect(`document.body.innerText.includes('HTTP 504')`, "failed run visible");
+      await rec.focus('[aria-label="search run history"]', 1.2); await rec.poster(true); await rec.hold(4);
+      await rec.resetCamera(); await rec.hold(2);
+    }
+  },
+  {
+    id: "mcp-tool-inspection", title: "Inspect a connected tool server", subtitle: "MCP server status and available tools", scenario: "open the fictional Atlas docs server tool list",
+    async run(rec) {
+      await rec.title(this.title, this.subtitle, 2.6);
+      await rec.caption("1 · Open Settings"); await rec.click('[data-tab-overflow]'); await rec.click('[data-topbar-overflow-tab="settings"]');
+      await rec.expect(`document.querySelector('[data-settings-section="mcp"]')`, "settings rail"); await rec.click('[data-settings-section="mcp"]');
+      await rec.expect(`document.querySelector('[data-mcp-store-expand="atlas-docs"]')`, "MCP store"); await rec.hold(2);
+      await rec.caption("2 · Inspect the Atlas docs server"); await rec.reveal('[data-mcp-store-expand="atlas-docs"]'); await rec.click('[data-mcp-store-expand="atlas-docs"]');
+      await rec.expect(`document.querySelector('[data-mcp-store-tools="atlas-docs"]')?.innerText.includes('docs')`, "tools loaded"); await rec.hold(3);
+      await rec.caption("3 · Read the tools before using them"); await rec.focus('[data-mcp-store-tools="atlas-docs"]', 1.2);
+      await rec.poster(true); await rec.hold(4); await rec.resetCamera(); await rec.hold(3);
+    }
+  },
+  {
+    id: "secret-access-inspection", title: "Inspect secret access", subtitle: "Named secrets and explicit agent grants", scenario: "search fictional secret metadata and inspect access controls without revealing values",
+    async run(rec) {
+      await rec.title(this.title, this.subtitle, 2.6);
+      await rec.caption("1 · Open the secret store");
+      await rec.click('[data-tab-overflow]'); await rec.click('[data-topbar-overflow-tab="settings"]'); await rec.expect(`document.querySelector('[data-settings-section="secrets"]')`, "settings rail"); await rec.click('[data-settings-section="secrets"]');
+      await rec.expect(`document.querySelector('[data-secret-row]')`, "secret metadata"); await rec.hold(2);
+      await rec.caption("2 · Find the staging token by name"); await rec.click('[placeholder="Search name or description"]'); await rec.type("STAGING", 3);
+      await rec.expect(`document.querySelectorAll('[data-secret-row]').length === 1`, "search filtered"); await rec.hold(3);
+      await rec.caption("3 · Inspect its explicit access controls"); await rec.click('[data-secret-row] summary');
+      await rec.expect(`document.querySelector('[data-secret-row] details').open`, "access controls open");
+      await rec.focus('[data-secret-row]', 1.15); await rec.poster(true); await rec.hold(4);
+      await rec.resetCamera(); await rec.hold(2);
+    }
+  },
+
   {
     id: "team-queue-lifecycle",
     title: "Put the next task in motion",
@@ -600,7 +673,7 @@ try {
   const ffmpeg = resolveFfmpeg();
   if (!ffmpeg) throw new Error("no ffmpeg found (set FFMPEG, put one on PATH, or install Playwright's browsers)");
   const ffmpegVersion = execFileSync(ffmpeg, ["-version"], { encoding: "utf8" }).split("\n")[0];
-  const mp4Tool = flag("no-mp4") ? null : await buildMp4Tool({ scratch, signal: controller.signal });
+  const mp4Tool = preflight || flag("no-mp4") ? null : await buildMp4Tool({ scratch, signal: controller.signal });
   mkdirSync(outDir, { recursive: true });
   // An overwritten clip invalidates prior playback/reproducibility evidence.
   for (const report of preflight ? [] : ['verification.json', 'determinism.json']) rmSync(join(outDir, report), { force: true });

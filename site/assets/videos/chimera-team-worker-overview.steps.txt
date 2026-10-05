@@ -1,0 +1,6 @@
+See who is on the team
+Team queue, roles and live workers
+
+[0:02] 1 · Open Teams
+[0:06] 2 · Select atlas: its queue and roles
+[0:11] 3 · Inspect a worker in the team

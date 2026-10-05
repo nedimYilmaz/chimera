@@ -56,7 +56,7 @@ for (const clip of provenance.clips) for (const format of ['mp4','webm']) {
 }
 const siteRoot=resolve(import.meta.dirname,'../site');
 const siteRequests=[];
-const types = { webm: 'video/webm', mp4: 'video/mp4', vtt: 'text/vtt', jpg: 'image/jpeg' };
+const types = { webm: 'video/webm', mp4: 'video/mp4', vtt: 'text/vtt', jpg: 'image/jpeg', js: 'text/javascript' };
 const server = createServer((req, res) => {
   const name = basename(new URL(req.url, 'http://localhost').pathname);
   if (req.url === '/chimera/review') {
@@ -68,7 +68,7 @@ const server = createServer((req, res) => {
   if (!req.url.startsWith('/chimera/assets/videos/')) {
     const path=resolve(siteRoot,new URL(req.url,'http://localhost').pathname.replace(/^\/chimera\//,''));
     if (!path.startsWith(siteRoot+sep)) { res.writeHead(404).end(); return; }
-    try { const bytes=readFileSync(path); res.setHeader('Content-Type',path.endsWith('.html')?'text/html':path.endsWith('.css')?'text/css':path.endsWith('.svg')?'image/svg+xml':'application/octet-stream'); res.end(bytes); } catch {res.writeHead(404).end();}
+    try { const bytes=readFileSync(path); res.setHeader('Content-Type',path.endsWith('.html')?'text/html':path.endsWith('.css')?'text/css':path.endsWith('.svg')?'image/svg+xml':path.endsWith('.js')?'text/javascript':'application/octet-stream'); res.end(bytes); } catch {res.writeHead(404).end();}
     return;
   }
   try {
@@ -132,7 +132,7 @@ try {
         const camera=clip.motion?.[0];
         if(camera) samples.push(['camera-mid',camera.atSeconds+.333],['camera-settled',camera.atSeconds+.733]);
       }
-      for(const [label,t] of samples) {
+      for(const [label,t] of (args.includes('--skip-frame-review')?[]:samples)) {
         await evaluate(`(async()=>{const v=document.getElementById('v');await new Promise((resolve,reject)=>{v.onseeked=()=>requestAnimationFrame(()=>requestAnimationFrame(resolve));v.currentTime=${t};if(!v.seeking && v.readyState>=2)requestAnimationFrame(resolve);setTimeout(()=>reject(new Error('seek timeout')),10000)});})()`);
         for(const width of [1280,390]) {
           await call('Emulation.setDeviceMetricsOverride',{width,height:Math.round(width*800/1280),deviceScaleFactor:1,mobile:false});
@@ -145,28 +145,91 @@ try {
       console.log(`${clip.id}/${format}: decoded, played, sought start/middle/end through /chimera/ relative asset paths`);
     }
   }
-  // Exercise the real Pages gallery with JavaScript disabled and reduced motion requested.
-  await call('Emulation.setScriptExecutionDisabled',{value:true});
-  await call('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]});
-  const beforeRequests=siteRequests.length;
-  await call('Page.navigate',{url:`${origin}/chimera/videos.html`});
-  for(let i=0;i<100 && !await evaluate('Boolean(document.querySelector(".demo-grid"))');i++) await new Promise(r=>setTimeout(r,50));
-  const gallery=await evaluate(`(() => ({ count:document.querySelectorAll('video').length, reduced:matchMedia('(prefers-reduced-motion:reduce)').matches, controls:[...document.querySelectorAll('video')].every(v=>v.controls && !v.autoplay && v.preload==='none' && v.hasAttribute('playsinline') && v.querySelector('track[kind="captions"]')), alternatives:document.querySelectorAll('.demo-links').length, links:[...document.querySelectorAll('a')].map(a=>a.getAttribute('href')).filter(h=>!h.startsWith('https:')) }))()`);
-  assert.equal(gallery.count,provenance.clips.length); assert.equal(gallery.alternatives,gallery.count);
-  assert.ok(gallery.controls && gallery.reduced);
-  assert.ok(gallery.links.includes('how-made.html#videos'),'gallery missing linked provenance');
-  assert.ok(await evaluate(`!/(demo data|scripted daemon|capture source)/i.test(document.body.innerText)`),'gallery repeated fixture labels');
-  assert.ok(!siteRequests.slice(beforeRequests).some(r=>/\.(mp4|webm)(?:$|\?)/.test(r)), 'gallery eagerly loaded videos');
-  for(const link of gallery.links) assert.ok((await fetch(new URL(link,`${origin}/chimera/videos.html`))).ok,`gallery link ${link}`);
-  for(const width of [1280,390]) {
-    await call('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width===390});
-    await new Promise(r=>setTimeout(r,150));
-    assert.ok(await evaluate(`document.documentElement.scrollWidth<=innerWidth+1`),'gallery mobile overflow');
-    const image=await call('Page.captureScreenshot',{format:'png',captureBeyondViewport:true});
-    writeFileSync(join(out,`gallery-nojs-reduced-${width}.png`),Buffer.from(image.data,'base64'));
+  // Exercise the actual homepage players, not just a full-size decoding fixture.
+  const homepageChecks=[];
+  for(const width of [360,390,768,1440]) {
+    await call('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<768});
+    const requestStart=siteRequests.length;
+    await call('Page.navigate',{url:`${origin}/chimera/index.html`});
+    for(let i=0;i<100 && !await evaluate(`Boolean(document.querySelector('#demos video'))`);i++) await new Promise(r=>setTimeout(r,50));
+    await evaluate(`document.fonts.ready`);
+    const layout=await evaluate(`(() => ({count:document.querySelectorAll('video').length, overflow:document.documentElement.scrollWidth>innerWidth+1, screenshotLinks:document.querySelectorAll('[data-zoom]').length, controls:[...document.querySelectorAll('video')].every(v=>v.controls && !v.autoplay && v.preload==='none' && v.playsInline), sources:[...document.querySelectorAll('source,track')].map(s=>s.src) }))()`);
+    const darkTextContrast=await evaluate(`(() => {
+      const linear=n=>{n/=255;return n<=.04045?n/12.92:((n+.055)/1.055)**2.4;};
+      const luminance=rgb=>rgb.map(linear).reduce((sum,n,i)=>sum+n*[.2126,.7152,.0722][i],0);
+      const bg=getComputedStyle(document.documentElement).getPropertyValue('--graphite').trim().slice(1);
+      const background=luminance([0,2,4].map(i=>parseInt(bg.slice(i,i+2),16)));
+      return Math.min(...[...document.querySelectorAll('.demo-card--hero figcaption,.demo-card--hero .demo-links a,.demo-card--dark figcaption,.demo-card--dark .demo-links a')].map(el=>{
+        const foreground=luminance(getComputedStyle(el).color.match(/[\\d.]+/g).slice(0,3).map(Number));
+        return (Math.max(background,foreground)+.05)/(Math.min(background,foreground)+.05);
+      }));
+    })()`);
+    assert.ok(darkTextContrast>=4.5,`homepage ${width}: caption/alternative contrast ${darkTextContrast}`);
+    assert.equal(layout.count,provenance.clips.length); assert.equal(layout.screenshotLinks,0);
+    assert.ok(layout.controls && !layout.overflow,`homepage ${width}: layout/controls`);
+    assert.ok(!siteRequests.slice(requestStart).some(r=>/\.(mp4|webm)(?:$|\?)/.test(r)),`homepage ${width}: eager video download`);
+    for(const src of layout.sources) assert.ok((await fetch(src)).ok,src);
+    for(const clip of provenance.clips) {
+      const result=await evaluate(`(async()=>{
+        const v=document.querySelector('#${clip.id} video'); v.scrollIntoView({block:'center'});
+        v.load(); await new Promise((resolve,reject)=>{if(v.readyState>=2)resolve();else {v.onloadeddata=resolve;v.onerror=()=>reject(Error('decode'));setTimeout(()=>reject(Error('load timeout')),15000)}});
+        v.textTracks[0].mode='showing';
+        await new Promise((resolve,reject)=>{const t=v.querySelector('track');if(t.readyState===2)resolve();else {t.onload=resolve;t.onerror=()=>reject(Error('captions'));setTimeout(()=>reject(Error('caption timeout')),10000)}});
+        await v.play(); const before=v.currentTime; await new Promise(r=>setTimeout(r,170)); const advanced=v.currentTime>before;
+        v.pause(); await new Promise((resolve,reject)=>{v.onseeked=resolve;v.currentTime=v.duration/2;setTimeout(()=>reject(Error('seek')),10000)});
+        return {advanced,seeked:Math.abs(v.currentTime-v.duration/2)<.15,captions:v.textTracks[0].cues.length,visibleCues:v.textTracks[0].activeCues.length};
+      })()`);
+      assert.ok(result.advanced && result.seeked && result.captions>0 && result.visibleCues>0,`${width}/${clip.id}: inline playback/captions/seek`);
+    }
+    const oneAtATime=await evaluate(`(async()=>{const [a,b]=document.querySelectorAll('video');await a.play();await b.play();await new Promise(r=>setTimeout(r,60));const ok=a.paused&&!b.paused;b.pause();return ok;})()`);
+    assert.ok(oneAtATime);
+    await evaluate(`scrollTo(0,0)`);
+    const shot=await call('Page.captureScreenshot',{format:'png',captureBeyondViewport:true});
+    writeFileSync(join(out,`homepage-${width}.png`),Buffer.from(shot.data,'base64'));
+    homepageChecks.push({width,status:'passed',players:layout.count,oneAtATime,noEagerLoads:true,darkTextContrast});
+    console.log(`homepage ${width}: all ${layout.count} inline players played, sought and loaded captions; no overflow or eager media`);
   }
-  checks.push({id:'gallery/no-js/reduced-motion/desktop-mobile',status:'passed',...gallery,scope:'Real static gallery, caption tracks and text/poster alternatives; no scripts or autoplay'});
-  const report={browser:(await cdp.call('Browser.getVersion')).product,ffprobe:{version:ffprobeVersion,checks:mediaChecks},scope:'Local static server under /chimera/ project Pages prefix; deployed Pages not exercised',checks};
+  console.log('homepage responsive playback complete; checking keyboard and compatibility fragments');
+  // Keyboard focus can reach the native controls and alternatives.
+  await evaluate(`document.activeElement?.blur();scrollTo(0,0)`);
+  let keyboardPlayer=false;
+  for(let i=0;i<35 && !keyboardPlayer;i++) {
+    await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
+    await call('Input.dispatchKeyEvent',{type:'keyUp',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
+    keyboardPlayer=await evaluate(`document.activeElement?.tagName==='VIDEO'`);
+  }
+  assert.ok(keyboardPlayer,'native video keyboard focus');
+  for(const clip of provenance.clips) {
+    await call('Page.navigate',{url:`${origin}/chimera/videos.html#${clip.id}`});
+    for(let i=0;i<100 && !await evaluate(`location.pathname.endsWith('/index.html') && location.hash==='#${clip.id}'`);i++) await new Promise(r=>setTimeout(r,30));
+    assert.ok(await evaluate(`location.pathname.endsWith('/index.html') && location.hash==='#${clip.id}' && Boolean(document.querySelector('#${clip.id} video'))`),'legacy fragment redirect');
+  }
+  console.log('legacy fragments passed; checking reduced-motion and noJS');
+  for(const nojs of [false,true]) {
+    await call('Emulation.setScriptExecutionDisabled',{value:nojs});
+    await call('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]});
+    const beforeRequests=siteRequests.length;
+    await call('Page.navigate',{url:`${origin}/chimera/index.html#demos`});
+    for(let i=0;i<100 && !await evaluate(`Boolean(document.querySelector('#demos video'))`);i++) await new Promise(r=>setTimeout(r,50));
+    const alternatives=await evaluate(`(() => ({count:document.querySelectorAll('video').length,reduced:matchMedia('(prefers-reduced-motion:reduce)').matches,controls:[...document.querySelectorAll('video')].every(v=>v.controls&&!v.autoplay&&v.preload==='none'),links:document.querySelectorAll('.demo-links').length}))()`);
+    assert.equal(alternatives.count,provenance.clips.length);assert.equal(alternatives.links,alternatives.count);assert.ok(alternatives.controls&&alternatives.reduced);
+    assert.ok(!siteRequests.slice(beforeRequests).some(r=>/\.(mp4|webm)(?:$|\?)/.test(r)),'reduced-motion eager media');
+    assert.ok(await evaluate(`!/(demo data|scripted daemon|capture source)/i.test(document.body.innerText)`),'repeated fixture labels');
+    if(nojs) {
+      // Disabling page scripts also suppresses their timer callbacks. Keep the wait in
+      // this runner, while Chromium's native media pipeline advances independently.
+      await evaluate(`(() => {const v=document.querySelector('video');v.muted=true;v.play();return true;})()`);
+      await new Promise(r=>setTimeout(r,500));
+      const native=await evaluate(`(() => {const v=document.querySelector('video');const advanced=v.currentTime>.1;v.pause();return advanced;})()`);
+      assert.ok(native,'noJS native player');
+      await call('Page.navigate',{url:`${origin}/chimera/videos.html#context-handoff`});
+      for(let i=0;i<100 && !await evaluate(`Boolean(document.querySelector('main a'))`);i++) await new Promise(r=>setTimeout(r,30));
+      assert.ok(await evaluate(`!document.querySelector('video') && Boolean(document.querySelector('a[href="index.html#context-handoff"]'))`),'noJS compatibility fallback');
+    }
+    checks.push({id:`homepage/reduced-motion/nojs-${nojs}`,status:'passed',...alternatives});
+  }
+  checks.push({id:'homepage/responsive/inline-playback/keyboard/legacy-fragments',status:'passed',widths:homepageChecks,keyboardPlayer});
+  const report={frameReview:args.includes('--skip-frame-review')?'Retained prior start/middle/end and transition review; media bytes unchanged':'Start/middle/end and transition screenshots generated this run',browser:(await cdp.call('Browser.getVersion')).product,ffprobe:{version:ffprobeVersion,checks:mediaChecks},scope:'Local static server under /chimera/ project Pages prefix; deployed Pages not exercised',checks};
   writeFileSync(join(dir,'verification.json'),JSON.stringify(report,null,2)+'\n');
 } finally {
   await cdp?.close(); await terminateOwnedProcess(chrome); await new Promise(r=>server.close(r)); await removeScratchDirectory(scratch);

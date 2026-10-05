@@ -10,6 +10,15 @@
     if (a) document.documentElement.classList.add("smooth-anchors");
   }, true);
 
+  // Keep the reader in one workflow when switching between inline films.
+  document.querySelectorAll("video").forEach(function (video) {
+    video.addEventListener("play", function () {
+      document.querySelectorAll("video").forEach(function (other) {
+        if (other !== video) other.pause();
+      });
+    });
+  });
+
   // Copy buttons on code blocks.
   var live = document.createElement("p");
   live.setAttribute("role", "status");

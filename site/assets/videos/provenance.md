@@ -2,14 +2,14 @@
 
 > These videos film the real Chimera UI against a SCRIPTED FIXTURE daemon with fictional 'Atlas website' data. They are not a live workspace, not a recording of agents working, and not a performance measurement.
 
-- Captured from source revision `7b1ac1f6888e8f711442d9fe048f246b11be9897`. Product/capture source snapshot: 7b1ac1f6888e8f711442d9fe048f246b11be9897; tree b16b42bfc2695a4a219796554d48d9c561d6c63a.
+- Captured from source revision `4b26d30a9acef38e104105b512a4e86bf46acec7`. Product/capture source snapshot: 4b26d30a9acef38e104105b512a4e86bf46acec7; tree c61cf10706fbaa6e7e4fe80ed9d8f365f554b199.
 - Browser: Chrome/154.0.8037.93. Encoders: libvpx VP8 → WebM; AVFoundation H.264 → MP4 (macOS only, best effort). Final verification requires FFprobe; capture probes come from `ffmpeg -i` and AVAssetReader.
 - Timeline: 15 fps fixed, 1280×800, page clock frozen at 2026-01-12T09:30:00.000Z. Durations are not performance evidence.
 - Reproduce: `node scripts/marketing-video.mjs --capture`
 
 ## Real vs scripted
 
-- Real: The production React components: TopBar, Queues, Memory, agent inspector/ContextLinks/Resources, Projects/Canvas, ComputerUseMonitor and Footer on the production app store/reducer
+- Real: The production React components: TopBar, Teams, Roles, Queues/Schedules, Settings/MCP/Secrets, Memory, agent inspector/ContextLinks/Resources, Projects/Canvas, ComputerUseMonitor and Footer on the production app store/reducer
 - Real: Every click, keystroke and focus change is a real input event dispatched into that UI through the browser's DevTools protocol
 - Real: Queue and memory screens refetch through their own coordination-event refresh path
 - Scripted: The daemon: a scripted fixture answers every RPC; nothing is spawned, scheduled or executed
@@ -23,6 +23,11 @@
 
 | Clip | Duration | Frames | WebM | MP4 | Shows | Capture source |
 | --- | --- | --- | --- | --- | --- | --- |
+| chimera-team-worker-overview | 22.9s | 343 | 2396 KiB | 2788 KiB | inspect the Atlas team and one worker | 4b26d30a9acef38e104105b512a4e86bf46acec7 |
+| chimera-role-library-binding | 22.3s | 334 | 2215 KiB | 2638 KiB | compare a library role with its Atlas team binding | 4b26d30a9acef38e104105b512a4e86bf46acec7 |
+| chimera-schedule-run-history | 22.4s | 336 | 2505 KiB | 2985 KiB | inspect the Atlas accessibility schedule and filter run history | 4b26d30a9acef38e104105b512a4e86bf46acec7 |
+| chimera-mcp-tool-inspection | 23.7s | 355 | 2640 KiB | 3058 KiB | open the fictional Atlas docs server tool list | 4b26d30a9acef38e104105b512a4e86bf46acec7 |
+| chimera-secret-access-inspection | 24.8s | 372 | 2527 KiB | 2857 KiB | search fictional secret metadata and inspect access controls without revealing values | 4b26d30a9acef38e104105b512a4e86bf46acec7 |
 | chimera-team-queue-lifecycle | 36.8s | 552 | 4092 KiB | 4975 KiB | team/queue lifecycle on the Atlas release queue | 7b1ac1f6888e8f711442d9fe048f246b11be9897 |
 | chimera-memory-search-link | 26.7s | 401 | 3208 KiB | 3650 KiB | memory search, open a note, follow a [[link]] and see the backlink | 8c088dc0377ee8aeacbbd40f154ca38109f9c043 |
 | chimera-context-handoff | 28.4s | 426 | 3445 KiB | 4206 KiB | explicit context snapshot and revocation; scripted RPC only | 8c088dc0377ee8aeacbbd40f154ca38109f9c043 |

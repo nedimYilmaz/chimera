@@ -1,0 +1,6 @@
+Trace a scheduled run
+Schedule targets and run history
+
+[0:02] 1 · Open queues and schedules
+[0:06] 2 · Select the accessibility sweep
+[0:10] 3 · Find the failed preview run

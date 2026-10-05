@@ -794,3 +794,18 @@ code {
 .demo-nav { display:flex; flex-wrap:wrap; gap:1rem; }
 @media (max-width:48rem) { .demo-grid { grid-template-columns:1fr; } }
 @media (prefers-reduced-motion:reduce) { .demo-card { scroll-behavior:auto; } }
+
+/* Inline films occupy the former screenshot slots without changing their aspect ratio. */
+.demo-card { margin:0; min-width:0; }
+.demo-card video { width:100%; height:auto; aspect-ratio:8/5; object-fit:contain; }
+.demo-card figcaption { font-size:.875rem; margin-top:.65rem; }
+.demo-card--hero { box-shadow:0 18px 48px rgba(10,25,18,.12); border-radius:.6rem; }
+.demo-card--hero figcaption, .demo-card--hero .demo-links { padding:0 1rem; }
+.demo-card--hero .demo-links { padding-bottom:1rem; }
+.demo-card--hero .demo-links a, .demo-card--dark .demo-links a { color:#bce6ca; }
+.demo-card--hero figcaption, .demo-card--dark figcaption { color:#b8c6c0; }
+.demo-links a:focus-visible, video:focus-visible { outline:3px solid #7dc997; outline-offset:4px; }
+.anchor-alias { display:block; scroll-margin-top:5rem; }
+@media (max-width:48rem) { .demo-links { font-size:1rem; gap:.5rem 1rem; } .demo-links a { padding:.35rem 0; } }
+
+.queues .demo-card { margin-top:clamp(2.5rem,5vw,4rem); }
