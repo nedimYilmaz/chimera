@@ -77,7 +77,7 @@
           <p class="lede">Chimera is an open-source desktop workspace for Claude and Codex agent teams. Queues, shared memory and every running task in view — each agent working in its own git worktree.</p>
           <div class="cta">
             <a class="btn btn--primary" href="https://github.com/nedimYilmaz/chimera">Explore on GitHub<span aria-hidden="true"> ↗</span></a>
-            <a class="link" href="#install">Run it from source</a>
+            <a class="link" href="#install">Install</a>
           </div>
         </div>
       </div>
@@ -370,15 +370,15 @@
         <div class="split__head">
           <p class="kicker">Availability</p>
           <h2 id="status-title">Early access, on a Mac first.</h2>
-          <p class="sub">Signed public downloads are not available yet. Today you run Chimera from source.</p>
+          <p class="sub">One command installs the signed desktop app and the CLI on macOS and Linux.</p>
         </div>
         <div class="status-body">
           <div class="plat">
             <dl>
-              <div><dt>macOS · Apple Silicon</dt><dd><span class="pill pill--ok">Tested</span>The only platform where the packaged desktop runtime has been run from a clean home folder.</dd></div>
-              <div><dt>macOS · Intel</dt><dd><span class="pill">Not tested</span>Not exercised natively yet.</dd></div>
-              <div><dt>Linux</dt><dd><span class="pill pill--warn">Source only</span>A source installer exists. No packaged build yet, and browser tools are unavailable on Linux arm64.</dd></div>
-              <div><dt>Windows</dt><dd><span class="pill pill--no">Unsupported</span>The installer stops before downloading anything.</dd></div>
+              <div><dt>macOS · Apple Silicon</dt><dd><span class="pill pill--ok">Supported</span>Signed and notarized; the most tested platform.</dd></div>
+              <div><dt>macOS · Intel</dt><dd><span class="pill">Less tested</span>Signed and notarized build, not yet verified on a clean machine.</dd></div>
+              <div><dt>Linux · x64 / arm64</dt><dd><span class="pill pill--warn">Packaged</span>AppImage installed by the same command; not yet verified end to end. Browser tools are unavailable on Linux arm64.</dd></div>
+              <div><dt>Windows</dt><dd><span class="pill pill--no">CLI only</span>The CLI and MCP server install with npm; the desktop app waits for a code-signing certificate.</dd></div>
             </dl>
             <p class="fine">Desktop control is macOS-only. The optional local decision model (Laya) needs macOS 14 or newer and downloads one pinned English model when you install it, so a fresh install is not fully offline. After that it runs offline, and multilingual requests fail rather than fetch an unreviewed model.</p>
           </div>
@@ -391,22 +391,16 @@
       <div class="wrap split">
         <div class="split__head">
           <p class="kicker">Install</p>
-          <h2 id="install-title">Run it from source today.</h2>
-          <p class="sub">Needs Git, Node.js 24+ and pnpm, plus Rust to build the desktop app. The installer fetches pnpm and Rust if they are missing.</p>
+          <h2 id="install-title">One command.</h2>
+          <p class="sub">Needs Node.js 24+ (which includes npm) and Git. macOS and Linux.</p>
         </div>
         <div class="install__body">
           <div class="code-wrap">
-            <pre class="code" data-copyable><code>git clone https://github.com/nedimYilmaz/chimera.git
-cd chimera
-./scripts/install.sh</code></pre>
+            <pre class="code" data-copyable><code>npx @nedimyilmaz/chimera install</code></pre>
           </div>
-          <p class="fine fine--dark">Installs <code>chimerad</code> and <code>chimera</code> into <code>~/.local/bin</code>, builds the desktop app and sets up a login service. On macOS that is a launchd agent, the path that has been tested. On Linux it sets up an AppImage and a systemd user unit, which is less proven. Flags: <code>--no-app</code>, <code>--no-service</code>, and on macOS <code>--enable-wake</code>.</p>
-          <details class="later">
-            <summary>After v0.1.0 ships <span class="tag">not available yet</span></summary>
-            <p>Once the first release is published, these will install the desktop app and the CLI. Do not run them before then.</p>
-            <div class="code-wrap"><pre class="code" data-copyable><code>npx @nedimyilmaz/chimera install</code></pre></div>
-            <div class="code-wrap"><pre class="code" data-copyable><code>curl -fsSL https://raw.githubusercontent.com/nedimYilmaz/chimera/main/scripts/install-public.sh | bash</code></pre></div>
-          </details>
+          <p class="fine fine--dark">Downloads the signed desktop app, verifies its SHA-256, installs the app and the <code>chimera</code> CLI, starts the daemon at login and opens the app, which walks you through connecting a provider. <code>--dry-run</code> shows what it would do; <code>--no-open</code> skips opening the app.</p>
+          <div class="code-wrap"><pre class="code" data-copyable><code>curl -fsSL https://raw.githubusercontent.com/nedimYilmaz/chimera/main/scripts/install-public.sh | bash</code></pre></div>
+          <p class="fine fine--dark">The same install without <code>npx</code>. For only the CLI and MCP server (any OS, including Windows): <code>npm install --global @nedimyilmaz/chimera</code>.</p>
         </div>
       </div>
     </section>
@@ -420,12 +414,12 @@ cd chimera
         </div>
         <div class="faq__list">
           <details>
-            <summary>Can I download it today?</summary>
-            <p>Not yet. Signed public downloads are not available yet; the first release (v0.1.0) is being prepared. Today you run it from source with <code>./scripts/install.sh</code>, on a Mac for the best-tested path.</p>
+            <summary>Can I install it today?</summary>
+            <p>Yes. <code>npx @nedimyilmaz/chimera install</code> installs the signed desktop app and the CLI on macOS and Linux. macOS on Apple Silicon is the best-tested path.</p>
           </details>
           <details>
             <summary>Does it run on Windows?</summary>
-            <p>No. The installer stops before downloading anything on Windows. Windows support waits for a code-signing certificate.</p>
+            <p>The CLI and MCP server do (<code>npm install --global @nedimyilmaz/chimera</code>). The desktop app does not yet: it waits for a code-signing certificate, and the installer stops before downloading anything on Windows.</p>
           </details>
           <details>
             <summary>Does it work offline?</summary>
@@ -456,11 +450,11 @@ cd chimera
       <div class="wrap final__row">
         <div class="final__copy">
           <h2 id="final-title">Early access is open.</h2>
-          <p class="sub">Run it from source on a Mac, point it at a repo you can afford to experiment on, and tell us what breaks.</p>
+          <p class="sub">Install it, point it at a repo you can afford to experiment on, and tell us what breaks.</p>
         </div>
         <div class="cta">
           <a class="btn btn--light" href="https://github.com/nedimYilmaz/chimera">Explore on GitHub<span aria-hidden="true"> ↗</span></a>
-          <a class="link link--dark" href="#install">Run it from source</a>
+          <a class="link link--dark" href="#install">Install</a>
           <a class="link link--dark" href="https://github.com/nedimYilmaz/chimera/issues">Share feedback</a>
         </div>
       </div>

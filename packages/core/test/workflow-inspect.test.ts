@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, writeFile, rm, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -137,6 +137,10 @@ describe("inspectWorkflowDir", () => {
     await writeFile(join(dir, "agent-a2.meta.json"), JSON.stringify({ agentType: "finder", model: "claude" }));
     await writeFile(join(dir, "agent-a2.jsonl"),
       JSON.stringify({ type: "user", timestamp: "2026-07-01T15:00:20.000Z", message: { role: "user", content: "Find the bug" } }));
+    // The roster orders by transcript mtime. Writes a few ms apart can share one timestamp (Linux
+    // stamps files from a coarse clock tick), so the order is set explicitly: a2 is the newer one.
+    await utimes(join(dir, "agent-a1.jsonl"), new Date("2026-07-01T15:00:09Z"), new Date("2026-07-01T15:00:09Z"));
+    await utimes(join(dir, "agent-a2.jsonl"), new Date("2026-07-01T15:00:20Z"), new Date("2026-07-01T15:00:20Z"));
   }
 
   it("assembles the inner-agent roster (state, label, resultPreview, meta) newest-first", async () => {

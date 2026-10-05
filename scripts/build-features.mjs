@@ -261,8 +261,8 @@ ${families}
         <p class="sub">Chimera is early access software. The guide describes what the code does; it does not promise polish everywhere.</p>
       </header>
       <ul class="ticks ticks--warn">
-        <li>macOS on Apple Silicon is the only platform where the packaged desktop runtime has been run end to end. Intel is untested, Linux is source-only, and Windows is unsupported.</li>
-        <li>Signed public downloads are not available yet. Today you run Chimera from source; the <a href="index.html#install">install steps</a> are on the home page.</li>
+        <li>macOS on Apple Silicon is the most tested platform. The Intel Mac build and the Linux AppImage have not yet been verified end to end on a clean machine, and on Windows only the CLI and MCP server install.</li>
+        <li>One command installs the signed desktop app and the CLI on macOS and Linux; the <a href="index.html#install">install steps</a> are on the home page.</li>
 ${flagged.map((c) => `        <li><strong>${esc(c.label)}</strong> is ${STATUS_LABEL[c.status].toLowerCase()}.${c.limits ? ` ${esc(c.limits)}` : ""}</li>`).join("\n")}
       </ul>
       <p class="fine">Screenshots show the actual Chimera interface with fictional demo data. <a href="${REPO}/blob/main/site/assets/provenance.md">How they were made</a>.</p>
@@ -278,7 +278,7 @@ ${flagged.map((c) => `        <li><strong>${esc(c.label)}</strong> is ${STATUS_L
         </div>
         <div class="cta">
           <a class="btn btn--light" href="${REPO}">Explore on GitHub<span aria-hidden="true"> ↗</span></a>
-          <a class="link link--dark" href="index.html#install">Run it from source</a>
+          <a class="link link--dark" href="index.html#install">Install</a>
           <a class="link link--dark" href="${REPO}/issues">Share feedback</a>
         </div>
       </div>

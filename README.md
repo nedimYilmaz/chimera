@@ -9,7 +9,7 @@ the same repository without colliding.
 
 [**Explore the site**](https://nedimyilmaz.github.io/chimera/) ·
 [**Feature guide**](https://nedimyilmaz.github.io/chimera/features.html) ·
-[**Run it from source**](#install) ·
+[**Install**](#install) ·
 [**Share feedback**](https://github.com/nedimYilmaz/chimera/issues)
 
 [![Chimera's Agents view: a team of agents working on a fictional project, with their status, transcripts and worktrees](site/assets/chimera-workspace.png)](https://nedimyilmaz.github.io/chimera/)
@@ -17,10 +17,49 @@ the same repository without colliding.
 <sub>Actual Chimera interface · demo data</sub>
 
 > **Early access.** Chimera is MIT-licensed and under active development.
-> Signed public downloads are not available yet: today you run it from source,
-> and the platform you can expect to work is macOS on Apple Silicon. See
-> [Platform availability](#platform-availability) and
-> [Known limits](#known-limits) before relying on it.
+> It installs with one command on macOS and Linux; macOS on Apple Silicon is
+> the most tested platform. See [Platform availability](#platform-availability)
+> and [Known limits](#known-limits) before relying on it.
+
+## Install
+
+You need [Node.js](https://nodejs.org) 24+ (which includes npm) and Git.
+
+```sh
+npx @nedimyilmaz/chimera install
+```
+
+That's the whole install. It detects your OS and architecture, downloads the
+signed desktop app, verifies its SHA-256, installs the app and the `chimera`
+CLI, starts the daemon at login and opens the app. The app's first screen walks
+you through connecting a provider (Claude, Codex, ...). `install --dry-run`
+prints what it would do without changing anything; `install --no-open` skips
+opening the app.
+
+Without `npx`:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/nedimYilmaz/chimera/main/scripts/install-public.sh | bash
+```
+
+**CLI and MCP server only** (any OS, including Windows):
+
+```sh
+npm install --global @nedimyilmaz/chimera
+chimera doctor
+claude mcp add chimera -- chimera-mcp
+```
+
+`chimera status` and the MCP server start the daemon automatically when it is
+not running. Any stdio MCP client (Claude Code, Codex, ...) can use
+`chimera-mcp`.
+
+**Upgrade** by running `npx @nedimyilmaz/chimera@latest install` again; your
+accounts and history in `~/.chimera` are kept. **Uninstall:** run
+`chimera stop`, close the app, then remove the login item (the macOS
+LaunchAgent, or `systemctl --user disable --now chimerad.service` on Linux),
+the app and the `chimera` install directory. Keep `~/.chimera` if you want your
+accounts and history.
 
 ## Why
 
@@ -55,93 +94,29 @@ session, and hitting the same rate limit on the same account. Chimera turns
 
 | Platform | Status |
 | --- | --- |
-| macOS · Apple Silicon | **Tested.** The only platform where the packaged desktop runtime has been run from a clean home folder. |
-| macOS · Intel | Not tested. |
-| Linux | **Source only.** There is a source installer, but no packaged build, and it has not been verified end to end. |
-| Windows | **Unsupported.** |
+| macOS · Apple Silicon | **Supported.** Signed and notarized; the most tested platform. |
+| macOS · Intel | Signed and notarized build; less tested. |
+| Linux · x64 / arm64 | AppImage installed by the same command; not yet verified end to end on a clean machine. Needs a glibc desktop with a systemd user session (Ubuntu 22.04+). |
+| Windows | CLI and MCP server only. The desktop app waits for a code-signing certificate. |
 
 Desktop control is macOS-only, and the built-in browser tools are unsupported on
 Linux arm64 and Windows arm64. The optional local decision model (Laya) needs
 macOS 14 or newer and downloads one English model, pinned to a full revision and
 checked against a digest, when you install it, so a fresh install is **not** fully
 offline. After that it runs offline: multilingual and typed-decision requests fail
-rather than fetch a model Chimera has not reviewed. Signed public downloads are not available yet.
-
-## Install
-
-Chimera is early access. The path that works today is installing from source.
-
-### From source
-
-```sh
-git clone https://github.com/nedimYilmaz/chimera.git && cd chimera
-./scripts/install.sh
-```
-
-This needs Git, Node.js 24+, pnpm and, for the desktop app, Rust (pnpm and Rust
-are installed if missing). It installs `chimerad` and `chimera` into
-`~/.local/bin`, builds the desktop app and sets up a login service. `--no-app`
-skips the desktop build, `--no-service` skips the login service, and on macOS
-`--enable-wake` lets scheduled jobs wake a sleeping machine.
-
-On macOS the login service is a launchd user agent, and that is the path that
-has been tested. On Linux the installer uses a systemd user unit and an
-AppImage; treat that as less proven.
-
-A fresh `~/.chimera` starts with no accounts; the app's first screen walks you
-through connecting a provider. Run `chimera doctor` to check prerequisites and
-configuration without starting the daemon.
-
-### Packaged installer and npm (once v0.1.0 is published)
-
-The first public release is still being prepared, so the commands below do not
-work yet. They will:
-
-```sh
-npx @nedimyilmaz/chimera install
-```
-
-or, without npx:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/nedimYilmaz/chimera/main/scripts/install-public.sh | bash
-```
-
-The installer detects your OS and architecture, verifies the download's
-SHA-256, installs the desktop app and the `chimera` CLI, starts the daemon at
-login and opens the app. `install --dry-run` prints what it would do without
-changing anything; `install --no-open` skips opening the app.
-
-For the CLI and MCP server only:
-
-```sh
-npm install --global @nedimyilmaz/chimera
-chimera doctor
-claude mcp add chimera -- chimera-mcp
-```
-
-`chimera status` and the MCP server start the daemon automatically when it is
-not running. Any stdio MCP client (Claude Code, Codex, ...) can use
-`chimera-mcp`.
-
-### Uninstall
-
-Run `chimera stop`, close the app, then remove the login item (the macOS
-LaunchAgent, or `systemctl --user disable --now chimerad.service` on Linux), the
-app and the `chimera` install directory. Keep `~/.chimera` if you want your
-accounts and history.
+rather than fetch a model Chimera has not reviewed.
 
 ## Early access: try it and tell us what breaks
 
-The most useful thing you can do right now is run Chimera from source on a Mac,
-point it at a repository you can afford to experiment on, and report what
-breaks or confuses you.
+The most useful thing you can do right now is install Chimera, point it at a
+repository you can afford to experiment on, and report what breaks or confuses
+you.
 
 - [Open an issue](https://github.com/nedimYilmaz/chimera/issues) with what you
   tried and what happened. `chimera support-report` prints a privacy-minimized
   JSON report (no credentials, transcripts or user paths) you can attach.
 - Star or watch the [repository](https://github.com/nedimYilmaz/chimera) to
-  follow the v0.1.0 release.
+  follow new releases.
 
 ## The two surfaces
 
@@ -308,10 +283,9 @@ transcripts in a public issue.
 
 ## Known limits
 
-- **Signed public downloads are not available yet.** The first release (v0.1.0)
-  is being prepared; until then, install from source.
-- **One platform is tested:** macOS on Apple Silicon. Linux has a source
-  installer but no packaged build; Windows is unsupported.
+- **macOS on Apple Silicon is the most tested platform.** The Linux AppImage
+  and the Intel Mac build have not yet been verified end to end on a clean
+  machine; on Windows only the CLI and MCP server install.
 - **Young or partial surfaces:** federation and the Kimi backend have seen the
   least use, voice is a preview, memory scoping is ranking rather than access
   control, and some budgets are estimated from token counts.

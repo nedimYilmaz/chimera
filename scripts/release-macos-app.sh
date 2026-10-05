@@ -65,7 +65,9 @@ fi
 release_marker="$(mktemp -t chimera-release)"
 trap 'rm -f -- "$release_marker"' EXIT
 echo "building signed + notarized DMG (this can take several minutes while Apple notarizes)..."
-(cd packages/app && pnpm tauri build --bundles dmg)
+# `app` must be listed too: with only `dmg`, Tauri deletes the intermediate .app once the DMG is
+# built, and both the checks below and package-macos-release.mjs (the installer's tar.gz) need it.
+(cd packages/app && pnpm tauri build --bundles app,dmg)
 
 APP_PATH="packages/app/src-tauri/target/release/bundle/macos/chimera.app"
 fresh_dmgs=()
