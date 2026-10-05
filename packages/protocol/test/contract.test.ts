@@ -6,6 +6,18 @@ import { TaskRecordSchema, TaskSummarySchema } from "@chimera/protocol";
 // can't silently drift apart — a family-grouping regression and a plain contract-membership
 // regression would otherwise need two separate hand-edits to stay in sync.
 const ALL_METHODS = [
+  // Workspace evolution: typed RPCs for groups, branching, layout, remote operator,
+  // context links, worktree editing, issue sources and local speech.
+  "agent.setGroups", "agent.addGroups", "agent.removeGroups", "agent.forkCapabilities", "agent.fork", "agent.resources",
+  "canvas.get", "canvas.saveLayout",
+  "group.list", "group.create", "group.update", "group.delete",
+  "host.admission",
+  "contextlink.create", "contextlink.list", "contextlink.get", "contextlink.revoke",
+  "operatorweb.operatorStatus", "operatorweb.status", "operatorweb.enable", "operatorweb.disable",
+  "operatorweb.pairStart", "operatorweb.sessionList", "operatorweb.sessionRevoke", "operatorweb.settingsSet",
+  "worktree.gitStatus", "worktree.gitDiff", "worktree.fileRead", "worktree.fileWrite", "worktree.gitStage", "worktree.gitCommit",
+  "issues.sourceList", "issues.sourceUpsert", "issues.sourceRemove", "issues.sync", "issues.linkList", "issues.postComment",
+  "stt.status", "stt.configure", "stt.install", "stt.installCancel", "stt.uninstall", "stt.transcribe", "stt.transcribeCancel",
   "artifact.add", "artifact.get", "artifact.list",
   "audit.verify", "events.search", "events.searchExport", "evidence.get",
   // F50 BUDGET-RESUME: operator-only — it is in the RPC contract but deliberately in NO MCP tool
@@ -46,7 +58,7 @@ const ALL_METHODS = [
 ].sort();
 
 describe("RPC_CONTRACT (FEATURE-8)", () => {
-  it("holds exactly the migrated queue.* cluster + evidence.get (FEATURE-10) + team.*/workflow.*/artifact.* (FEATURE-11) + audit.verify (tamper-evident ledger) + mcpstore.oauth.* (MCP-OAUTH slice 1) — a regression net for accidental additions/removals", () => {
+  it("pins every typed RPC method — a regression net for accidental additions/removals", () => {
     expect(Object.keys(RPC_CONTRACT).sort()).toEqual(ALL_METHODS);
   });
 

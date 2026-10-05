@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as React from "react";
+import type { OperatorWebStatus } from "@chimera/protocol";
 import { act, create } from "react-test-renderer";
 
 // F49.2 plan test 38 — the network section's read-only mcp-listener block.
@@ -19,6 +20,10 @@ vi.mock("../src/rpc/bridge", () => ({
   rpcCall: vi.fn(async (method: string) => {
     if (method === "daemon.status") return statusResponse;
     if (method === "config.get") return {};
+    if (method === "operatorweb.status") return {
+      enabled: false, localUrl: null, bundleAvailable: false, limitation: "Loopback only",
+      settings: { v: 1, port: 0, publicOrigin: null, idleMin: 5, absoluteH: 8 }, sessions: [],
+    } satisfies OperatorWebStatus;
     return [];
   }),
   subscribeEvents: vi.fn(async () => {}),

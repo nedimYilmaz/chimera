@@ -164,6 +164,27 @@ describe("unified browser gate runner", () => {
     expect(stderr.join("")).toContain("PASS meeting browser suite");
   });
 
+  test("schedules the expanded UI budget while keeping the meeting deadline unchanged", async () => {
+    const scripts: Record<string, string> = {};
+    for (const id of ["ui", "meeting"] as const) {
+      scripts[id] = join(testRoot, `budget-${id}.mjs`);
+      const result = { ...suiteResult(id, "passed"), checks: REQUIRED_CHECK_IDS[id].map((checkId: string) => ({ id: checkId, status: "passed", durationMs: 0 })) };
+      await writeFile(scripts[id]!, `console.log(${JSON.stringify(RESULT_PREFIX + JSON.stringify(result))});`);
+    }
+    // Observe native timers around real, short-lived child fixtures; never wait five minutes.
+    const timers = vi.spyOn(globalThis, "setTimeout");
+    const deadlines: Record<string, number | undefined> = {};
+    try {
+      const result = await runUnifiedBrowserGate({
+        spawnImpl: (executable: string, args: string[], options: any) => spawn(executable, [scripts[args[0]!.includes("test-ui-browser") ? "ui" : "meeting"]!], options),
+        onSpawn: (id: string) => { deadlines[id] = timers.mock.calls.at(-1)?.[1]; },
+        stdout: { write() {} }, stderr: { write() {} },
+      });
+      expect(result.exitCode).toBe(0);
+      expect(deadlines).toEqual({ ui: 300_000, meeting: 180_000 });
+    } finally { timers.mockRestore(); }
+  });
+
   test.each(["ui", "meeting"])("fails the final gate for a required %s probe failure", async (failedSuite) => {
     const scripts = [];
     for (const id of ["ui", "meeting"]) {
@@ -458,7 +479,7 @@ setInterval(() => {}, 1000);
       // Full-suite workers can take seconds to schedule a fresh Node process. The
       // fixture writes its descendant PID synchronously after spawn, then the
       // bounded suite deadline measures the deliberately stuck phase.
-      const running = runUnifiedBrowserGate({ suites: [{ id: "ui", script }], signalSource, suiteTimeoutMs: 5_000, cleanupTimeoutMs: 60,
+      const running = runUnifiedBrowserGate({ suites: [{ id: "ui", script, timeoutMs: 300_000 }], signalSource, suiteTimeoutMs: 5_000, cleanupTimeoutMs: 60,
         stdout: { write() {} }, stderr: { write() {} } });
       const descendantPid = Number(await waitForFile(ready));
       if (mode !== "deadline") signalSource.emit(mode);

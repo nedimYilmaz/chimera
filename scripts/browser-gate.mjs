@@ -1183,7 +1183,7 @@ async function runSuiteProcess(suite, signalState, options = {}) {
       child.once("error", stop);
       child.once("close", (code, childSignal) => resolveOutcome({ code, childSignal }));
       signalState.stop = stop;
-      timer = setTimeout(() => stop(new Error("Suite deadline exceeded")), options.suiteTimeoutMs ?? 180_000);
+      timer = setTimeout(() => stop(new Error("Suite deadline exceeded")), options.suiteTimeoutMs ?? suite.timeoutMs ?? 180_000);
       options.onSpawn?.(suite.id, child);
       if (signalState.interruptedBy) stop(new Error(`Suite interrupted by ${signalState.interruptedBy}`));
     });
@@ -1219,7 +1219,9 @@ async function runSuiteProcess(suite, signalState, options = {}) {
 export async function runUnifiedBrowserGate(options = {}) {
   const startedAt = performance.now();
   const suites = options.suites ?? [
-    { id: "ui", script: join(scriptDirectory, "test-ui-browser.mjs"), requiredCheckIds: REQUIRED_CHECK_IDS.ui },
+    // The expanded UI inventory exceeds three minutes even in an isolated run.
+    // Keep this suite bounded without extending meeting, action or cleanup deadlines.
+    { id: "ui", script: join(scriptDirectory, "test-ui-browser.mjs"), requiredCheckIds: REQUIRED_CHECK_IDS.ui, timeoutMs: 300_000 },
     { id: "meeting", script: join(scriptDirectory, "test-meeting-browser.mjs"), requiredCheckIds: REQUIRED_CHECK_IDS.meeting },
   ];
   const signalSource = options.signalSource ?? process;

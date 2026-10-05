@@ -8,4 +8,4 @@
 .editor { min-width: 0; max-width: 100%; margin-top: 8px; }
 .editor label { display: block; }
 .editor textarea, .panel textarea { display: block; box-sizing: border-box; width: 100%; max-width: 100%; font: inherit; }
-.error { color: var(--danger, #e88); }
+.error { color: var(--danger); }

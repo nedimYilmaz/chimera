@@ -111,11 +111,13 @@ describe("granting a surface by tag", () => {
   });
 
   it("gives a conductor core PLUS conductor, including direct voice controls", () => {
-    // The number the operator predicted before any of this was built. It matching is the proof
-    // that moving from two name lists to one tag vocabulary changed no one's surface.
+    // Pin the grant size, including the seven workspace group controls.
     const granted = new Set(["core", "conductor"]);
     const got = MCP_TOOL_TABLE.filter((t) => t.tags.some((x) => granted.has(x)));
-    expect(got.length).toBe(53); // native voice and conductor meeting controls
+    expect(got.length).toBe(60);
+    for (const name of ["group_list", "group_create", "group_update", "group_delete", "agent_set_groups", "agent_add_groups", "agent_remove_groups"]) {
+      expect(got.map((t) => t.name)).toContain(name);
+    }
   });
 
   it("widens by naming a subject, not by editing a list", () => {
@@ -142,8 +144,11 @@ describe("chimera_tools search behaviour", () => {
   });
 
   it("ranks a name hit above a description hit", () => {
-    const r = call({ query: "move agent to another provider" });
+    // Avoid common substrings like "move" (also in "remove") and "to" (in "atomically").
+    const r = call({ query: "handoff provider" });
     expect(r.tools![0]!.name).toBe("agent_handoff");
+    // agent_rebind mentions both terms only in its description.
+    expect(r.tools!.findIndex((t) => t.name === "agent_rebind")).toBeGreaterThan(0);
   });
 
   it("returns the LEAD by default and the manual on detail:true", () => {

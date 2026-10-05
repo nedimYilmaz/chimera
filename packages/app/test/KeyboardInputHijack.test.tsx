@@ -67,6 +67,7 @@ afterEach(async () => {
     await settle();
   });
   mounted = null;
+  vi.unstubAllGlobals();
   keydownHandlers.length = 0;
   rpcImpl = async (method: string) => (method === "daemon.status" ? { protocolVersion: 1, agents: {} } : {});
 });
@@ -226,6 +227,12 @@ describe("useTranscriptKeyboard — bare v/q act on focus, not stale selection (
 
 describe("ReviewRoomScreen — Escape/hunk-nav ignore ANY editable target, not just <input>/<textarea> (REVIEW-ROOM-INPUT-HIJACK)", () => {
   it("Escape at a <select> target (missed by the old matches('input,textarea') check) does not close the room; a non-editable target does", () => {
+    // The handler also checks dialog ancestry; Node has no browser Element constructor.
+    class TestElement {
+      constructor(private readonly inDialog = false) {}
+      closest(selector: string) { return this.inDialog && selector === '[role="dialog"]' ? this : null; }
+    }
+    vi.stubGlobal("Element", TestElement);
     act(() => {
       appStore.dispatch({ type: "reviewRoomOpen", taskId: "t1" } as never);
       appStore.dispatch({
@@ -242,7 +249,10 @@ describe("ReviewRoomScreen — Escape/hunk-nav ignore ANY editable target, not j
     act(() => fireKeydown({ key: "Escape", target: { tagName: "SELECT" } }));
     expect(appStore.getState().reviewRoom.openTaskId).toBe("t1");
 
-    act(() => fireKeydown({ key: "Escape", target: NON_EDITABLE }));
+    act(() => fireKeydown({ key: "Escape", target: new TestElement(true) }));
+    expect(appStore.getState().reviewRoom.openTaskId).toBe("t1");
+
+    act(() => fireKeydown({ key: "Escape", target: new TestElement() }));
     expect(appStore.getState().reviewRoom.openTaskId).toBeNull();
   });
 });

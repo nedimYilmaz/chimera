@@ -23,7 +23,7 @@ export function LocalSpeechSettings() {
         <option value="apple-on-device" disabled={!appleLocales.length}>Apple on-device {appleLocales.length ? "" : "(unavailable)"}</option>
       </select></label>
       <label className={styles.kvRow}>dictation language <select className={styles.select} data-stt-language disabled={busy || installing} value={status.preferences.language} onChange={e => { void run(() => configureLocalStt(status.preferences.engine, e.target.value as "en" | "tr")); }}>
-        <option value="en">English</option><option value="tr">Türkçe</option>
+        <option value="en">English</option><option value="tr">Turkish</option>
       </select></label>
       <p className={styles.faint}>English and Turkish passed the bundled synthetic Whisper fixtures. Other languages have not been verified. Apple requires a matching on-device system locale; availability varies by OS.</p>
       <details data-stt-install-details><summary>Install local model · {(status.model.bytes / 1_000_000).toFixed(0)} MB · multilingual small</summary>
