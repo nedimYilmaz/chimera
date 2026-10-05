@@ -42,6 +42,20 @@ async function waitForFile(path: string, timeoutMs = 10_000) {
   throw new Error(`Timed out after ${Date.now() - startedAt}ms waiting for fixture handshake ${path}`);
 }
 
+async function waitForChildClose(close: Promise<unknown>, timeoutMs = 1_000) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      close,
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error("Child stdio did not close within its deadline")), timeoutMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function suiteResult(id: string, status: "passed" | "failed" | "skipped") {
   return {
     id,
@@ -373,22 +387,122 @@ setInterval(() => {}, 1000);
     expect(JSON.stringify(result.report).length).toBeLessThan(10_000);
   });
 
-  posixTest("reaps stubborn inherited-pipe descendants after their group leader exits", async () => {
+  test("waits for a queued child close event after process cleanup has returned", async () => {
+    vi.useFakeTimers();
+    try {
+      const child = new EventEmitter();
+      let closed = false;
+      const close = new Promise(resolveClose => child.once("close", () => { closed = true; resolveClose(undefined); }));
+      const waiting = waitForChildClose(close, 100);
+      let settled = false;
+      void waiting.then(() => { settled = true; });
+      await vi.advanceTimersByTimeAsync(40);
+      expect(closed).toBe(false);
+      expect(settled).toBe(false);
+      child.emit("close");
+      await waiting;
+      expect(closed).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("rejects a child that never closes at the event deadline", async () => {
+    vi.useFakeTimers();
+    try {
+      const waiting = waitForChildClose(new Promise(() => {}), 100);
+      const rejected = expect(waiting).rejects.toThrow("Child stdio did not close within its deadline");
+      await vi.advanceTimersByTimeAsync(100);
+      await rejected;
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  posixTest.each([false, true])("escalates an exited leader's owned group with bounded cleanup (survives SIGKILL: %s)", async (survivesKill) => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
+    let killed = false;
+    const kill = vi.spyOn(process, "kill").mockImplementation((_pid, signal) => {
+      if (signal === "SIGKILL") killed = true;
+      if (killed && !survivesKill && signal === 0) throw Object.assign(new Error("No such process"), { code: "ESRCH" });
+      return true;
+    });
+    try {
+      const child = { pid: 424242, exitCode: 0, signalCode: null };
+      const cleanup = terminateOwnedProcess(child, 60);
+      const result = survivesKill
+        ? expect(cleanup).rejects.toThrow("Owned process group survived bounded cleanup")
+        : expect(cleanup).resolves.toBeUndefined();
+      await vi.advanceTimersByTimeAsync(59);
+      expect(killed).toBe(false);
+      await vi.advanceTimersByTimeAsync(61);
+      await result;
+      expect(kill.mock.calls.filter(([, signal]) => signal !== 0)).toEqual([
+        [-child.pid, "SIGTERM"], [-child.pid, "SIGKILL"],
+      ]);
+      expect(kill.mock.calls.every(([pid]) => pid === -child.pid)).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      kill.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  posixTest("does not signal a foreign group when the exited child does not own it", async () => {
+    const kill = vi.spyOn(process, "kill").mockImplementation(() => { throw new Error("Foreign group signaled"); });
+    const child = { pid: 424242, exitCode: 0, signalCode: null, ownedProcessGroup: false, kill: vi.fn() };
+    try {
+      await terminateOwnedProcess(child, 60);
+      expect(kill).not.toHaveBeenCalled();
+      expect(child.kill).not.toHaveBeenCalled();
+    } finally {
+      kill.mockRestore();
+    }
+  });
+
+  posixTest.each([false, true])("reaps stubborn inherited-pipe descendants after their group leader exits (queued close: %s)", async (queueClose) => {
     const ready = join(testRoot, "descendant");
     const child = spawn(process.execPath, ["-e", `
       const { spawn } = require('node:child_process');
       const descendant = spawn(process.execPath, ['-e', ${JSON.stringify(`process.on('SIGTERM', () => {}); require('node:fs').writeFileSync(${JSON.stringify(ready)}, String(process.pid)); setInterval(() => {}, 1000);`)}], { stdio: ['ignore', 'inherit', 'inherit'] });
       descendant.unref();
     `], { detached: true, stdio: ["ignore", "pipe", "pipe"] });
+    const emit = child.emit.bind(child);
+    let releaseClose: (() => void) | undefined;
+    if (queueClose) {
+      // Hold event delivery, not OS cleanup, to reproduce the CI ordering deterministically.
+      child.emit = (event: string | symbol, ...args: unknown[]) => {
+        if (event === "close") {
+          releaseClose = () => emit(event, ...args);
+          return true;
+        }
+        return emit(event, ...args);
+      };
+    }
     let closed = false;
-    child.once("close", () => { closed = true; });
+    const close = new Promise(resolveClose => child.once("close", () => { closed = true; resolveClose(undefined); }));
     try {
       await waitForFile(ready);
       if (child.exitCode === null) await new Promise(resolveExit => child.once("exit", resolveExit));
+      expect(closed).toBe(false);
       await terminateOwnedProcess(child, 60);
+      expect(() => process.kill(-child.pid!, 0)).toThrow(expect.objectContaining({ code: "ESRCH" }));
+      if (queueClose) {
+        expect(closed).toBe(false);
+        child.emit = emit;
+        releaseClose?.();
+      }
+      // Group disappearance precedes Node's delivery of pipe/ChildProcess close events.
+      await waitForChildClose(close);
       expect(closed).toBe(true);
     } finally {
       try { process.kill(-child.pid!, "SIGKILL"); } catch {}
+      child.emit = emit;
+      releaseClose?.();
+      child.stdout.destroy();
+      child.stderr.destroy();
     }
   });
 
