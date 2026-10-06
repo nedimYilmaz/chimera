@@ -39,15 +39,15 @@ describe("version parsing", () => {
 });
 
 describe("latestStable against the real PyPI index", () => {
-  it("picks 0.3.27 and its pure-python wheel, not the sdist", () => {
+  it("picks 0.3.28 and its pure-python wheel, not the sdist", () => {
     const latest = latestStable(PYPI)!;
-    expect(latest.version).toBe("0.3.27");
-    expect(latest.wheel).toMatchObject({ file: "laya-0.3.27-py3-none-any.whl", url: expect.stringMatching(/^https:\/\/files\.pythonhosted\.org\/.*\.whl$/) });
+    expect(latest.version).toBe("0.3.28");
+    expect(latest.wheel).toMatchObject({ file: "laya-0.3.28-py3-none-any.whl", url: expect.stringMatching(/^https:\/\/files\.pythonhosted\.org\/.*\.whl$/) });
     expect(latest.uploadedAt).toMatch(/^2026-10-0\d/);
   });
   it("the wheel PyPI reports for the current pin is the digest and URL we pinned", () => {
     const wheel = latestStable(PYPI)!.wheel!;
-    expect(LAYA.version).toBe("0.3.27");
+    expect(LAYA.version).toBe("0.3.28");
     expect(wheel.sha256).toBe(LAYA.wheel.sha256);
     expect(wheel.url).toBe(LAYA.wheel.url);
     expect(wheel.file).toBe(LAYA.wheel.file);

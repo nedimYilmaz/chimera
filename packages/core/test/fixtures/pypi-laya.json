@@ -1,7 +1,7 @@
 {
- "_note": "Trimmed copy of https://pypi.org/pypi/laya/json fetched 2026-10-05 (info.version 0.3.27); only the fields scripts/check-laya-release.ts reads, and only the versions the tests need. Real data, not an invented index.",
+ "_note": "Trimmed official PyPI data: historical releases fetched 2026-10-05; 0.3.28 fetched from https://pypi.org/pypi/laya/0.3.28/json on 2026-10-06. Only fields read by the release checker/evaluation; no invented release artifacts.",
  "info": {
-  "version": "0.3.27"
+  "version": "0.3.28"
  },
  "releases": {
   "0.3.3": [
@@ -156,6 +156,28 @@
      "sha256": "8a1ad028f2b02289fad0cb69a6058c7eb0cbf42506945726693e822b2f7f601b"
     },
     "upload_time_iso_8601": "2026-10-04T18:18:18.053766Z"
+   }
+  ],
+  "0.3.28": [
+   {
+    "filename": "laya-0.3.28-py3-none-any.whl",
+    "packagetype": "bdist_wheel",
+    "yanked": false,
+    "url": "https://files.pythonhosted.org/packages/f1/73/c2beaece06283911d53823f1735c7a033e07a1e690735ea02d8d57706d69/laya-0.3.28-py3-none-any.whl",
+    "digests": {
+     "sha256": "a1493cff474c0a5d84861db55c0c5c9b17f1db8561e458764da9a322dc542a88"
+    },
+    "upload_time_iso_8601": "2026-10-05T18:05:12.640380Z"
+   },
+   {
+    "filename": "laya-0.3.28.tar.gz",
+    "packagetype": "sdist",
+    "yanked": false,
+    "url": "https://files.pythonhosted.org/packages/ed/52/108b9fda4e5bcd56d64db83e2c173981b64793c1f20b7e97f6cfc7542d5e/laya-0.3.28.tar.gz",
+    "digests": {
+     "sha256": "8122301a5021e9fa56d8a6dba11d3bc7ae262d4f2f25dd9504344ebed9b26cbd"
+    },
+    "upload_time_iso_8601": "2026-10-05T18:05:14.580229Z"
    }
   ]
  }

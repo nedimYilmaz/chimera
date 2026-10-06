@@ -1,0 +1,442 @@
+{
+  "provenance": {
+    "source": "docs/quality/2026-10-06/laya-0.3.27-vs-0.3.28.json",
+    "sourceSha256": "d8853b4de79d1f456be40a69cea39e0f419fe746fc8c5db8ab6e14d23e0fa972",
+    "recordedAt": "2026-10-06T06:03:14.332Z",
+    "checkpoint": {
+      "repo": "convaiinnovations/laya",
+      "revision": "55cf4c4ebb4ebe31b2550e8bdf3bd21b99753851",
+      "files": {
+        "model.safetensors": {
+          "sha256": "891102d372688fc2a094dac56a384bc537b87c63f21f9f3dac0be2b7cbc8d86c",
+          "bytes": 842609210,
+          "ok": true
+        }
+      }
+    },
+    "scope": "Saved English-checkpoint evaluation; no desktop action. Exact en-window-notes records only."
+  },
+  "floor": 0.9,
+  "recordings": [
+    {
+      "version": "0.3.27",
+      "trial": 0,
+      "route": "sequential",
+      "record": {
+        "caseId": "en-window-notes",
+        "lang": "en",
+        "group": "wrong-window",
+        "expected": "refocus_window",
+        "actions": [
+          "type_text",
+          "refocus_window",
+          "click",
+          "wait"
+        ],
+        "decision": {
+          "choice": "type_text",
+          "probabilities": {
+            "type_text": 0.9313,
+            "refocus_window": 0.0458,
+            "click": 0.0107,
+            "wait": 0.0123
+          },
+          "answerConfidence": 0.9313,
+          "confidence": 0.7764,
+          "abstention": "passed",
+          "abstentionThreshold": 0.9,
+          "lowConfidence": false,
+          "model": "english",
+          "device": "mps",
+          "latencyMs": 32.237
+        },
+        "wallMs": 33.579249999998865
+      }
+    },
+    {
+      "version": "0.3.27",
+      "trial": 0,
+      "route": "batch",
+      "record": {
+        "caseId": "en-window-notes",
+        "lang": "en",
+        "group": "wrong-window",
+        "expected": "refocus_window",
+        "actions": [
+          "type_text",
+          "refocus_window",
+          "click",
+          "wait"
+        ],
+        "decision": {
+          "choice": "type_text",
+          "probabilities": {
+            "type_text": 0.9313,
+            "refocus_window": 0.0458,
+            "click": 0.0107,
+            "wait": 0.0123
+          },
+          "answerConfidence": 0.9313,
+          "confidence": 0.7764,
+          "abstention": "passed",
+          "abstentionThreshold": 0.9,
+          "lowConfidence": false,
+          "model": "english",
+          "device": "mps",
+          "latencyMs": 30.836
+        },
+        "wallMs": null
+      }
+    },
+    {
+      "version": "0.3.28",
+      "trial": 0,
+      "route": "sequential",
+      "record": {
+        "caseId": "en-window-notes",
+        "lang": "en",
+        "group": "wrong-window",
+        "expected": "refocus_window",
+        "actions": [
+          "type_text",
+          "refocus_window",
+          "click",
+          "wait"
+        ],
+        "decision": {
+          "choice": "type_text",
+          "probabilities": {
+            "type_text": 0.9313,
+            "refocus_window": 0.0458,
+            "click": 0.0107,
+            "wait": 0.0123
+          },
+          "answerConfidence": 0.9313,
+          "confidence": 0.7764,
+          "abstention": "passed",
+          "abstentionThreshold": 0.9,
+          "lowConfidence": false,
+          "model": "english",
+          "device": "mps",
+          "latencyMs": 30.131
+        },
+        "wallMs": 31.269000000000233
+      }
+    },
+    {
+      "version": "0.3.28",
+      "trial": 0,
+      "route": "batch",
+      "record": {
+        "caseId": "en-window-notes",
+        "lang": "en",
+        "group": "wrong-window",
+        "expected": "refocus_window",
+        "actions": [
+          "type_text",
+          "refocus_window",
+          "click",
+          "wait"
+        ],
+        "decision": {
+          "choice": "type_text",
+          "probabilities": {
+            "type_text": 0.9313,
+            "refocus_window": 0.0458,
+            "click": 0.0107,
+            "wait": 0.0123
+          },
+          "answerConfidence": 0.9313,
+          "confidence": 0.7764,
+          "abstention": "passed",
+          "abstentionThreshold": 0.9,
+          "lowConfidence": false,
+          "model": "english",
+          "device": "mps",
+          "latencyMs": 31.105
+        },
+        "wallMs": null
+      }
+    },
+    {
+      "version": "0.3.28",
+      "trial": 1,
+      "route": "sequential",
+      "record": {
+        "caseId": "en-window-notes",
+        "lang": "en",
+        "group": "wrong-window",
+        "expected": "refocus_window",
+        "actions": [
+          "type_text",
+          "refocus_window",
+          "click",
+          "wait"
+        ],
+        "decision": {
+          "choice": "type_text",
+          "probabilities": {
+            "type_text": 0.9313,
+            "refocus_window": 0.0458,
+            "click": 0.0107,
+            "wait": 0.0123
+          },
+          "answerConfidence": 0.9313,
+          "confidence": 0.7764,
+          "abstention": "passed",
+          "abstentionThreshold": 0.9,
+          "lowConfidence": false,
+          "model": "english",
+          "device": "mps",
+          "latencyMs": 31.128
+        },
+        "wallMs": 32.30841599999985
+      }
+    },
+    {
+      "version": "0.3.28",
+      "trial": 1,
+      "route": "batch",
+      "record": {
+        "caseId": "en-window-notes",
+        "lang": "en",
+        "group": "wrong-window",
+        "expected": "refocus_window",
+        "actions": [
+          "type_text",
+          "refocus_window",
+          "click",
+          "wait"
+        ],
+        "decision": {
+          "choice": "type_text",
+          "probabilities": {
+            "type_text": 0.9313,
+            "refocus_window": 0.0458,
+            "click": 0.0107,
+            "wait": 0.0123
+          },
+          "answerConfidence": 0.9313,
+          "confidence": 0.7764,
+          "abstention": "passed",
+          "abstentionThreshold": 0.9,
+          "lowConfidence": false,
+          "model": "english",
+          "device": "mps",
+          "latencyMs": 30.904
+        },
+        "wallMs": null
+      }
+    },
+    {
+      "version": "0.3.27",
+      "trial": 1,
+      "route": "sequential",
+      "record": {
+        "caseId": "en-window-notes",
+        "lang": "en",
+        "group": "wrong-window",
+        "expected": "refocus_window",
+        "actions": [
+          "type_text",
+          "refocus_window",
+          "click",
+          "wait"
+        ],
+        "decision": {
+          "choice": "type_text",
+          "probabilities": {
+            "type_text": 0.9313,
+            "refocus_window": 0.0458,
+            "click": 0.0107,
+            "wait": 0.0123
+          },
+          "answerConfidence": 0.9313,
+          "confidence": 0.7764,
+          "abstention": "passed",
+          "abstentionThreshold": 0.9,
+          "lowConfidence": false,
+          "model": "english",
+          "device": "mps",
+          "latencyMs": 30.147
+        },
+        "wallMs": 31.19641700000284
+      }
+    },
+    {
+      "version": "0.3.27",
+      "trial": 1,
+      "route": "batch",
+      "record": {
+        "caseId": "en-window-notes",
+        "lang": "en",
+        "group": "wrong-window",
+        "expected": "refocus_window",
+        "actions": [
+          "type_text",
+          "refocus_window",
+          "click",
+          "wait"
+        ],
+        "decision": {
+          "choice": "type_text",
+          "probabilities": {
+            "type_text": 0.9313,
+            "refocus_window": 0.0458,
+            "click": 0.0107,
+            "wait": 0.0123
+          },
+          "answerConfidence": 0.9313,
+          "confidence": 0.7764,
+          "abstention": "passed",
+          "abstentionThreshold": 0.9,
+          "lowConfidence": false,
+          "model": "english",
+          "device": "mps",
+          "latencyMs": 30.793
+        },
+        "wallMs": null
+      }
+    },
+    {
+      "version": "0.3.27",
+      "trial": 2,
+      "route": "sequential",
+      "record": {
+        "caseId": "en-window-notes",
+        "lang": "en",
+        "group": "wrong-window",
+        "expected": "refocus_window",
+        "actions": [
+          "type_text",
+          "refocus_window",
+          "click",
+          "wait"
+        ],
+        "decision": {
+          "choice": "type_text",
+          "probabilities": {
+            "type_text": 0.9313,
+            "refocus_window": 0.0458,
+            "click": 0.0107,
+            "wait": 0.0123
+          },
+          "answerConfidence": 0.9313,
+          "confidence": 0.7764,
+          "abstention": "passed",
+          "abstentionThreshold": 0.9,
+          "lowConfidence": false,
+          "model": "english",
+          "device": "mps",
+          "latencyMs": 31.013
+        },
+        "wallMs": 32.06545799999731
+      }
+    },
+    {
+      "version": "0.3.27",
+      "trial": 2,
+      "route": "batch",
+      "record": {
+        "caseId": "en-window-notes",
+        "lang": "en",
+        "group": "wrong-window",
+        "expected": "refocus_window",
+        "actions": [
+          "type_text",
+          "refocus_window",
+          "click",
+          "wait"
+        ],
+        "decision": {
+          "choice": "type_text",
+          "probabilities": {
+            "type_text": 0.9313,
+            "refocus_window": 0.0458,
+            "click": 0.0107,
+            "wait": 0.0123
+          },
+          "answerConfidence": 0.9313,
+          "confidence": 0.7764,
+          "abstention": "passed",
+          "abstentionThreshold": 0.9,
+          "lowConfidence": false,
+          "model": "english",
+          "device": "mps",
+          "latencyMs": 31.019
+        },
+        "wallMs": null
+      }
+    },
+    {
+      "version": "0.3.28",
+      "trial": 2,
+      "route": "sequential",
+      "record": {
+        "caseId": "en-window-notes",
+        "lang": "en",
+        "group": "wrong-window",
+        "expected": "refocus_window",
+        "actions": [
+          "type_text",
+          "refocus_window",
+          "click",
+          "wait"
+        ],
+        "decision": {
+          "choice": "type_text",
+          "probabilities": {
+            "type_text": 0.9313,
+            "refocus_window": 0.0458,
+            "click": 0.0107,
+            "wait": 0.0123
+          },
+          "answerConfidence": 0.9313,
+          "confidence": 0.7764,
+          "abstention": "passed",
+          "abstentionThreshold": 0.9,
+          "lowConfidence": false,
+          "model": "english",
+          "device": "mps",
+          "latencyMs": 31.44
+        },
+        "wallMs": 32.50004099999933
+      }
+    },
+    {
+      "version": "0.3.28",
+      "trial": 2,
+      "route": "batch",
+      "record": {
+        "caseId": "en-window-notes",
+        "lang": "en",
+        "group": "wrong-window",
+        "expected": "refocus_window",
+        "actions": [
+          "type_text",
+          "refocus_window",
+          "click",
+          "wait"
+        ],
+        "decision": {
+          "choice": "type_text",
+          "probabilities": {
+            "type_text": 0.9313,
+            "refocus_window": 0.0458,
+            "click": 0.0107,
+            "wait": 0.0123
+          },
+          "answerConfidence": 0.9313,
+          "confidence": 0.7764,
+          "abstention": "passed",
+          "abstentionThreshold": 0.9,
+          "lowConfidence": false,
+          "model": "english",
+          "device": "mps",
+          "latencyMs": 30.914
+        },
+        "wallMs": null
+      }
+    }
+  ]
+}

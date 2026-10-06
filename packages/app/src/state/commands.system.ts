@@ -1124,7 +1124,7 @@ const PRESENTATION: Record<EngineToolName, McpPresentation> = {
     fields: [{ key: "name", label: "name", type: "string", required: true }],
   },
   mcp_store_tools: {
-    description: "Discover store servers and their tools, lazily connecting each on first call", kind: "flat", rpc: "mcpstore.tools",
+    description: "Discover MCP-store tools/schemas lazily. Use before mcp_store_call/native MCP; only missing capability permits native fallback, never denial/busy/connection errors. For app-directed typing, select intended app/window via fresh list_apps/list_windows/get_window_state; use the exact window target, not titles alone. Laya ranks; observe and verify. Laya confidence never authorizes desktop/frontmost substitution. Deliberate desktop tasks may type globally. Guidance, not an enforced target-identity guarantee.", kind: "flat", rpc: "mcpstore.tools",
     fields: [{ key: "query", label: "query", type: "string", hint: "(optional)" }],
   },
   operator_web_status: { description: "Operator panel availability (read only)", kind: "flat", rpc: "operatorweb.operatorStatus", fields: [] },
@@ -1150,7 +1150,7 @@ const PRESENTATION: Record<EngineToolName, McpPresentation> = {
   memory_index_status: { description: "Inspect vector memory index readiness and errors. This tool only reads status; it cannot rebuild the index.", kind: "raw", rpc: "memory.index", rawTemplate: "{\"action\":\"status\"}" },
   mcp_store_monitor: { description: "Inspect live desktop computer-use activity metadata: lease owner, busy state, target window and recent tool outcomes. Contains no screenshots, typed text or tool arguments. This does not start the desktop service, grant OS permission or open the preview popup; use mcp_store_tools to check connectivity.", kind: "flat", rpc: "mcpstore.monitor", fields: [] },
   mcp_store_session: {
-    description: "Acquire or release exclusive desktop control", kind: "flat", rpc: "mcpstore.session",
+    description: "Acquire, inspect or release exclusive computer-use control. Desktop tools acquire automatically; release after finishing so another agent can use the desktop. Active calls cannot be stolen; an idle lease expires after five minutes. A busy result means wait, then take a fresh snapshot before acting. The lease establishes ownership, not the intended app/window. Before app-directed typing, verify fresh app/window identity and use the exact window target from the live schema; after expiry/release, observe again. Laya confidence never authorizes desktop/frontmost substitution. Deliberate desktop tasks may use desktop-wide typing. Target selection remains the agent's responsibility; the proxy does not enforce task intent.", kind: "flat", rpc: "mcpstore.session",
     fields: [
       { key: "server", label: "server", type: "string", required: true },
       { key: "action", label: "action", type: "enum", options: ["status", "acquire", "release"], required: true },

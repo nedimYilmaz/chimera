@@ -1745,13 +1745,13 @@ const MCP_TOOL_TABLE_BASE = [
   { name: "mcp_store_remove", description: "Remove an MCP server from the chimera store (tears down its live daemon connection, if any)", inputSchema: { name: z.string() }, resolve: (a) => rpc("mcpstore.remove", a) },
   {
     name: "mcp_store_tools",
-    description: "Discover MCP-store servers/tools with descriptions and input schemas; connects lazily. Optional query filters server/tool names and descriptions. Call before mcp_store_call and before falling back to provider-native MCP tools: prefer a suitable Chimera tool; native MCP is only a fallback for a capability missing from Chimera, not for permission denials, busy leases or connection errors. Computer use: laya ranks finite actions; chimera-browser and chimera-desktop execute them. Observe first and verify the result.",
+    description: "Discover MCP-store tools/schemas lazily. Use before mcp_store_call/native MCP; only missing capability permits native fallback, never denial/busy/connection errors. For app-directed typing, select intended app/window via fresh list_apps/list_windows/get_window_state; use the exact window target, not titles alone. Laya ranks; observe and verify. Laya confidence never authorizes desktop/frontmost substitution. Deliberate desktop tasks may type globally. Guidance, not an enforced target-identity guarantee.",
     inputSchema: { query: z.string().optional() },
     resolve: (a) => rpc("mcpstore.tools", { ...(a["query"] !== undefined ? { query: a["query"] } : {}) }),
   },
   {
     name: "mcp_store_session",
-    description: "Acquire, inspect or release exclusive computer-use control. Desktop tools acquire automatically; release after finishing so another agent can use the desktop. Active calls cannot be stolen; an idle lease expires after five minutes. A busy result means wait, then take a fresh snapshot before acting.",
+    description: "Acquire, inspect or release exclusive computer-use control. Desktop tools acquire automatically; release after finishing so another agent can use the desktop. Active calls cannot be stolen; an idle lease expires after five minutes. A busy result means wait, then take a fresh snapshot before acting. The lease establishes ownership, not the intended app/window. Before app-directed typing, verify fresh app/window identity and use the exact window target from the live schema; after expiry/release, observe again. Laya confidence never authorizes desktop/frontmost substitution. Deliberate desktop tasks may use desktop-wide typing. Target selection remains the agent's responsibility; the proxy does not enforce task intent.",
     inputSchema: { server: z.string(), action: z.enum(["status", "acquire", "release"]) },
     resolve: (a, ctx) => rpc("mcpstore.session", { server: a["server"], action: a["action"], ...(ctx.agentId ? { agentId: ctx.agentId } : {}) }),
   },
