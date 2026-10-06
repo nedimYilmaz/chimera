@@ -3,6 +3,8 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { ChimeraClient } from "@chimera/client";
 import { createChimeraMcpServer } from "@chimera/protocol/mcp-server-factory";
 import { createDispatch } from "./daemon-skew.js";
+import { PassThrough } from "node:stream";
+import { createMcpLifecycle, STARTUP_INPUT_HIGH_WATER_MARK } from "./lifecycle.js";
 
 // This entrypoint is used two ways: (1) spawned as a subprocess of an ALREADY-running
 // chimerad by claude.ts/codex.ts for an orchestration-enabled agent; (2) launched
@@ -16,16 +18,41 @@ import { createDispatch } from "./daemon-skew.js";
 // already produces a readable Error for those; this turns it into ONE clear stderr line
 // instead of an unhandled top-level-await stack trace the MCP client would otherwise show
 // as an opaque "server failed to start".
-let client: ChimeraClient;
+// Read EOF during the startup dial while preserving MCP input until the SDK is ready.
+// PassThrough applies backpressure instead of collecting an unbounded startup buffer.
+const input = new PassThrough({ highWaterMark: STARTUP_INPUT_HIGH_WATER_MARK });
+const transport = new StdioServerTransport(input);
+// SDK buffer overflow rejects the input and closes transport; report it rather than
+// silently discarding an oversized frame once startup backpressure is released.
+transport.onerror = (error) => {
+  console.error("chimera-mcp: stdio transport failed:", error.message);
+  process.exitCode = 1;
+};
+const lifecycle = createMcpLifecycle({
+  connect: () => ChimeraClient.connect(),
+  stdin: process.stdin,
+  signals: process,
+  closeInput: () => { process.stdin.unpipe(input); input.destroy(); process.stdin.pause(); },
+  onSignal: (signal) => { process.exitCode = signal === "SIGINT" ? 130 : 143; },
+  onError: (error) => console.error("chimera-mcp: shutdown failed:", error),
+});
+lifecycle.bindTransport(transport);
+if (!lifecycle.closing) process.stdin.pipe(input);
 try {
-  client = await ChimeraClient.connect();
+  await lifecycle.reconnect();
 } catch (e) {
-  const detail = e instanceof Error ? e.message : String(e);
-  console.error(
-    `chimera-mcp: could not connect to (or start) chimerad: ${detail}\n` +
-    `If chimerad uses a non-default home, set CHIMERA_HOME to match before retrying.`,
-  );
-  process.exit(1);
+  if (!lifecycle.closing) {
+    const detail = e instanceof Error ? e.message : String(e);
+    console.error(
+      `chimera-mcp: could not connect to (or start) chimerad: ${detail}\n` +
+      `If chimerad uses a non-default home, set CHIMERA_HOME to match before retrying.`,
+    );
+    await lifecycle.shutdown();
+    // Preserve the existing fatal-startup behavior: connect can reject after opening
+    // a socket, without returning a client that this owner can close.
+    process.exit(1);
+  }
+  await lifecycle.shutdown();
 }
 const depth = Number(process.env.CHIMERA_DEPTH ?? -1) + 1;
 // set by the chimera-MCP grant injected into orchestrating agents (Task 17):
@@ -42,20 +69,12 @@ const isDisconnected = (e: unknown): boolean =>
   typeof e === "object" && e !== null && (e as { code?: unknown }).code === "disconnected";
 
 // P1 reliability fix: a long-lived MCP server holds ONE persistent daemon socket
-// (`client`) for its whole process lifetime. If chimerad restarts or the socket
+// for its whole process lifetime. If chimerad restarts or the socket
 // drops (idle timeout, EPIPE/ECONNRESET), every call used to fail forever with
 // {code:"disconnected"} -- surfaced to the SDK as "Stream closed" -- with no
 // retry. `reconnect()` re-dials on demand and shares one in-flight promise so
-// concurrent callers don't each open their own duplicate connection.
-let reconnecting: Promise<void> | null = null;
-const reconnect = (): Promise<void> => {
-  if (!reconnecting) {
-    reconnecting = ChimeraClient.connect()
-      .then((c) => { client = c; })
-      .finally(() => { reconnecting = null; });
-  }
-  return reconnecting;
-};
+// concurrent callers don't each open their own duplicate connection. Lifecycle owns that
+// promise so a late reconnect cannot resurrect a socket after the MCP peer has left.
 
 // INPROC-CHIMERA-BRIDGE: dispatch is the ONLY socket-specific piece left in this file -- the
 // tool-name -> RPC mapping (method + param shaping) and the McpServer construction now live in
@@ -63,9 +82,9 @@ const reconnect = (): Promise<void> => {
 // in-process bridge (packages/core/src/backends/generic-mcp.ts). The daemon-version-skew
 // strip-and-retry logic lives in ./daemon-skew.ts so it can be unit-tested with a fake daemon.
 const dispatch = createDispatch({
-  request: (method, params) => client.request(method, params),
-  isClosed: () => client.closed,
-  reconnect,
+  request: lifecycle.request,
+  isClosed: lifecycle.isClosed,
+  reconnect: lifecycle.reconnect,
   isDisconnected,
   warn: (message) => console.error(message),
 });
@@ -73,6 +92,15 @@ const dispatch = createDispatch({
 // CONDUCTOR-TOOLS-MATCH-THE-PLAYBOOK: stamped by every backend from spec.conductor — see
 // CONDUCTOR_TOOL_NAMES for what it unlocks and why.
 const conductor = process.env.CHIMERA_CONDUCTOR === "1";
-const server = await createChimeraMcpServer(dispatch, { agentId, depth, maxDepthCap, treeId, team, autonomy, conductor });
-
-await server.connect(new StdioServerTransport());
+if (!lifecycle.closing) {
+  try {
+    const server = await createChimeraMcpServer(dispatch, { agentId, depth, maxDepthCap, treeId, team, autonomy, conductor });
+    if (!lifecycle.closing) await server.connect(transport);
+  } catch (error) {
+    if (!lifecycle.closing) {
+      console.error("chimera-mcp: startup failed:", error);
+      process.exitCode = 1;
+    }
+    await lifecycle.shutdown();
+  }
+}

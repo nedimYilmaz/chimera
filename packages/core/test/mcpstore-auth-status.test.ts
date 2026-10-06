@@ -64,7 +64,7 @@ describe("MCP-AUTH-STATUS: McpStoreConnectionManager.authStatus", () => {
   it("reports `authorized` with the granted scopes once tokens are stored", async () => {
     writeStore(dir, { remote: oauthEntry() });
     keychain.putRaw(mcpStoreAuthService("remote"), JSON.stringify({
-      tokens: { access_token: "at", refresh_token: "rt", expires_in: 3600, scope: "read write" },
+      tokens: { issuer: "https://auth.example.com/", access_token: "at", refresh_token: "rt", expires_in: 3600, scope: "read write" },
       authorizedAt: Date.now(),
     }));
     const [row] = await manager().authStatus();
@@ -77,7 +77,7 @@ describe("MCP-AUTH-STATUS: McpStoreConnectionManager.authStatus", () => {
   it("keeps a long-expired access token `authorized` while a refresh token remains", async () => {
     writeStore(dir, { remote: oauthEntry() });
     keychain.putRaw(mcpStoreAuthService("remote"), JSON.stringify({
-      tokens: { access_token: "at", refresh_token: "rt", expires_in: 3600 },
+      tokens: { issuer: "https://auth.example.com/", access_token: "at", refresh_token: "rt", expires_in: 3600 },
       authorizedAt: Date.now() - 30 * 24 * HOUR_MS,     // a month stale
     }));
     const [row] = await manager().authStatus();
@@ -89,7 +89,7 @@ describe("MCP-AUTH-STATUS: McpStoreConnectionManager.authStatus", () => {
   it("reports `needs-reauth` for an expired token with no refresh token", async () => {
     writeStore(dir, { remote: oauthEntry() });
     keychain.putRaw(mcpStoreAuthService("remote"), JSON.stringify({
-      tokens: { access_token: "at", expires_in: 3600 },
+      tokens: { issuer: "https://auth.example.com/", access_token: "at", expires_in: 3600 },
       authorizedAt: Date.now() - 5 * HOUR_MS,
     }));
     const [row] = await manager().authStatus();
@@ -100,7 +100,7 @@ describe("MCP-AUTH-STATUS: McpStoreConnectionManager.authStatus", () => {
   it("keeps a not-yet-expired refresh-less token `authorized`", async () => {
     writeStore(dir, { remote: oauthEntry() });
     keychain.putRaw(mcpStoreAuthService("remote"), JSON.stringify({
-      tokens: { access_token: "at", expires_in: 3600 },
+      tokens: { issuer: "https://auth.example.com/", access_token: "at", expires_in: 3600 },
       authorizedAt: Date.now() - 60_000,
     }));
     const [row] = await manager().authStatus();
@@ -112,7 +112,7 @@ describe("MCP-AUTH-STATUS: McpStoreConnectionManager.authStatus", () => {
   it("reports `needs-reauth` after a real connect was rejected for auth", async () => {
     writeStore(dir, { remote: oauthEntry("https://127.0.0.1:9/mcp") });
     keychain.putRaw(mcpStoreAuthService("remote"), JSON.stringify({
-      tokens: { access_token: "at", refresh_token: "rt", expires_in: 3600 },
+      tokens: { issuer: "https://auth.example.com/", access_token: "at", refresh_token: "rt", expires_in: 3600 },
       authorizedAt: Date.now(),
     }));
     const mgr = manager();
@@ -128,7 +128,7 @@ describe("MCP-AUTH-STATUS: McpStoreConnectionManager.authStatus", () => {
   it("does NOT report needs-reauth when a connect failed for non-auth reasons", async () => {
     writeStore(dir, { remote: oauthEntry() });
     keychain.putRaw(mcpStoreAuthService("remote"), JSON.stringify({
-      tokens: { access_token: "at", refresh_token: "rt", expires_in: 3600 },
+      tokens: { issuer: "https://auth.example.com/", access_token: "at", refresh_token: "rt", expires_in: 3600 },
       authorizedAt: Date.now(),
     }));
     const mgr = manager();
@@ -159,7 +159,7 @@ describe("MCP-AUTH-STATUS: McpStoreConnectionManager.authStatus", () => {
   it("never leaks token material into a status row", async () => {
     writeStore(dir, { remote: oauthEntry() });
     keychain.putRaw(mcpStoreAuthService("remote"), JSON.stringify({
-      tokens: { access_token: "SECRET-ACCESS", refresh_token: "SECRET-REFRESH", expires_in: 3600, scope: "read" },
+      tokens: { issuer: "https://auth.example.com/", access_token: "SECRET-ACCESS", refresh_token: "SECRET-REFRESH", expires_in: 3600, scope: "read" },
       clientInfo: { client_id: "cid", client_secret: "SECRET-CLIENT", redirect_uris: ["http://127.0.0.1:0/callback"] },
       authorizedAt: Date.now(),
     }));
@@ -175,11 +175,11 @@ describe("MCP-AUTH-STATUS: readMcpStoreOAuthSnapshot", () => {
     await expect(readMcpStoreOAuthSnapshot(keychain, "broken")).resolves.toEqual({ hasTokens: false, hasRefreshToken: false });
   });
 
-  // Grants minted before `authorizedAt` existed have no stamp; they must read as present-and-
-  // usable rather than as an expired token with an unknown issue time.
+  // Issuer-bound grants with no `authorizedAt` still have no known age; the issuer
+  // requirement is independent of the optional freshness timestamp.
   it("reports tokens with no authorizedAt stamp as present, with no age", async () => {
     const keychain = new FakeKeychain();
-    keychain.putRaw(mcpStoreAuthService("legacy"), JSON.stringify({ tokens: { access_token: "at", expires_in: 3600 } }));
+    keychain.putRaw(mcpStoreAuthService("legacy"), JSON.stringify({ tokens: { issuer: "https://auth.example.com/", access_token: "at", expires_in: 3600 } }));
     const snap = await readMcpStoreOAuthSnapshot(keychain, "legacy");
     expect(snap).toMatchObject({ hasTokens: true, hasRefreshToken: false, expiresInSeconds: 3600 });
     expect(snap.authorizedAt).toBeUndefined();
@@ -253,7 +253,7 @@ describe("MCP-AUTH-STATUS: a rejection is only evidence about the credential it 
     writeStore(dir, { remote: oauthEntry() });
     const failedAt = Date.now() - 60_000;
     keychain.putRaw(mcpStoreAuthService("remote"), JSON.stringify({
-      tokens: { access_token: "fresh", refresh_token: "rt", expires_in: 3600 },
+      tokens: { issuer: "https://auth.example.com/", access_token: "fresh", refresh_token: "rt", expires_in: 3600 },
       authorizedAt: failedAt + 30_000,          // re-authorized AFTER the rejection
     }));
     const mgr = new McpStoreConnectionManager(new McpStoreRegistry(dir), keychain);
@@ -266,7 +266,7 @@ describe("MCP-AUTH-STATUS: a rejection is only evidence about the credential it 
     writeStore(dir, { remote: oauthEntry() });
     const authorizedAt = Date.now() - 60_000;
     keychain.putRaw(mcpStoreAuthService("remote"), JSON.stringify({
-      tokens: { access_token: "stale", refresh_token: "rt", expires_in: 3600 }, authorizedAt,
+      tokens: { issuer: "https://auth.example.com/", access_token: "stale", refresh_token: "rt", expires_in: 3600 }, authorizedAt,
     }));
     const mgr = new McpStoreConnectionManager(new McpStoreRegistry(dir), keychain);
     (mgr as unknown as { outcomes: Map<string, unknown> }).outcomes

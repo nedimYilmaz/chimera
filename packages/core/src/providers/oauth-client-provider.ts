@@ -11,7 +11,7 @@
 import { randomUUID } from "node:crypto";
 import type { OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js";
 import type {
-  OAuthClientInformationFull, OAuthClientInformationMixed, OAuthClientMetadata, OAuthTokens,
+  OAuthClientInformationMixed, OAuthClientMetadata, OAuthTokens,
 } from "@modelcontextprotocol/sdk/shared/auth.js";
 import type { Keychain } from "../keychain.js";
 import { mcpStoreAuthService } from "../keychain.js";
@@ -21,13 +21,27 @@ import { mcpStoreAuthService } from "../keychain.js";
 // exactly what keeps the two from ever being confused at the call site).
 type KeychainOAuthPayload = {
   tokens?: OAuthTokens;
-  clientInfo?: OAuthClientInformationFull;
+  clientInfo?: OAuthClientInformationMixed;
   // MCP-AUTH-STATUS: epoch ms of the saveTokens() that wrote `tokens`. OAuthTokens carries
   // `expires_in` (a DURATION) but no issue time, so without this stamp there is no way to tell
   // a token minted a minute ago from one minted last month. Additive: load() tolerates its
   // absence, which is exactly what every grant minted before this field looks like.
   authorizedAt?: number;
 };
+
+// Credentials saved before SDK 1.31 have no issuer. Never infer it from current server
+// discovery: that is controlled by the MCP server and could silently bind an old secret
+// to an attacker. Withhold legacy/malformed entries until an explicit sign-in replaces
+// them; reads leave the keychain intact. The SDK checks bound entries against discovery.
+function issuerBound<T extends { issuer?: string }>(credential: T | undefined): T | undefined {
+  if (!credential || typeof credential.issuer !== "string" || !credential.issuer.trim()) return undefined;
+  try {
+    const url = new URL(credential.issuer);
+    return (url.protocol === "https:" || url.protocol === "http:") && url.hostname ? credential : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 // MCP-AUTH-STATUS: everything the auth-status surface is allowed to know about a stored grant.
 // Note what is NOT on this type: access_token, refresh_token, client_secret. This value reaches
@@ -57,7 +71,7 @@ export async function readMcpStoreOAuthSnapshot(keychain: Keychain, serverName: 
     // keychain entry is unreadable simply shows as never-authorized.
     return { hasTokens: false, hasRefreshToken: false };
   }
-  const tokens = payload.tokens;
+  const tokens = issuerBound(payload.tokens);
   if (!tokens?.access_token) return { hasTokens: false, hasRefreshToken: false };
   const scope = typeof tokens.scope === "string" ? tokens.scope.split(/\s+/).filter(Boolean) : undefined;
   return {
@@ -131,7 +145,7 @@ export class KeychainOAuthClientProvider implements OAuthClientProvider {
   }
 
   async tokens(): Promise<OAuthTokens | undefined> {
-    return (await this.load()).tokens;
+    return issuerBound((await this.load()).tokens);
   }
 
   async saveTokens(tokens: OAuthTokens): Promise<void> {
@@ -142,10 +156,10 @@ export class KeychainOAuthClientProvider implements OAuthClientProvider {
   }
 
   async clientInformation(): Promise<OAuthClientInformationMixed | undefined> {
-    return (await this.load()).clientInfo;
+    return issuerBound((await this.load()).clientInfo);
   }
 
-  async saveClientInformation(clientInformation: OAuthClientInformationFull): Promise<void> {
+  async saveClientInformation(clientInformation: OAuthClientInformationMixed): Promise<void> {
     await this.persist({ clientInfo: clientInformation });
   }
 
