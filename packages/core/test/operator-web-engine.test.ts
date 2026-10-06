@@ -1,19 +1,22 @@
-import { mkdirSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { Engine } from "../src/engine.js";
 import { FakeAgentBackend } from "../src/backends/fake.js";
 import { makeEngineHome } from "./helpers.js";
 import { operatorWebEngine } from "../src/operator-web-engine.js";
+import { EventLog } from "../src/events.js";
+import { QueueStore } from "../src/queues.js";
 import type { OperatorWebSession } from "@chimera/protocol";
 import type { AgentRecord } from "../src/supervisor.js";
 const session: OperatorWebSession = { id: "session", project: "one", deviceLabel: "Test", scope: "control", createdAt: 1, lastUsedAt: 1, expiresAt: 10000 };
-function fixture() {
+function fixture(seedQueues?: (home: string) => void) {
   const home = makeEngineHome();
   for (const dir of ["one", "two", "third"]) mkdirSync(join(home, dir));
+  seedQueues?.(home);
   const e = new Engine({ home, backends: new Map([["claude", new FakeAgentBackend([])]]) });
   e.projects.create({ name: "one", path: join(home, "one"), queue: "one-q" }); e.projects.create({ name: "two", path: join(home, "two"), queue: "two-q" });
-  e.queues.create({ name: "one-q" }); e.queues.create({ name: "two-q" });
+  for (const name of ["one-q", "two-q"]) if (!e.queues.list().some(q => q.name === name)) e.queues.create({ name });
   const rows = ["one", "two"].map(projectId => ({ agentId: projectId + "-a", projectId, state: "running", shadow: false, spec: { displayLabel: projectId, prompt: "sk-secret-do-not-expose" } })) as unknown as AgentRecord[];
   vi.spyOn(e.supervisor, "list").mockReturnValue(rows);
   vi.spyOn(e.supervisor, "status").mockImplementation(id => { const a = rows.find(a => a.agentId === id); if (!a) throw Error(); return a; });
@@ -95,11 +98,33 @@ describe("project authorization using real engine stores", () => {
   });
 });
 it("bounds UTF-8 queue snapshots under the HTTP response cap and reports truncation", async () => {
-  const { e, deps } = fixture();
-  for (let n = 0; n < 300; n++) e.queues.push("one-q", { prompt: "😀".repeat(3000) });
+  const prompt = "😀".repeat(3000);
+  const { e, deps } = fixture(home => {
+    const events = new EventLog(home), queues = new QueueStore(home, events);
+    const spec = queues.create({ name: "one-q" }), template = queues.push("one-q", { prompt });
+    // Seed a real persisted store once: 300 pushes rewrite about 587 MB of growing
+    // queue state, testing filesystem throughput rather than snapshot bounds.
+    const tasks = Array.from({ length: 300 }, (_, n) => ({ ...template, taskId: `utf8-task-${n}`, orderKey: n }));
+    writeFileSync(join(home, "queues.json"), JSON.stringify({ queues: [spec], tasks }));
+    events.flushDurable();
+  });
+  const stored = e.queues.status("one-q").tasks;
+  expect(stored).toHaveLength(300);
+  expect(stored.every(t => t.prompt === prompt)).toBe(true);
+  expect(Buffer.byteLength(JSON.stringify(stored))).toBeGreaterThan(1_048_576);
   const snapshot = await deps.snapshot(session);
   expect(Buffer.byteLength(JSON.stringify(snapshot))).toBeLessThan(1_048_576);
-  expect(snapshot.truncated).toBe(true); expect(snapshot.queues[0]!.tasks.length).toBeGreaterThan(0);
+  expect(snapshot.truncated).toBe(true);
+  const tasks = snapshot.queues[0]!.tasks;
+  expect(tasks.length).toBeGreaterThan(0);
+  // The byte budget must truncate before the independent 200-task count cap.
+  expect(tasks.length).toBeLessThan(200);
+  expect(tasks.every(t => t.prompt === "😀".repeat(500) + "… [truncated]")).toBe(true);
+  expect(tasks.map(t => t.taskId)).toEqual(stored.slice(0, tasks.length).map(t => t.taskId));
+  const taskBytes = tasks.reduce((sum, t) => sum + Buffer.byteLength(JSON.stringify(t)), 0);
+  expect(taskBytes).toBeLessThanOrEqual(400_000);
+  const next = { taskId: stored[tasks.length]!.taskId, state: stored[tasks.length]!.state, prompt: tasks[0]!.prompt };
+  expect(taskBytes + Buffer.byteLength(JSON.stringify(next))).toBeGreaterThan(400_000);
 });
 it("does not offer release for budget/session-limit pauses", async () => {
   const { rows, deps } = fixture(); rows[0]!.state = "paused"; rows[0]!.pauseReason = "session-limit";

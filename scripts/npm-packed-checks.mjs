@@ -5,6 +5,25 @@ import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { pathToFileURL } from 'node:url';
 import { execFileSync } from 'node:child_process';
+import { openSync, closeSync } from 'node:fs';
+
+function runArchiveTar(artifact, dir, create, { env, run = execFileSync } = {}) {
+  // GNU tar treats a drive-letter archive filename as a remote host. Node opens
+  // the exact file; both GNU and BSD tar use '-' for the inherited byte stream.
+  const fd = openSync(resolve(artifact), create ? 'w' : 'r');
+  try {
+    run('tar', [create ? '-czf' : '-xzf', '-', ...(create ? ['package'] : [])],
+      { cwd: resolve(dir), env, stdio: create ? ['ignore', fd, 'pipe'] : [fd, 'pipe', 'pipe'] });
+  } finally { closeSync(fd); }
+}
+
+export function extractPackedArtifact(artifact, dir, options) {
+  runArchiveTar(artifact, dir, false, options);
+}
+
+export function createPackedArtifact(artifact, dir, options) {
+  runArchiveTar(artifact, dir, true, options);
+}
 
 export async function checkPackedInstaller(artifact) {
   assert.ok(artifact?.endsWith('.tgz'), 'A packed npm artifact is required');
@@ -15,7 +34,7 @@ export async function checkPackedInstaller(artifact) {
   env.LOCALAPPDATA = join(env.HOME, 'AppData', 'Local');
   env.APPDATA = join(env.HOME, 'AppData', 'Roaming');
   try {
-    execFileSync('tar', ['-xzf', resolve(artifact), '-C', dir], { env });
+    extractPackedArtifact(artifact, dir, { env });
     const base = join(dir, 'package');
     const manifest = JSON.parse(await readFile(join(base, 'package.json'), 'utf8'));
     // Plain npm installation must not start a desktop installation, including with --global.
