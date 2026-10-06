@@ -50,6 +50,9 @@ chimera doctor
 claude mcp add chimera -- chimera-mcp
 ```
 
+Global npm installation does not install or open the desktop app or add a login
+service. Run `chimera install` explicitly for the combined desktop installation.
+
 `chimera status` and the MCP server start the daemon automatically when it is
 not running. Any stdio MCP client (Claude Code, Codex, ...) can use
 `chimera-mcp`.

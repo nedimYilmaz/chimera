@@ -5,13 +5,10 @@
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
 
 use base64::Engine;
 use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
 
-const FLUSH_INTERVAL: Duration = Duration::from_millis(8);
-const FLUSH_BYTES: usize = 32 * 1024;
 // A stuck terminal-open key must not fork-bomb the operator's machine.
 pub const MAX_SESSIONS: usize = 8;
 
@@ -116,29 +113,7 @@ pub fn open_session_with(
 
     let child_for_exit = child.clone();
     std::thread::spawn(move || {
-        let mut raw = [0u8; 8192];
-        let mut pending: Vec<u8> = Vec::new();
-        let mut last = Instant::now();
-        loop {
-            match reader.read(&mut raw) {
-                Ok(0) | Err(_) => break,
-                Ok(n) => {
-                    pending.extend_from_slice(&raw[..n]);
-                    if pending.len() >= FLUSH_BYTES || last.elapsed() >= FLUSH_INTERVAL {
-                        sink(PtyMsg::Output {
-                            b64: base64::engine::general_purpose::STANDARD.encode(&pending),
-                        });
-                        pending.clear();
-                        last = Instant::now();
-                    }
-                }
-            }
-        }
-        if !pending.is_empty() {
-            sink(PtyMsg::Output {
-                b64: base64::engine::general_purpose::STANDARD.encode(&pending),
-            });
-        }
+        read_output(&mut *reader, &sink);
         // EOF on the master means the shell is gone. Emitting the code on the SAME channel
         // keeps ordering: every byte the shell wrote is delivered before its exit.
         let code = child_for_exit.lock().ok().and_then(|mut c| c.wait().ok()).map(|s| s.exit_code() as i32);
@@ -151,6 +126,22 @@ pub fn open_session_with(
         .map_err(|_| "pty registry poisoned".to_string())?
         .insert(id.clone(), Session { master: pair.master, writer, child });
     Ok(id)
+}
+
+fn read_output(reader: &mut dyn Read, sink: &impl Fn(PtyMsg)) {
+    let mut raw = [0u8; 8192];
+    loop {
+        match reader.read(&mut raw) {
+            Ok(0) | Err(_) => break,
+            Ok(n) => {
+                // A blocking read cannot enforce a flush deadline: a short prompt or
+                // cursor query may be the last output until the terminal responds.
+                sink(PtyMsg::Output {
+                    b64: base64::engine::general_purpose::STANDARD.encode(&raw[..n]),
+                });
+            }
+        }
+    }
 }
 
 pub fn write_session(state: &PtyState, id: &str, data: &str) -> Result<(), String> {
@@ -255,4 +246,73 @@ pub fn term_resize(state: tauri::State<'_, PtyState>, term_id: String, cols: u16
 #[tauri::command]
 pub fn term_close(state: tauri::State<'_, PtyState>, term_id: String) -> Result<(), String> {
     close_session(&state, &term_id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    #[test]
+    fn short_output_is_delivered_before_the_next_blocking_read() {
+        struct Burst<'a> { sent: bool, delivered: &'a AtomicBool }
+        impl Read for Burst<'_> {
+            fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+                if self.sent {
+                    assert!(self.delivered.load(Ordering::SeqCst),
+                        "short output was buffered when the reader blocked for more input");
+                    return Ok(0);
+                }
+                self.sent = true;
+                buf[..4].copy_from_slice(b"\x1b[6n");
+                Ok(4)
+            }
+        }
+        let delivered = AtomicBool::new(false);
+        let mut reader = Burst { sent: false, delivered: &delivered };
+        read_output(&mut reader, &|msg| {
+            if let PtyMsg::Output { b64 } = msg {
+                assert_eq!(base64::engine::general_purpose::STANDARD.decode(b64).unwrap(), b"\x1b[6n");
+                delivered.store(true, Ordering::SeqCst);
+            }
+        });
+        assert!(delivered.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn raw_chunks_are_delivered_in_order_before_eof_or_read_error() {
+        struct Chunks {
+            chunks: std::vec::IntoIter<Vec<u8>>,
+            end_with_error: bool,
+        }
+        impl Read for Chunks {
+            fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+                match self.chunks.next() {
+                    Some(bytes) => {
+                        buf[..bytes.len()].copy_from_slice(&bytes);
+                        Ok(bytes.len())
+                    }
+                    None if self.end_with_error => Err(std::io::Error::new(
+                        std::io::ErrorKind::BrokenPipe, "controlled stream end")),
+                    None => Ok(0),
+                }
+            }
+        }
+        // Terminal sequences and UTF-8 may split across reads; invalid bytes must
+        // also survive the base64 transport without lossy string conversion.
+        let chunks = vec![b"\x1b[".to_vec(), b"6n".to_vec(), vec![0xff, 0],
+            vec![0xf0, 0x9f], vec![0x98, 0x80]];
+        for end_with_error in [false, true] {
+            let mut reader = Chunks { chunks: chunks.clone().into_iter(), end_with_error };
+            let observed = Mutex::new(Vec::new());
+            read_output(&mut reader, &|msg| {
+                if let PtyMsg::Output { b64 } = msg {
+                    observed.lock().unwrap().push(
+                        base64::engine::general_purpose::STANDARD.decode(b64).unwrap());
+                }
+            });
+            assert_eq!(*observed.lock().unwrap(), chunks);
+        }
+    }
+
 }

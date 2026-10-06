@@ -1,13 +1,228 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { installPlan, verifyChecksum, launchAgent } from './npm-install.mjs';
+import { installPlan, verifyChecksum, launchAgent, quitMacDesktop, installMac } from './npm-install.mjs';
 import { systemdUnit, desktopEntry, cliLauncher, psCommand, windowsShortcut, verifyNativeHeader, verifyWindowsSignature } from './npm-install-platforms.mjs';
 import { installPortable, snapshotFiles, restoreFiles } from './npm-install-portable.mjs';
-import { mkdtemp, mkdir, readFile, writeFile, rm, lstat } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, writeFile, rm, lstat, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { runInNewContext } from 'node:vm';
+
+function macQuery(source, identifiers) {
+  return runInNewContext(source, {
+    ObjC: { import() {}, unwrap: value => value },
+    $: { NSWorkspace: { sharedWorkspace: { runningApplications: {
+      count: identifiers.length, objectAtIndex: i => ({ bundleIdentifier: identifiers[i] }),
+    } } } },
+  });
+}
+
+for (const identifiers of [[], ['other.chimera.desktop', null], ['dev.chimera.desktop.helper']]) {
+  test(`macOS skips graceful quit for absent/not-running exact bundle: ${JSON.stringify(identifiers)}`, async () => {
+    let queries = 0;
+    await quitMacDesktop(async (cmd, args) => {
+      assert.equal(cmd, '/usr/bin/osascript');
+      assert.deepEqual(args.slice(0, 3), ['-l', 'JavaScript', '-e']);
+      queries++;
+      return { stdout: String(macQuery(args[3], identifiers)) };
+    });
+    assert.equal(queries, 1);
+  });
+}
+
+test('macOS quits the exact running bundle gracefully and waits for exit', async () => {
+  let running = true, quits = 0, queries = 0, pauses = 0;
+  await quitMacDesktop(async (cmd, args, options) => {
+    assert.equal(cmd, '/usr/bin/osascript');
+    assert.ok(options.timeout > 0 && options.timeout <= 15_000);
+    if (args[0] === '-l') {
+      queries++;
+      return { stdout: String(macQuery(args[3], running ? ['dev.chimera.desktop'] : [])) };
+    }
+    assert.deepEqual(args, ['-e', 'set bundleID to "dev.chimera.desktop"\nif application id bundleID is running then\n tell application id bundleID to quit\nend if']);
+    quits++;
+    return { stdout: '' };
+  }, async () => { pauses++; running = false; });
+  assert.equal(quits, 1); assert.equal(queries, 3); assert.equal(pauses, 1);
+});
+
+test('macOS preserves detection, permission and quit failures', async () => {
+  for (const phase of ['detection', 'quit', 'after-quit']) {
+    const failure = new Error(`${phase}: permission denied (-1743)`);
+    let queries = 0;
+    await assert.rejects(quitMacDesktop(async (_cmd, args) => {
+      if (args[0] === '-l') {
+        queries++;
+        if (phase === 'detection' || phase === 'after-quit' && queries > 1) throw failure;
+        return { stdout: 'true' };
+      }
+      if (phase === 'quit') throw failure;
+      return { stdout: '' };
+    }), error => error === failure);
+  }
+  await assert.rejects(quitMacDesktop(async () => ({ stdout: '' })), /Could not determine/);
+  let time = 0;
+  await assert.rejects(quitMacDesktop(async () => ({ stdout: 'true' }), async ms => { time += ms; }, () => time), /did not quit/);
+  assert.equal(time, 10_000);
+});
+
+test('macOS slow positive exit queries share one deadline rather than extending the budget', async () => {
+  let time = 0, queries = 0;
+  const timeouts = [], pauses = [];
+  await assert.rejects(quitMacDesktop(async (_cmd, args, { timeout }) => {
+    if (args[0] !== '-l') { assert.equal(timeout, 15_000); return { stdout: '' }; }
+    timeouts.push(timeout);
+    queries++;
+    if (queries === 2) time += 6000;
+    if (queries === 3) time += 3800;
+    assert.ok(queries <= 3, 'deadline must prevent another query');
+    return { stdout: 'true' };
+  }, async ms => { pauses.push(ms); time += ms; }, () => time), /did not quit/);
+  assert.deepEqual(timeouts, [15_000, 10_000, 3900]);
+  assert.deepEqual(pauses, [100, 100]);
+  assert.equal(time, 10_000);
+});
+
+test('macOS stubborn app caps the last pause and preserves a timed-out query error', async () => {
+  let time = 0, queries = 0;
+  const pauses = [];
+  await assert.rejects(quitMacDesktop(async (_cmd, args, { timeout }) => {
+    if (args[0] === '-l' && ++queries > 1) {
+      assert.equal(timeout, 10_000 - time);
+      time += 30;
+    }
+    return { stdout: 'true' };
+  }, async ms => { pauses.push(ms); time += ms; }, () => time), /did not quit/);
+  assert.equal(time, 10_000);
+  assert.equal(pauses.at(-1), 90);
+  const failure = new Error('query subprocess timed out');
+  time = 0; queries = 0;
+  await assert.rejects(quitMacDesktop(async (_cmd, args, { timeout }) => {
+    if (args[0] === '-l' && ++queries > 1) {
+      assert.equal(timeout, 10_000);
+      time += timeout;
+      throw failure;
+    }
+    return { stdout: 'true' };
+  }, async ms => { time += ms; }, () => time), error => error === failure);
+  assert.equal(time, 10_000); assert.equal(queries, 2);
+});
+
+test('native macOS compilation reproduces old first-install failure without targeting Chimera', { skip: process.platform !== 'darwin' }, async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'chimera-compile-test-'));
+  const missing = `dev.chimera.installer-test.missing-${process.pid}`;
+  try {
+    const old = spawnSync('/usr/bin/osacompile', ['-o', join(dir, 'old.scpt'), '-e', `if application id "${missing}" is running then\n tell application id "${missing}" to quit\nend if`], { encoding: 'utf8' });
+    assert.notEqual(old.status, 0); assert.match(old.stderr, /-1728/);
+    execFileSync('/usr/bin/osacompile', ['-o', join(dir, 'new.scpt'), '-e', `set bundleID to "${missing}"\nif application id bundleID is running then\n tell application id bundleID to quit\nend if`]);
+    await quitMacDesktop(async (cmd, args) => {
+      assert.equal(args[0], '-l'); // Never execute any quit command against a live app.
+      return { stdout: execFileSync(cmd, [...args.slice(0, 3), args[3].replaceAll('dev.chimera.desktop', missing)], { encoding: 'utf8' }) };
+    });
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test('packed npm CLI has no desktop lifecycle hook and explicit install --dry-run is offline', { skip: process.platform === 'win32' }, async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'chimera-packed-installer-test-'));
+  const root = fileURLToPath(new URL('../', import.meta.url));
+  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('CHIMERA_') && !['NODE_OPTIONS', 'NODE_PATH'].includes(key)));
+  env.HOME = join(dir, 'home');
+  try {
+    execFileSync(process.execPath, [join(root, 'scripts/build-npm.mjs')], { cwd: root, env });
+    const packed = JSON.parse(execFileSync('npm', ['pack', join(root, 'dist/npm'), '--offline', '--ignore-scripts', '--json', '--pack-destination', dir], { env, encoding: 'utf8' }));
+    execFileSync('/usr/bin/tar', ['-xzf', join(dir, packed[0].filename), '-C', dir]);
+    const base = join(dir, 'package');
+    const manifest = JSON.parse(await readFile(join(base, 'package.json'), 'utf8'));
+    // Plain npm install (including --global) cannot trigger the desktop installer.
+    assert.equal(manifest.scripts, undefined);
+    for (const file of ['npm-install.mjs', 'npm-install-portable.mjs', 'npm-install-platforms.mjs']) await lstat(join(base, 'scripts', file));
+    assert.match(await readFile(join(base, 'scripts/npm-install.mjs'), 'utf8'), /NSWorkspace/);
+    const cli = join(base, manifest.bin.chimera);
+    assert.equal(execFileSync(process.execPath, [cli, '--version'], { env, encoding: 'utf8' }).trim(), manifest.version);
+    const plan = JSON.parse(execFileSync(process.execPath, [cli, 'install', '--dry-run'], { env, encoding: 'utf8' }));
+    assert.equal(plan.version, manifest.version);
+    assert.ok(plan.download.includes(`/v${manifest.version}/`));
+    assert.equal(plan.home, env.HOME);
+    // npm pack may create its cache under HOME; the desktop dry-run must create
+    // none of the installer-managed app, CLI, daemon-state or service paths.
+    for (const path of [plan.app, plan.root, plan.bin, plan.state, plan.plist ?? plan.serviceFile]) {
+      await assert.rejects(lstat(path), { code: 'ENOENT' });
+    }
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+for (const scenario of ['fresh', 'closed', 'running', 'detection-error', 'quit-error', 'activation-error']) {
+  test(`macOS offline installation transaction: ${scenario}`, async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'chimera-mac-install-test-'));
+    const plan = installPlan({ version: '1.0.0' }, { platform: 'darwin', arch: 'arm64', home: dir });
+    const manifest = { name: '@test/chimera', version: plan.version, bin: { chimera: 'cli.js', chimerad: 'daemon.js' } };
+    const bin = join(plan.bin, 'chimera'), oldPlist = 'com.chimera.chimerad old chimerad';
+    const existing = scenario !== 'fresh', failure = scenario.endsWith('error');
+    const payload = Buffer.from('offline signed app fixture'), hash = createHash('sha256').update(payload).digest('hex');
+    const calls = [];
+    let appRunning = ['running', 'quit-error'].includes(scenario), daemonRunning = existing;
+    await mkdir(plan.bin, { recursive: true });
+    if (existing) {
+      await mkdir(plan.app, { recursive: true }); await writeFile(join(plan.app, 'old'), 'original bundle');
+      await writeFile(bin, '# Chimera npm installer\noriginal CLI', { mode: 0o755 });
+      await mkdir(join(dir, 'Library/LaunchAgents'), { recursive: true }); await writeFile(plan.plist, oldPlist);
+    }
+    const run = async (cmd, args) => {
+      calls.push({ cmd, args });
+      if (cmd === '/usr/bin/osascript') {
+        if (args[0] === '-l') {
+          if (scenario === 'detection-error') throw new Error('detection denied');
+          return { stdout: String(macQuery(args[3], appRunning ? ['dev.chimera.desktop'] : [])) };
+        }
+        if (scenario === 'quit-error') throw new Error('quit denied (-1743)');
+        appRunning = false;
+      }
+      if (cmd === '/usr/libexec/PlistBuddy') return { stdout: args[1].includes('Version') ? plan.version : 'dev.chimera.desktop' };
+      if (args[0] === '-tzf') return { stdout: 'chimera.app/Contents/Info.plist\n' };
+      if (args.includes('pack')) return { stdout: '[{"filename":"fixture.tgz"}]' };
+      if (cmd === '/usr/bin/ditto') { await mkdir(args[1]); await writeFile(join(args[1], 'new'), 'new bundle'); }
+      if (cmd === '/bin/launchctl') {
+        if (args[0] === 'print' && !existing) throw new Error('not loaded');
+        if (args[0] === 'bootout') daemonRunning = false;
+        if (args[0] === 'bootstrap') {
+          if (scenario === 'activation-error' && await readFile(plan.plist, 'utf8') !== oldPlist) throw new Error('activation denied');
+          daemonRunning = true;
+        }
+      }
+      return { stdout: '' };
+    };
+    const Client = { connect: async () => {
+      if (!daemonRunning) throw new Error('not running');
+      return { request: async method => { if (method === 'daemon.stop') daemonRunning = false; return {}; }, close() {} };
+    } };
+    try {
+      const task = installMac({ manifest, plan, args: ['--no-open'], packageRoot: dir }, {
+        run, ChimeraClient: Client,
+        download: async url => url === plan.checksums ? Buffer.from(`${hash}  ${plan.asset}\n`) : payload,
+      });
+      if (failure) {
+        await assert.rejects(task, /detection denied|quit denied|activation denied/);
+        assert.equal(await readFile(join(plan.app, 'old'), 'utf8'), 'original bundle');
+        assert.equal(await readFile(bin, 'utf8'), '# Chimera npm installer\noriginal CLI');
+        assert.equal((await lstat(bin)).mode & 0o777, 0o755);
+        assert.equal(await readFile(plan.plist, 'utf8'), oldPlist);
+        assert.equal(daemonRunning, true);
+        assert.deepEqual(await readdir(join(plan.root, 'releases')), []);
+      } else {
+        await task;
+        assert.equal(await readFile(join(plan.app, 'new'), 'utf8'), 'new bundle');
+        assert.match(await readFile(bin, 'utf8'), /Chimera npm installer/);
+        assert.match(await readFile(plan.plist, 'utf8'), /ProgramArguments/);
+        assert.equal(daemonRunning, true);
+      }
+      assert.equal(calls.filter(c => c.cmd === '/usr/bin/osascript' && c.args[0] === '-e').length, ['running', 'quit-error'].includes(scenario) ? 1 : 0);
+      assert.ok(!calls.some(c => /pkill|killall|\/open$/.test(c.cmd)));
+    } finally { await rm(dir, { recursive: true, force: true }); }
+  });
+}
 
 test('pins desktop asset and checksum to CLI version and architecture', () => {
   const plan = installPlan({ version: '1.2.3' }, { platform: 'darwin', arch: 'arm64', home: '/Users/test space' });

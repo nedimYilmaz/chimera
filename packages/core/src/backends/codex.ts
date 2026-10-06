@@ -18,6 +18,7 @@ import { validateJsonSchemaLite } from "../json-schema-lite.js";
 import { prepareCodexInput, type CodexInput, type CodexTurnInput } from "./codex-input.js";
 import { resolveCodexBinary, validateCodexModel } from "../providers/codex-cli-models.js";
 import { CodexSessionUsage, codexUsage, codexUsageDelta } from "./codex-session-usage.js";
+import { CodexSessionImages, isCodexRolloutSessionId } from "./codex-session-images.js";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { CodexAppServer } from "./codex-app-server.js";
@@ -78,6 +79,8 @@ const defaultFactory: CodexFactory = (opts) =>
   } as ConstructorParameters<typeof Codex>[0]) as unknown as CodexLike;
 
 type CodexItem = { type: string; [k: string]: unknown };
+const isCodexImageItem = (item: CodexItem | undefined): boolean => item?.type === "imageGeneration"
+  || item?.type === "Extension" && item.kind === "image_gen.generation";
 
 // AGENT-FAILURE-REACHES-CONDUCTOR: unlike claude.ts (which owns its own child process spawn),
 // this backend never touches a ChildProcess directly — @openai/codex-sdk spawns `codex exec`
@@ -144,6 +147,9 @@ export function normalizeCodexEvent(ev: CodexThreadEvent, deltas?: Map<string, s
 
 function normalizeCodexEventContent(ev: CodexThreadEvent, deltas?: Map<string, string>, effectiveModel?: string, effort?: string): BackendEvent | BackendEvent[] | null {
   switch (ev.type) {
+    case "image_output.warning":
+      return { kind: "message_complete", data: { role: "system", imageOutputOmitted: true, reason: String(ev.reason ?? "unavailable").slice(0, 80),
+        text: `Codex native image output omitted (${String(ev.reason ?? "unavailable").slice(0, 80)}).` } };
     case "goal.updated":
       return { kind: "status", data: { nativeGoalSummary: ev["summary"] }, raw: ev };
     case "thread.usage":
@@ -175,7 +181,7 @@ function normalizeCodexEventContent(ev: CodexThreadEvent, deltas?: Map<string, s
       const item = ev["item"] as CodexItem;
       const completed = ev.type === "item.completed";
       const started = ev.type === "item.started";
-      switch (item.type) {
+      switch (isCodexImageItem(item) ? "imageGeneration" : item.type) {
         case "contextCompaction":
         case "context_compaction":
           return started || completed ? { kind: "compaction", data: { phase: started ? "start" : "end", owner: "sdk" }, raw: ev } : null;
@@ -625,9 +631,35 @@ export class CodexAgentBackend implements AgentBackend {
         ...(sample.window ? { modelContextWindow: sample.window, effectiveContextLimit: Math.min(spec.compactionThreshold ?? sample.window, sample.window) } : {}) } });
     };
     const deltas = new Map<string, string>();   // per-item last emitted agent_message text (message_delta contract)
+    let imageReader: CodexSessionImages | undefined;
+    let imageReaderId: string | undefined;
+    let imageSince = 0;
+    let nextImageRead = 0;
+    const streamedImages = new Set<string>();
+    const deliveredImages = new Set<string>();
+    const readImages = async (id: string, force = false, final = false): Promise<void> => {
+      // Other thread-ID formats have no supported native rollout namespace.
+      if (transport !== "exec" || loop.killed || !isCodexRolloutSessionId(id)) return;
+      if (imageReaderId !== id) {
+        imageReaderId = id;
+        imageReader = new CodexSessionImages(factoryOptions.env?.CODEX_HOME ?? join(homedir(), ".codex"), id, imageSince);
+      }
+      if (!force && Date.now() < nextImageRead) return;
+      nextImageRead = Date.now() + 1_000;
+      for (const event of await imageReader!.read(final)) {
+        const item = event.item as CodexItem | undefined;
+        if (typeof item?.id === "string" && streamedImages.has(item.id)) continue;
+        emitRaw(event);
+      }
+    };
 
     const emitRaw = (raw: CodexThreadEvent): void => {
       if (loop.killed) return;
+      const imageItem = raw.item as CodexItem | undefined;
+      if (transport === "exec" && isCodexImageItem(imageItem) && typeof imageItem?.id === "string") {
+        if (deliveredImages.has(imageItem.id)) return;
+        if (raw.type === "item.completed") deliveredImages.add(imageItem.id);
+      }
       if (typeof raw.modelContextWindow === "number" && Number.isFinite(raw.modelContextWindow) && raw.modelContextWindow > 0) {
         contextLimits = { ...contextLimits, sessionWindow: raw.modelContextWindow };
       }
@@ -650,7 +682,7 @@ export class CodexAgentBackend implements AgentBackend {
         if (ev.kind === "agent_started") ev.data = { ...ev.data, codexTransport: transport, nativeApprovals: transport === "app-server", nativeDialogs: transport === "app-server" && spec.autonomy !== "full", supportsSteer: transport === "app-server", ...(transport === "app-server" ? { nativeVoice: spec.providerOptions["codexRealtime"] === true } : {}) };
         // Explicit commentary is progress, not a final response. Exec versions
         // without phase metadata still identify their response by item completion.
-        if (ev.kind === "message_complete" && (raw.item as Record<string, unknown> | undefined)?.phase !== "commentary") lastText = String(ev.data["text"] ?? "");
+        if (ev.kind === "message_complete" && ev.data.role !== "system" && (raw.item as Record<string, unknown> | undefined)?.phase !== "commentary") lastText = String(ev.data["text"] ?? "");
         if (ev.kind === "turn_complete") {
           if (raw["maintenance"] === true) {
             if (resultBeforeTurn) {
@@ -742,6 +774,16 @@ export class CodexAgentBackend implements AgentBackend {
                 controller.signal.throwIfAborted();
               }
               prepared = prepareCodexInput(prompt);
+              if (transport === "exec") {
+                imageSince = Date.now(); nextImageRead = 0;
+                streamedImages.clear(); deliveredImages.clear(); imageReader = undefined; imageReaderId = undefined;
+                const knownId = spec.resume ?? thread.id;
+                if (knownId && isCodexRolloutSessionId(knownId)) {
+                  imageReaderId = knownId;
+                  imageReader = new CodexSessionImages(factoryOptions.env?.CODEX_HOME ?? join(homedir(), ".codex"), knownId, imageSince);
+                  for (const warning of await imageReader.prime()) emitRaw(warning);
+                }
+              }
               const { events } = await thread.runStreamed(prepared.input, {
                 signal: controller.signal,
                 // W2-1 STRUCTURED-RETURNS: verified against pinned SDK 0.145.0's dist/index.d.ts —
@@ -764,16 +806,29 @@ export class CodexAgentBackend implements AgentBackend {
                 if (interruptForSteer && controller.signal.aborted) continue;
                 const id = typeof raw["thread_id"] === "string" ? raw["thread_id"] : thread.id;
                 if (transport === "exec" && id && raw.type !== "thread.started") await readTelemetry(id, raw.type === "turn.completed");
+                // A future exec can forward native images itself. Register its ID
+                // before rollout ingestion so the same image is persisted once.
+                const streamedItem = raw.item as CodexItem | undefined;
+                if (raw.type === "item.completed" && isCodexImageItem(streamedItem) && typeof streamedItem?.id === "string") streamedImages.add(streamedItem.id);
+                const terminalFailure = raw.type === "turn.failed" || raw.type === "error";
+                // Preserve only images already available at failure. Waiting for
+                // another provider frame would weaken the existing error exit.
+                if (transport === "exec" && id && raw.type !== "thread.started") await readImages(id, raw.type === "turn.completed" || terminalFailure, terminalFailure);
                 emitRaw(raw);
                 if (transport === "exec" && id && raw.type === "thread.started") await readTelemetry(id, true);
                 if (failed) return;
               }
               // The SDK iterator closes only after exec exits and flushes its rollout.
               if (transport === "exec" && thread.id) await readTelemetry(thread.id, true);
+              if (transport === "exec" && imageReaderId) await readImages(imageReaderId, true, true);
+              if (failed) return;
               // Some iterators finish cleanly on cancellation instead of throwing.
               if (interruptForSteer) controller.signal.throwIfAborted();
             } catch (turnErr) {
               if (loop.killed) return;
+              // Cancellation can flush a completed image after the last stdout
+              // event. Preserve that real result before opening the next turn.
+              if (transport === "exec" && imageReaderId) await readImages(imageReaderId, true, true);
               const timeoutReason = turnCtl.consumeTimeout();
               if (timeoutReason) {
                 sink({ kind: "turn_timeout", data: { reason: timeoutReason, elapsedMs: turnCtl.elapsedMs, idleTimeoutMs: spec.idleTimeoutMs, maxTurnDurationMs: spec.maxTurnDurationMs } });

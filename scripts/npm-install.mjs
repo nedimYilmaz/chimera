@@ -80,6 +80,38 @@ export async function download(url, limit) {
   return Buffer.concat(chunks);
 }
 
+export async function quitMacDesktop(run = exec, pause = ms => new Promise(r => setTimeout(r, ms)), now = () => performance.now()) {
+  // NSWorkspace enumerates running bundles without asking LaunchServices to resolve an
+  // installed app. AppleScript's literal application-id reference fails at compile time
+  // on a fresh machine, even inside an "is running" guard.
+  const query = `ObjC.import('AppKit');
+var apps = $.NSWorkspace.sharedWorkspace.runningApplications;
+var found = false;
+for (var i = 0; i < apps.count; i++) {
+  if (ObjC.unwrap(apps.objectAtIndex(i).bundleIdentifier) === 'dev.chimera.desktop') found = true;
+}
+found;`;
+  const running = async (timeout = 15_000) => {
+    const { stdout } = await run('/usr/bin/osascript', ['-l', 'JavaScript', '-e', query], { timeout });
+    if (!['true', 'false'].includes(stdout.trim())) throw new Error('Could not determine whether the Chimera desktop is running');
+    return stdout.trim() === 'true';
+  };
+  if (!await running()) return;
+  // Resolve the identity at runtime so compilation never needs a registered bundle.
+  await run('/usr/bin/osascript', ['-e', 'set bundleID to "dev.chimera.desktop"\nif application id bundleID is running then\n tell application id bundleID to quit\nend if'], { timeout: 15_000 });
+  // Queries and pauses share one monotonic budget: a slow positive query must
+  // not reset the exit wait while the daemon is stopped for the bundle swap.
+  const deadline = now() + 10_000;
+  while (now() < deadline) {
+    const remaining = deadline - now();
+    if (remaining < 1) break;
+    if (!await running(Math.floor(remaining))) return;
+    const delay = Math.min(100, deadline - now());
+    if (delay > 0) await pause(delay);
+  }
+  throw new Error('Existing Chimera desktop did not quit; installation rolled back');
+}
+
 export async function install(args = process.argv.slice(3)) {
   for (const arg of args) if (!['--dry-run', '--no-open'].includes(arg)) throw new Error(`Unknown install option: ${arg}`);
   const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -90,6 +122,13 @@ export async function install(args = process.argv.slice(3)) {
   if (process.getuid?.() === 0) throw new Error('Run this installer as your normal user, without sudo.');
   if (process.env.CHIMERA_HOME && resolve(process.env.CHIMERA_HOME) !== plan.state) throw new Error('Combined desktop installation uses ~/.chimera. Unset CHIMERA_HOME, or use the existing source installer for custom state paths.');
   if (plan.platform !== 'darwin') return (await import('./npm-install-portable.mjs')).installPortable({ manifest, plan, args, packageRoot });
+  return installMac({ manifest, plan, args, packageRoot });
+}
+
+// Dependencies are injectable for offline transaction tests; production uses the native
+// commands and the client from the exact permanent npm payload being installed.
+export async function installMac({ manifest, plan, args, packageRoot }, { run = exec, download: fetchRelease = download, ChimeraClient: Client } = {}) {
+  const exec = run;
   await exec('git', ['--version']);
   await exec('npm', ['--version']);
   const service = `gui/${process.getuid()}/${label}`;
@@ -119,8 +158,8 @@ export async function install(args = process.argv.slice(3)) {
   let releaseDir, oldApp, newApp = false, changed = false, loaded = false, committed = false, retainRelease = false;
   try {
     console.log(`Downloading signed desktop ${plan.version} (${process.arch})…`);
-    const checksums = await download(plan.checksums, 1024 * 1024);
-    const bytes = await download(plan.download, 1024 * 1024 * 1024);
+    const checksums = await fetchRelease(plan.checksums, 1024 * 1024);
+    const bytes = await fetchRelease(plan.download, 1024 * 1024 * 1024);
     verifyChecksum(bytes, checksums.toString('utf8'), plan.asset);
     const archive = join(temp, plan.asset);
     await writeFile(archive, bytes);
@@ -151,7 +190,7 @@ export async function install(args = process.argv.slice(3)) {
     await mkdir(plan.bin, { recursive: true });
     await mkdir(dirname(plan.plist), { recursive: true });
     await mkdir(plan.state, { recursive: true, mode: 0o700 });
-    const { ChimeraClient } = await import(pathToFileURL(join(permanent, 'packages/client/src/client.js')).href);
+    const ChimeraClient = Client ?? (await import(pathToFileURL(join(permanent, 'packages/client/src/client.js')).href)).ChimeraClient;
     loaded = await exec('/bin/launchctl', ['print', service]).then(() => true, () => false);
     changed = true;
     if (loaded) await exec('/bin/launchctl', ['bootout', service]);
@@ -164,8 +203,7 @@ export async function install(args = process.argv.slice(3)) {
       connected.close(); await new Promise(r => setTimeout(r, 100));
     }
     if (!stopped) throw new Error('Existing daemon did not stop; installation rolled back');
-    // Quit only our bundle ID; do not kill unrelated Electron/Tauri processes.
-    await exec('/usr/bin/osascript', ['-e', 'if application id "dev.chimera.desktop" is running then\n tell application id "dev.chimera.desktop" to quit\nend if'], { timeout: 15_000 });
+    await quitMacDesktop(exec);
     if (await exists(plan.app)) {
       const backup = `${plan.app}.backup-${Date.now()}`;
       await rename(plan.app, backup);
