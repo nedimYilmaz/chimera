@@ -6,7 +6,6 @@ import { systemdUnit, desktopEntry, cliLauncher, psCommand, windowsShortcut, ver
 import { installPortable, snapshotFiles, restoreFiles } from './npm-install-portable.mjs';
 import { mkdtemp, mkdir, readFile, writeFile, rm, lstat, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { runInNewContext } from 'node:vm';
@@ -125,37 +124,12 @@ test('native macOS compilation reproduces old first-install failure without targ
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
-test('packed npm CLI has no desktop lifecycle hook and explicit install --dry-run is offline', { skip: process.platform === 'win32' }, async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'chimera-packed-installer-test-'));
-  const root = fileURLToPath(new URL('../', import.meta.url));
-  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('CHIMERA_') && !['NODE_OPTIONS', 'NODE_PATH'].includes(key)));
-  env.HOME = join(dir, 'home');
-  try {
-    execFileSync(process.execPath, [join(root, 'scripts/build-npm.mjs')], { cwd: root, env });
-    const packed = JSON.parse(execFileSync('npm', ['pack', join(root, 'dist/npm'), '--offline', '--ignore-scripts', '--json', '--pack-destination', dir], { env, encoding: 'utf8' }));
-    execFileSync('/usr/bin/tar', ['-xzf', join(dir, packed[0].filename), '-C', dir]);
-    const base = join(dir, 'package');
-    const manifest = JSON.parse(await readFile(join(base, 'package.json'), 'utf8'));
-    // Plain npm install (including --global) cannot trigger the desktop installer.
-    assert.equal(manifest.scripts, undefined);
-    for (const file of ['npm-install.mjs', 'npm-install-portable.mjs', 'npm-install-platforms.mjs']) await lstat(join(base, 'scripts', file));
-    assert.match(await readFile(join(base, 'scripts/npm-install.mjs'), 'utf8'), /NSWorkspace/);
-    const cli = join(base, manifest.bin.chimera);
-    assert.equal(execFileSync(process.execPath, [cli, '--version'], { env, encoding: 'utf8' }).trim(), manifest.version);
-    const plan = JSON.parse(execFileSync(process.execPath, [cli, 'install', '--dry-run'], { env, encoding: 'utf8' }));
-    assert.equal(plan.version, manifest.version);
-    assert.ok(plan.download.includes(`/v${manifest.version}/`));
-    assert.equal(plan.home, env.HOME);
-    // npm pack may create its cache under HOME; the desktop dry-run must create
-    // none of the installer-managed app, CLI, daemon-state or service paths.
-    for (const path of [plan.app, plan.root, plan.bin, plan.state, plan.plist ?? plan.serviceFile]) {
-      await assert.rejects(lstat(path), { code: 'ENOENT' });
-    }
-  } finally { await rm(dir, { recursive: true, force: true }); }
-});
-
 for (const scenario of ['fresh', 'closed', 'running', 'detection-error', 'quit-error', 'activation-error']) {
-  test(`macOS offline installation transaction: ${scenario}`, async () => {
+  test(`macOS offline installation transaction: ${scenario}`, async t => {
+    // The mocked macOS transaction needs a UID even when this suite runs on Windows.
+    const uid = Object.getOwnPropertyDescriptor(process, 'getuid');
+    Object.defineProperty(process, 'getuid', { configurable: true, value: () => 501 });
+    t.after(() => { if (uid) Object.defineProperty(process, 'getuid', uid); else delete process.getuid; });
     const dir = await mkdtemp(join(tmpdir(), 'chimera-mac-install-test-'));
     const plan = installPlan({ version: '1.0.0' }, { platform: 'darwin', arch: 'arm64', home: dir });
     const manifest = { name: '@test/chimera', version: plan.version, bin: { chimera: 'cli.js', chimerad: 'daemon.js' } };

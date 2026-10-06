@@ -38,7 +38,7 @@ jobs:
       - run: npm install --global pnpm@11.11.0
       - run: pnpm install --frozen-lockfile
       - run: node scripts/audit-secrets.mjs
-      - run: node --test scripts/npm-install.test.mjs
+      - run: node --test scripts/npm-install.test.mjs scripts/npm-build.test.mjs
       - name: Build JavaScript distribution
         env:
           RELEASE_NAME: ${{ inputs.package_name }}
@@ -81,4 +81,7 @@ jobs:
         shell: bash
         run: |
           node --test scripts/npm-install.test.mjs
-          npm run test:npm -- "$PWD"/artifact/*.tgz
+          artifacts=(artifact/*.tgz)
+          test "${#artifacts[@]}" -eq 1
+          CHIMERA_NPM_ARTIFACT="${artifacts[0]}" node --test scripts/npm-artifact.test.mjs
+          npm run test:npm -- "${artifacts[0]}"
