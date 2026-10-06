@@ -262,7 +262,9 @@ export class QueueScheduler {
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private unsub: (() => void) | null = null;
 
-  constructor(private deps: SchedulerDeps) {}
+  constructor(private deps: SchedulerDeps) {
+    deps.queues.setPrincipalResolver(from => deps.supervisor.principalFor(from));
+  }
 
   attach(): void {
     this.unsub ??= this.deps.events.subscribe((e) => {
@@ -445,16 +447,16 @@ export class QueueScheduler {
   // all of Phase A's pool/spawn logic rather than duplicating it here.
   async assign(
     target: { agentId: string } | { team: string; role?: string },
-    prompt: string, priority?: number,
+    prompt: string, priority?: number, callerAgentId?: string,
   ): Promise<{ delivered: true; agentId: string } | TaskRecord> {
     if ("agentId" in target) {
-      await this.deps.supervisor.send(target.agentId, prompt, "assign");
+      await this.deps.supervisor.send(target.agentId, prompt, callerAgentId ?? "operator");
       return { delivered: true, agentId: target.agentId };
     }
     const team = this.deps.teams.get(target.team);   // throws UnknownTeamError
     if (!team.queue) throw new SchedulerError(`team "${target.team}" has no queue to assign into`);
     const task = this.deps.queues.push(team.queue, {
-      prompt, role: target.role ?? null, priority: priority ?? 0, overrides: {},
+      prompt, role: target.role ?? null, priority: priority ?? 0, overrides: {}, author: this.deps.supervisor.principalFor(callerAgentId ?? "operator"), pushedBy: callerAgentId ?? null,
     });
     await this.tick();
     return task;
@@ -823,7 +825,7 @@ export class QueueScheduler {
       const rec = await this.deps.supervisor.spawn(
         {
           ...agentTemplate, ...task.overrides, ...(wf ? { conductor: true } : {}), ...(workdirKey ? { workdirKey } : {}),
-          ...(stepModel ? { model: stepModel } : {}), prompt: this.withTeamPreamble(team, task.prompt), instructions,
+          ...(stepModel ? { model: stepModel } : {}), prompt: task.prompt, instructions,
         },
         // FEATURE-5: register this task's root budget node (if maxBudgetUsd is set, via
         // task.overrides/JobSpec) under the STABLE task.taskId rather than this spawn's own
@@ -836,7 +838,7 @@ export class QueueScheduler {
         // which have no parentTaskId.
         {
           membership: { team: team.name, role: roleName }, budgetNodeId: task.taskId,
-          originConductorId: task.originConductorId,
+          originConductorId: task.originConductorId, promptFrom: task.author?.from ?? task.pushedBy ?? "operator", promptAuthor: task.author,
           ...(task.parentTaskId ? { budgetParentId: task.parentTaskId } : {}),
         },
       );
@@ -969,64 +971,19 @@ export class QueueScheduler {
     return task.role ?? defaultRole;
   }
 
-  // Task B1: current members of ALL roles of `team`, EXCLUDING the about-to-spawn
-  // agent (it has no id yet — callers invoke this BEFORE supervisor.spawn). A
-  // snapshot at spawn time, not a live view — YAGNI: no live roster updates.
-  // Persistent members come from the pool (idle + busy); ephemeral members come
-  // from `tracked`, skipping anything already counted via poolIndex so a busy
-  // persistent worker (present in both `pool` and `tracked`) isn't listed twice.
-  private rosterFor(team: TeamSpec): string {
-    const members: Array<{ agentId: string; role: string }> = [];
-    const byRole = this.pool.get(team.name);
-    if (byRole) for (const [role, set] of byRole) for (const agentId of set) members.push({ agentId, role });
-    for (const [agentId, t] of this.tracked)
-      if (t.team === team.name && !this.poolIndex.has(agentId)) members.push({ agentId, role: t.role });
-    if (members.length === 0) return "none yet";
-    // short (8-char) id prefixes for readability, per the design.
-    return members.map((m) => `${m.agentId.slice(0, 8)}(${m.role})`).join(", ");
-  }
-
-  // Task B1 / SAFE-1 CACHE-PREFIX: the STATIC team-member header prepended to a team
-  // spawn's instructions (which rides the Claude system-prompt append — part of the
-  // prompt-cache prefix). Deliberately excludes the live roster and team purpose (see
-  // teamContextPreamble below) — those two are the only things that vary spawn-to-spawn
-  // (a fresh agent id joins the roster) or team-to-team (purpose), and embedding either
-  // here would make the system block byte-DIFFERENT on every single spawn, defeating
-  // Anthropic's exact-prefix cache match for every agent this daemon ever spawns. Original
-  // instructions (if any) are preserved AFTER this header, unchanged otherwise.
+  // Role instructions are separate from task bodies. Live membership is available
+  // through my_team; never snapshot the whole roster into each assignment.
   private instructionsHeader(team: TeamSpec, roleName: string, original?: string): string {
-    // AWARENESS: name the actual tools when the worker HAS them (orchestration
-    // grant → chimera MCP mounted); a worker without the grant gets only the
-    // honest who-am-I line (no tool claims it can't act on).
     const role = this.resolveTeamRole(team, roleName);
     const hasTools = role?.orchestration?.allow === true;
     const base = `You are a member of team "${team.name}" acting as role "${roleName}".`;
-    const tools = hasTools
-      ? ` You have chimera tools: my_team (live roster), ask_agent/agent_send (reach teammates by id), ask_team (broadcast), ask_human (escalate to the user), subscribe (wake on a topic instead of polling — subscribe {topic,filter,once:true} then end your turn; never poll/block-wait for daemon-visible state like gate.verdict/task.state/queue.drained), and a SHARED cross-agent memory — memory_search before starting related work (memory_search{tags:["team:${team.name}"]} narrows to this team's own guidance, auto-tagged on your writes), memory_add (kind: decision|fact) when you decide or learn something durable. Coordinate live overlap DIRECTLY: agent_send a concurrent teammate about file overlap and landing order (memory is for durable facts, not live coordination). Keep briefs, reports, and messages lean and goal-focused — outcome first, no restating context the reader can memory_search.`
+    const coordination = hasTools
+      ? " Use my_team for the live roster; agent_send teammates about file overlap and landing order."
       : "";
-    // VERIFICATION & LIFECYCLE DOCTRINE: applies to every worker regardless of role/
-    // provider (unconditional, unlike `tools` above) — a backgrounded gate or a
-    // "wait for notification" turn-end kills an ephemeral worker before the result
-    // ever lands, stranding uncommitted work (real incident, not hypothetical).
-    const doctrine = ` VERIFICATION & LIFECYCLE DOCTRINE: verify in-turn, foreground — run tsc + env-scrubbed vitest for the touched packages synchronously and read the output THIS turn; NEVER background a gate (no \`&\`, no run_in_background, no ScheduleWakeup) or end your turn to "wait for" a background test/notification — you are ephemeral and will die before it finishes, stranding the work. Slow suite → scope to touched packages/files, foreground, and wait it out. Commit BEFORE any long verification so work can never strand as uncommitted. To verify a UI/app change, use its dev seams (mock flags, tsc/vitest/build, headless renderers) — never launch, kill, or relaunch a live desktop app the user may be using.`;
-    const header = base + tools + doctrine;
+    // Ephemeral workers cannot leave verification running after their turn ends.
+    const lifecycle = " Verify touched packages in the foreground (tsc and env-scrubbed vitest); read results before ending your turn. Commit before long checks. Use dev/test seams for UI verification; never launch, kill or relaunch the operator's desktop app.";
+    const header = base + (team.purpose ? ` Team purpose: ${team.purpose}.` : "") + coordination + lifecycle;
     return original ? `${header}\n${original}` : header;
-  }
-
-  // SAFE-1 CACHE-PREFIX: the per-spawn VARIANCE split out of instructionsHeader above —
-  // live roster (a fresh id joins on every spawn) and team purpose (differs team-to-team).
-  // Prepended to the first USER turn (below the Claude system-prompt's cached prefix)
-  // instead, at every fresh-spawn call site, so the system block itself stays byte-
-  // identical across every team/spawn — the agent still receives the exact same
-  // information, just relocated, per the SDK's own excludeDynamicSections precedent
-  // (claude.ts) of moving per-session facts out of the cacheable system block.
-  private teamContextPreamble(team: TeamSpec): string {
-    const purpose = team.purpose ? ` Team purpose: ${team.purpose}.` : "";
-    return `Current teammates: ${this.rosterFor(team)}.${purpose}`;
-  }
-
-  private withTeamPreamble(team: TeamSpec, prompt: string): string {
-    return `${this.teamContextPreamble(team)}\n\n${prompt}`;
   }
 
   // ---------- D12: task workflows — resolution, prompt injection, gate machine ----------
@@ -2104,7 +2061,7 @@ export class QueueScheduler {
         // message text instead (mirrors assignPersistent's identical idle-reuse path).
         const prompt = `${this.workflowStepText(wf, stepIndex, retryReason, handoffText)}\n\n${task.prompt}`;
         this.deps.supervisor.setOriginConductor(idle, task.originConductorId);
-        await this.deps.supervisor.send(idle, prompt, "scheduler");
+        await this.deps.supervisor.send(idle, prompt, task.author?.from ?? task.pushedBy ?? "operator", undefined, false, undefined, { author: task.author, taskId: task.taskId });
         this.tracked.set(idle, { taskId: task.taskId, team: team.name, role: roleName });
         this.deps.queues.markInProgress(task.taskId, idle);
         this.deps.queues.startStep(task.taskId, stepIndex, wf.steps[stepIndex]!.id, idle);
@@ -2124,8 +2081,8 @@ export class QueueScheduler {
           task,
         );
         const rec = await this.deps.supervisor.spawn(
-          { ...agentTemplate, ...task.overrides, ...modelOverride, ...budgetOverride, ...effortOverride, persistent: true, workdirKey, prompt: this.withTeamPreamble(team, task.prompt), instructions },
-          { membership: { team: team.name, role: roleName }, budgetParentId: task.taskId, originConductorId: task.originConductorId },
+          { ...agentTemplate, ...task.overrides, ...modelOverride, ...budgetOverride, ...effortOverride, persistent: true, workdirKey, prompt: task.prompt, instructions },
+          { membership: { team: team.name, role: roleName }, budgetParentId: task.taskId, originConductorId: task.originConductorId, promptFrom: task.author?.from ?? task.pushedBy ?? "operator", promptAuthor: task.author },
         );
         pool.add(rec.agentId);
         this.poolIndex.set(rec.agentId, { team: team.name, role: roleName });
@@ -2150,8 +2107,8 @@ export class QueueScheduler {
         task,
       );
       const rec = await this.deps.supervisor.spawn(
-        { ...agentTemplate, ...task.overrides, ...modelOverride, ...budgetOverride, ...effortOverride, conductor: true, workdirKey, prompt: this.withTeamPreamble(team, task.prompt), instructions },
-        { membership: { team: team.name, role: roleName }, budgetParentId: task.taskId, originConductorId: task.originConductorId },
+        { ...agentTemplate, ...task.overrides, ...modelOverride, ...budgetOverride, ...effortOverride, conductor: true, workdirKey, prompt: task.prompt, instructions },
+        { membership: { team: team.name, role: roleName }, budgetParentId: task.taskId, originConductorId: task.originConductorId, promptFrom: task.author?.from ?? task.pushedBy ?? "operator", promptAuthor: task.author },
       );
       this.tracked.set(rec.agentId, { taskId: task.taskId, team: team.name, role: roleName });
       this.deps.queues.markInProgress(task.taskId, rec.agentId);
@@ -2325,7 +2282,7 @@ export class QueueScheduler {
     try {
       spawned = await this.deps.supervisor.spawn(
         { ...agentTemplate, workdirKey, conductor: false, persistent: false, prompt },
-        { membership: { team: team.name, role: roleName }, budgetParentId: task.taskId, originConductorId: task.originConductorId },
+        { membership: { team: team.name, role: roleName }, budgetParentId: task.taskId, originConductorId: task.originConductorId, promptFrom: task.author?.from ?? task.pushedBy ?? "operator", promptAuthor: task.author },
       );
     } catch (err) {
       // Fails CLOSED to "revise" (consumes one round) rather than hard-failing the task on a
@@ -2386,7 +2343,7 @@ export class QueueScheduler {
       // fanned out — see spawnForTask's identical comment.
       const prompt = wf ? `${this.workflowStepText(wf, task.stepIndex, undefined, this.mergeSummaryText(task))}\n\n${task.prompt}` : task.prompt;
       this.deps.supervisor.setOriginConductor(idle, task.originConductorId);
-      await this.deps.supervisor.send(idle, prompt, "scheduler");
+      await this.deps.supervisor.send(idle, prompt, task.author?.from ?? task.pushedBy ?? "operator", undefined, false, undefined, { author: task.author, taskId: task.taskId });
       this.tracked.set(idle, { taskId: task.taskId, team: team.name, role: roleName });
       this.deps.queues.markInProgress(task.taskId, idle);
       if (wf && task.workflow === null) this.deps.queues.pinWorkflow(task.taskId, { name: wf.name, version: wf.version });
@@ -2426,13 +2383,13 @@ export class QueueScheduler {
       const rec = await this.deps.supervisor.spawn(
         {
           ...agentTemplate, ...task.overrides, persistent: true, ...(workdirKey ? { workdirKey } : {}),
-          ...(stepModel ? { model: stepModel } : {}), prompt: this.withTeamPreamble(team, task.prompt), instructions,
+          ...(stepModel ? { model: stepModel } : {}), prompt: task.prompt, instructions,
         },
         // FEATURE-5: mirrors spawnForTask's identical task.taskId-keyed root registration.
         // Dynamic Planner: mirrors spawnForTask's identical budgetParentId inheritance.
         {
           membership: { team: team.name, role: roleName }, budgetNodeId: task.taskId,
-          originConductorId: task.originConductorId,
+          originConductorId: task.originConductorId, promptFrom: task.author?.from ?? task.pushedBy ?? "operator", promptAuthor: task.author,
           ...(task.parentTaskId ? { budgetParentId: task.parentTaskId } : {}),
         },
       );

@@ -68,7 +68,7 @@ describe("chimera MCP coordination tools", () => {
     // preamble (scheduler.ts's withTeamPreamble) ahead of the task text itself, instead
     // of riding the (no-longer-per-spawn-unique) system-prompt append — the fake backend
     // echoes spec.prompt verbatim, so the echo includes that preamble.
-    expect(done?.resultText).toMatch(/^fake:.*\n\nmcp task$/s);
+    expect(done?.resultText).toBe("fake:mcp task");
 
     const teams = parse(await client.callTool({ name: "team_list", arguments: {} }));
     expect(teams[0]).toMatchObject({ name: "crew", running: 0 });

@@ -748,7 +748,7 @@ describe("missing Codex rollout recovery", () => {
     const mock = server({ "thread/resume": missing });
     const client = new CodexAppServer({ env: {} }, async () => false, undefined, mock.factory);
     try {
-      const thread = client.resumeThread("missing", { model: "gpt-6-astra", workingDirectory: "/tmp", sandboxMode: "read-only", approvalPolicy: "on-request", recoveryInstructions: "Keep project changes scoped." });
+      const thread = client.resumeThread("missing", { model: "gpt-6-astra", workingDirectory: "/tmp", sandboxMode: "read-only", approvalPolicy: "on-request", developerInstructions: "Keep project changes scoped." });
       const input = [{ type: "text" as const, text: "continue this task" }, { type: "local_image" as const, path: "/tmp/image.png" }];
       const { events } = await thread.runStreamed(input);
       const fresh = mock.messages.find(m => m.method === "thread/start");

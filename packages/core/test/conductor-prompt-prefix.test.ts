@@ -34,18 +34,17 @@ describe("conductor prompt cache prefix", () => {
     expect(instructions).toContain('PROJECT "alpha"');
   });
 
-  // The guidance used to say adding a shared server "remains an operator action", which made
-  // a conductor tell the user it could not help even though mcp_store_add proposes one.
-  it("a PROJECT conductor is told it may PROPOSE a shared MCP server, with the operator doing the enabling", async () => {
-    const e = new Engine({ home: makeEngineHome(), backends: backends() });
+  it("gets one shared discovery block through the actual spawn boundary", async () => {
+    const fake = new FakeAgentBackend([[{ awaitSend: true }]]);
+    const e = new Engine({ home: makeEngineHome(), backends: new Map([["claude", fake]]) });
     await e.handle("project.create", { name: "alpha", path: makeEngineHome() });
-    const started = (await e.handle("project.conductor.start", { name: "alpha" })) as { agentId: string };
-    const instructions = String((e.supervisor.status(started.agentId).spec as { instructions?: string }).instructions ?? "");
-    expect(instructions).toContain("PROPOSE a missing shared server with mcp_store_add");
-    expect(instructions).toContain("disabled and untrusted");
-    expect(instructions).toContain("the operator reviews, enables and authorizes it");
-    expect(instructions).not.toContain("remains an operator action");
-    // PROMPT-CACHE-PREFIX: the project-specific sentence must still come after the shared guidance.
-    expect(instructions.indexOf('PROJECT "alpha"')).toBeGreaterThan(instructions.indexOf("mcp_store_add"));
+    await e.handle("project.conductor.start", { name: "alpha" });
+    const instructions = fake.spawns[0]!.instructions!;
+    expect(instructions.match(/mcp_store_tools/g)).toHaveLength(1);
+    expect(instructions.match(/chimera_tools/g)).toHaveLength(1);
+    expect(instructions).toContain("never access the daemon socket directly");
+    expect(instructions).toContain('PROJECT "alpha"');
+    expect(instructions.length).toBeLessThan(3_200);
+    await e.supervisor.kill(fake.spawns[0]!.agentId);
   });
 });

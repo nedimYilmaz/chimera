@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { UiState } from "@chimera/ui-state";
 import { displayChord, registerActionHandler, runAction } from "../keymap";
 import { rpcCall } from "../rpc/bridge";
@@ -79,6 +79,9 @@ export function ProjectsScreen() {
   const confirmDelete = useProjectsLocal((s) => s.confirmDelete);
   const confirmDeleteFiles = useProjectsLocal((s) => s.confirmDeleteFiles);
   const deleteError = useProjectsLocal((s) => s.deleteError);
+  const deleteWarningId = useId();
+  const deletePath = items.find((p) => p.name === confirmDelete)?.path
+    ?? (detail?.spec["name"] === confirmDelete ? String(detail.spec["path"] ?? "") : "");
   const teams = useStore((s: UiState) => s.teams);
   const sessionSeq = useStore((s: UiState) => latestSessionSeq(s.events));
 
@@ -109,6 +112,7 @@ export function ProjectsScreen() {
   // an arrow-key move is enough, no separate "drill" action required to see it.
   const selectedProjectName = shown[cursor]?.name ?? null;
   useEffect(() => {
+    projectsLocal.set({ confirmDelete: null, confirmDeleteFiles: false, deleteError: null });
     if (selectedProjectName) void commands.openDetail(selectedProjectName);
     else commands.closeDetail();
   }, [selectedProjectName]);
@@ -273,17 +277,20 @@ export function ProjectsScreen() {
             onConfirm={() => { void commands.deleteProject(confirmDelete, confirmDeleteFiles); }}
             onClose={() => projectsLocal.set({ confirmDelete: null, confirmDeleteFiles: false, deleteError: null })}
           >
-            <span
-              className={confirmDeleteFiles ? styles.settingsToggleOn : styles.settingsToggleOff}
-              role="switch"
-              aria-checked={confirmDeleteFiles}
-              onClick={() => projectsLocal.set({ confirmDeleteFiles: !confirmDeleteFiles, deleteError: null })}
-              data-delete-files-toggle={confirmDeleteFiles ? "on" : "off"}
-            >
-              {confirmDeleteFiles ? "◉" : "◯"} also delete files on disk
-            </span>
+            <label className={styles.deleteFilesChoice}>
+              <input
+                type="checkbox"
+                checked={confirmDeleteFiles}
+                disabled={!deletePath}
+                aria-describedby={confirmDeleteFiles ? deleteWarningId : undefined}
+                onChange={(event) => projectsLocal.set({ confirmDeleteFiles: event.currentTarget.checked, deleteError: null })}
+                data-delete-files-toggle={confirmDeleteFiles ? "on" : "off"}
+              />
+              also delete files on disk
+            </label>
             {confirmDeleteFiles && (
-              <div className={styles.deleteFilesWarning} data-delete-files-warning>
+              <div id={deleteWarningId} className={styles.deleteFilesWarning} data-delete-files-warning>
+                <div className={styles.deleteFilesPath} data-delete-files-path>{deletePath}</div>
                 ⚠ the project directory will be permanently removed from disk — this cannot be undone.
               </div>
             )}

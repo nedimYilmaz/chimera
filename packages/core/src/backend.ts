@@ -1,4 +1,4 @@
-import type { AgentSpec, ChimeraMcpCtx, CompactResult, ContentBlock, EventKind, ModelMetadataLookup } from "@chimera/protocol";
+import type { AgentInput, AgentDelivery, AgentSpec, ChimeraMcpCtx, CompactResult, ContentBlock, EventKind, ModelMetadataLookup } from "@chimera/protocol";
 import type { McpListenerGrant } from "./mcp-listener.js";
 
 export type { ContentBlock };
@@ -35,6 +35,7 @@ export type Image = { mediaType: ImageMediaType; data: string };
 export type CompactionThresholdSource = "spawn" | "account" | "provider" | "default" | "native";
 
 export type ResolvedAgentSpec = AgentSpec & {
+  initialDelivery?: AgentDelivery;
   agentId: string;
   accountName: string;                    // concrete account, after auto-routing
   // F23 D3: widened from "claude" | "codex" — see protocol's AccountConfigSchema.provider
@@ -92,6 +93,8 @@ export interface ChimeraEngineAccessor {
 export type RemoteControlHandleResult = Pick<import("@chimera/protocol").RemoteControlStatus, "sessionUrl" | "connectUrl" | "connectionStatus" | "serverName" | "environmentId"> | undefined;
 
 export interface AgentHandle {
+  /** Canonical daemon input; send/steer remain compatibility methods for embedders. */
+  deliver?(input: AgentInput): Promise<void>;
   /** Exact owned child PID; absent for in-process/SDK transports that hide it. */
   readonly processPid?: number | null;
   command?(text: string): Promise<string>;
@@ -102,9 +105,9 @@ export interface AgentHandle {
   // the SDK message content array (images land at their referenced positions
   // instead of bunched after `text`). `text`/`images` stay required/valid on their
   // own for every existing (legacy) caller.
-  send(text: string, images?: Image[], content?: ContentBlock[]): Promise<void>;      // deliver one mailbox batch / follow-up turn; images: additive (IMAGE.PASTE)
+  send(text: string, images?: Image[], content?: ContentBlock[], delivery?: AgentDelivery): Promise<void>;      // deliver one mailbox batch / follow-up turn; images: additive (IMAGE.PASTE)
   interrupt(): Promise<void>;
-  steer?(text: string, images?: Image[], content?: ContentBlock[]): Promise<void>;
+  steer?(text: string, images?: Image[], content?: ContentBlock[], delivery?: AgentDelivery): Promise<void>;
   kill(): Promise<void>;
   close?(): Promise<void>;                 // Phase 3: gracefully end the input stream (conductor sessions)
   // REMOTE-CONTROL: toggle the provider's native remote-control bridge on THIS live
@@ -148,6 +151,8 @@ export interface BackendCapabilities {
 }
 
 export interface AgentBackend {
+  /** Reject unsupported content before it can enter a durable inbox. */
+  validateInput?(content: ContentBlock[]): void;
   readonly provider: string;
   readonly capabilities: BackendCapabilities;
   // Only advertise after proving a bounded fork can resume from another worktree.

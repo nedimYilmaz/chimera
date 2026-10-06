@@ -65,6 +65,20 @@ describe("Engine federation surface", () => {
 });
 
 describe("Engine.handlePeer authz boundary", () => {
+  it("marks a peer's initial task external, independently of execution ownership", async () => {
+    const { engine, fake } = makeEngine([{ ...PEER, allowSpawn: true, accounts: ["main"] }], [SLOW]);
+    const record = await engine.handlePeer("mbp", "agent.spawn", { spec: { prompt: "remote task", cwd: "/tmp", isolation: "none", account: "main" }, spawnId: "origin" }) as { agentId: string };
+    expect(fake.spawns[0]!.initialDelivery!.messages[0]!.author).toEqual({ from: "mbp/caller", source: "external", engineId: "mbp" });
+    await engine.supervisor.kill(record.agentId);
+  });
+  it("stamps the authenticated peer on direct messages even when it claims an operator sender", async () => {
+    const { engine, fake } = makeEngine([PEER], [SLOW]);
+    const target = await engine.supervisor.spawn({ prompt: "wait", cwd: "/tmp", isolation: "none" });
+    await engine.handlePeer("mbp", "agent.send", { agentId: target.agentId, text: "remote", from: "operator" });
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(fake.deliveries[0]!.delivery!.messages[0]!.author).toEqual({ from: "mbp/operator", source: "external", engineId: "mbp" });
+    await engine.supervisor.kill(target.agentId);
+  });
   it("rejects unknown peers and non-allowlisted methods", async () => {
     const { engine } = makeEngine([PEER]);
     await expect(engine.handlePeer("stranger", "peer.status", {})).rejects.toMatchObject({ code: "peer-auth" });
@@ -370,7 +384,7 @@ describe("Engine.handlePeer agent.send", () => {
     await engine.handle("agent.wait", { agentId: rec.agentId, timeoutMs: 1000 });
     const tail = engine.events.tail(rec.agentId, 50);
     const echoed = tail.find((ev) => ev.kind === "message_complete");
-    expect(echoed?.data["text"]).toBe("echo:[from mbp/caller] hi");
+    expect(echoed?.data["text"]).toBe("echo:hi");
   });
 
   it("re-stamps an explicit 'from' to <peerId>/<bare-from>", async () => {
@@ -381,7 +395,7 @@ describe("Engine.handlePeer agent.send", () => {
     await engine.handle("agent.wait", { agentId: rec.agentId, timeoutMs: 1000 });
     const tail = engine.events.tail(rec.agentId, 50);
     const echoed = tail.find((ev) => ev.kind === "message_complete");
-    expect(echoed?.data["text"]).toBe("echo:[from mbp/child1] hi");
+    expect(echoed?.data["text"]).toBe("echo:hi");
   });
 
   it("rejects a qualified agentId (no transitive relay) for agent.send", async () => {

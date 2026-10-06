@@ -246,64 +246,31 @@ describe("a per-project conductor's account/model pin", () => {
   });
 });
 
-describe("what a project conductor is TOLD it can reach on demand", () => {
-  // The operator's ask was "let them find these and load them on the fly", explicitly NOT
-  // "preload them". Measured on this fleet, preloading is 734 SKILL.md files / ~54k tokens of
-  // listing in every prompt, plus the foreign MCP catalogue the codebase already established as
-  // its most expensive line. So the surface stays lazy and the INSTRUCTIONS carry the paths —
-  // which is the half that was missing, and the reason the lazy paths went unused.
-
-  it("names the on-demand MCP path, since foreign servers are not in its tool list", async () => {
-    const { spec } = await spawnProjectConductor();
-    const instructions = String(spec["instructions"] ?? "");
-    expect(instructions).toContain("mcp_store_tools");
-    expect(instructions).toContain("mcp_store_call");
-  });
-
-  it("says which surface is ALREADY loaded, so it does not go hunting for it", async () => {
-    // loadProjectSettings defaults true, so the project's own .claude/ (CLAUDE.md, commands,
-    // skills) is loaded natively. An agent told only "everything is lazy" would re-fetch what it
-    // already has.
-    const { spec } = await spawnProjectConductor();
-    expect(String(spec["instructions"] ?? "")).toContain(".claude/");
-  });
-
-  it("keeps the shared playbook prefix in front of it", async () => {
-    // PROMPT-CACHE-PREFIX: the on-demand text names no project, so it belongs to the cacheable
-    // prefix every project conductor shares. Inserted before the playbook — or written with the
-    // project name in it — it would diverge the prefix and re-bill the whole playbook per project.
+describe("project conductor prompt scope", () => {
+  it("adds only project routing after the shared playbook", async () => {
     const { spec } = await spawnProjectConductor();
     const instructions = String(spec["instructions"] ?? "");
     expect(instructions.startsWith(CONDUCTOR_PLAYBOOK)).toBe(true);
-    expect(instructions.indexOf("ON DEMAND")).toBeLessThan(instructions.indexOf('PROJECT "alpha"'));
-    expect(instructions.slice(CONDUCTOR_PLAYBOOK.length, instructions.indexOf('PROJECT "alpha"'))).not.toContain("alpha");
+    expect(instructions).toContain('PROJECT "alpha"');
+    expect(instructions).toContain('projectName:"alpha"');
+    expect(instructions).toContain("dispatch");
+    expect(instructions).not.toContain("mcp_store_tools");
+    expect(instructions).not.toContain("already loaded");
+    expect(instructions.length - CONDUCTOR_PLAYBOOK.length).toBeLessThan(300);
   });
 });
 
-describe("the capability block never promises a Skill tool that will refuse", () => {
-  // The SDK is explicit that an unlisted skill is "hidden from the model's listing AND REJECTED BY
-  // THE SKILL TOOL" — not deferred. With leanAgentSkills empty (the out-of-the-box default) every
-  // lean claude spawn gets `skills: []`, so the block's unconditional "Skill ... lazy-load[s]
-  // skills on demand" described a path that refuses on arrival. Same defect the memory block
-  // beside it already guards against.
-
-  it("drops the Skill promise when skills are switched off, and points at what still works", () => {
-    const off = buildCapabilityBlock({ skillsUsable: false });
-    expect(off).not.toContain("Skill and ToolSearch lazy-load");
-    expect(off).toContain("Skill tool is OFF");
-    // Not merely a removed sentence: the files are still on disk and readable, so "load it on the
-    // fly" stays true by a different route — which is what the operator actually asked for.
+describe("provider-specific skill guidance", () => {
+  it("only explains the disabled Skill tool for Claude", () => {
+    const off = buildCapabilityBlock({ provider: "claude", skillsUsable: false });
+    expect(off).toContain("Skill tool is off");
     expect(off).toContain("SKILL.md");
-    expect(off).toContain("ToolSearch");
+    expect(buildCapabilityBlock({ provider: "claude", skillsUsable: true })).not.toContain("Skill tool is off");
   });
 
-  it("keeps the original wording when skills ARE usable", () => {
-    expect(buildCapabilityBlock({ skillsUsable: true })).toContain("Skill and ToolSearch lazy-load");
-  });
-
-  it("defaults to the original block, so every existing caller stays byte-identical", () => {
-    // Two stable cache-prefix variants, not a per-agent string. A default of "off" would silently
-    // rewrite the prompt of every spawn that never opted in.
-    expect(buildCapabilityBlock()).toBe(buildCapabilityBlock({ skillsUsable: true }));
+  it.each(["codex", "kimi", "openai"])("does not promise Claude's tools to %s", (provider) => {
+    const block = buildCapabilityBlock({ provider, skillsUsable: false });
+    expect(block).not.toContain("Skill");
+    expect(block).not.toContain("ToolSearch");
   });
 });

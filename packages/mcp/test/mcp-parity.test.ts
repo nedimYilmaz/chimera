@@ -120,9 +120,6 @@ const INTENTIONALLY_EXCLUDED_RPCS = new Set([
   //    finished agents and deletes their archived record + mailbox). Same operator-only posture
   //    as killMany beside it, one step stronger: an agent that could erase its siblings' history
   //    is a strictly worse idea than one that could end their sessions.
-  //  - agent.forget .......... the same broom narrowed to named ids (DISMISS-A-FINISHED-AGENT,
-  //    the ✕ on a finished row). Operator-only for exactly the reason above — being able to
-  //    erase ONE sibling's history on purpose is no better than erasing all of them.
   //  - secret.set/list/delete/grant/revoke ... SECRET-MANAGER: the OPERATOR half of the secret
   //    store. Deliberately absent from MCP — an agent that could grant itself a secret is not an
   //    allowlist, it is a formality, and one that could enumerate every stored secret would be
@@ -139,7 +136,7 @@ const INTENTIONALLY_EXCLUDED_RPCS = new Set([
   //    case comment gives — an agent that could mark itself seen would erase the very signal the
   //    operator triages by, so the attention queue would quietly empty itself.
   "agent.markSeen",
-  "agent.interruptMany", "agent.killMany", "agent.purgeTerminal", "agent.forget", "project.setLoadProjectSettings", "project.setSetupHook", "fs.list", "fs.read", "fs.resolve",
+  "agent.interruptMany", "agent.killMany", "agent.purgeTerminal", "project.setLoadProjectSettings", "project.setSetupHook", "fs.list", "fs.read", "fs.resolve",
   "shadow.workflowInspect",
   //  - voice.session.start/stop, voice.conversation.set . VOICE S2 (docs/superpowers/specs/
   //    2026-07-24-voice-agents-design.md §6): app-driven mic session lifecycle + conversation

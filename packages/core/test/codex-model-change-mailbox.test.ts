@@ -51,7 +51,7 @@ describe("Codex mailbox delivery after a model change", () => {
       expect(sup.status(initial.agentId).state).not.toBe("failed");
       expect(threads[1]!.options?.model).toBe("gpt-6-sol");
       expect(threads[1]!.runs).toHaveLength(1);
-      expect(threads[1]!.runs[0]!.input).toContain("Please review this test fixture");
+      expect(threads[1]!.runs[0]!.input).toContainEqual({ type: "text", text: "Please review this test fixture" });
       expect(sup.status(initial.agentId).spec.providerOptions).not.toHaveProperty("model");
       expect(sup.status(initial.agentId).spec.providerOptions.codexTransport).toBe("exec");
       expect(initial.spec.providerOptions.model).toBe("gpt-6-astra");

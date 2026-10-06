@@ -71,6 +71,31 @@ describe("QueueScheduler drain", () => {
     expect(rig.queues.status("work").counts.done).toBe(1);
   });
 
+  it("keeps task/role context and worker lifecycle without a second tool or memory manual", async () => {
+    const rig = makeCoordination([HAPPY("done")]);
+    rig.queues.create({ name: "work" });
+    rig.teams.create({
+      ...DEV_TEAM(1),
+      roles: { dev: { role: "blank", overrides: {
+        cwd: "/tmp", account: "main", isolation: "none",
+        orchestration: { allow: true }, instructions: "Check the parser boundary.",
+      } } },
+    });
+    rig.queues.push("work", { prompt: "Fix the parser", overrides: { instructions: "Check Unicode input." } });
+    await rig.scheduler.tick();
+    await waitUntil(() => rig.queues.status("work").counts.done === 1);
+    const spec = rig.fake.spawns[0]!;
+    expect(spec.prompt).toContain("Fix the parser");
+    expect(spec.instructions).toContain('team "crew" acting as role "dev"');
+    expect(spec.instructions).toContain("Check Unicode input.");
+    expect(spec.instructions).not.toContain("Check the parser boundary.");
+    expect(spec.instructions).toContain("foreground");
+    expect(spec.instructions).toContain("Commit before long checks");
+    expect(spec.instructions).not.toContain("memory_search");
+    expect(spec.instructions).not.toContain("memory_search before starting");
+    expect(spec.instructions!.length).toBeLessThan(1_800);
+  });
+
   it("respects priority then FIFO order with maxConcurrent 1", async () => {
     const rig = makeCoordination([HAPPY("a"), HAPPY("b"), HAPPY("c")]);
     rig.queues.create({ name: "work" });
@@ -257,6 +282,6 @@ describe("AgentSupervisor.deliverPending — per-agent serialization (Deferred M
     await new Promise((r) => setTimeout(r, 0));
     await new Promise((r) => setTimeout(r, 0));
 
-    expect(sent).toEqual(["[from a] one", "[from b] two"]);    // globally FIFO — no cross-batch interleave
+    expect(sent).toEqual(["one", "two"]);    // globally FIFO — no cross-batch interleave
   });
 });

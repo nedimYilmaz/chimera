@@ -108,6 +108,6 @@ describe("ClaudeAgentBackend PROJECT-WORKSPACE-LAYOUT", () => {
     expect(first).not.toBe("TIMEOUT");
     const text = (first as { message: { content: Array<{ text?: string }> } }).message.content[0]!.text!;
     expect(text).not.toContain("WORKSPACE:");
-    expect(text.startsWith("ORIENTATION")).toBe(true);
+    expect(text.startsWith("WORKSPACE (already set up")).toBe(true);
   });
 });

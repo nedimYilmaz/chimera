@@ -25,7 +25,7 @@ describe("Engine.handle agent.send — WS-B slash round-trip", () => {
     await e.handle("agent.wait", { agentId: rec.agentId, timeoutMs: 1000 });
 
     const echo = e.events.tail(rec.agentId, 50).find((ev) => ev.kind === "message_complete");
-    expect(echo?.data["text"]).toBe("echo:/compact go");       // no "[from tui] " prefix
+    expect(echo?.data["text"]).toBe("echo:/compact go");       // no "" prefix
   });
 
   it("still prefixes when slash is omitted (default false) — proves the flag, not text, drives it", async () => {
@@ -36,6 +36,6 @@ describe("Engine.handle agent.send — WS-B slash round-trip", () => {
     await e.handle("agent.wait", { agentId: rec.agentId, timeoutMs: 1000 });
 
     const echo = e.events.tail(rec.agentId, 50).find((ev) => ev.kind === "message_complete");
-    expect(echo?.data["text"]).toBe("echo:[from tui] /compact go");
+    expect(echo?.data["text"]).toBe("echo:/compact go");
   });
 });

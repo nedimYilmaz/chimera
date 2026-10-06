@@ -315,7 +315,7 @@ describe("Engine.handle", () => {
       await e.handle("agent.wait", { agentId: rec.agentId, timeoutMs: 1000 });
       const tail = e.events.tail(rec.agentId, 50);
       const echoed = tail.find((ev) => ev.kind === "message_complete");
-      expect(echoed?.data["text"]).toBe("echo:[from caller] hi");
+      expect(echoed?.data["text"]).toBe("echo:hi");
     });
 
     it("forwards an explicit 'from' when provided", async () => {
@@ -325,7 +325,7 @@ describe("Engine.handle", () => {
       await e.handle("agent.wait", { agentId: rec.agentId, timeoutMs: 1000 });
       const tail = e.events.tail(rec.agentId, 50);
       const echoed = tail.find((ev) => ev.kind === "message_complete");
-      expect(echoed?.data["text"]).toBe("echo:[from supervisor-42] hi");
+      expect(echoed?.data["text"]).toBe("echo:hi");
     });
 
     it("preserves explicit force intent through RPC into the delivered message", async () => {
@@ -372,7 +372,7 @@ describe("Engine.handle", () => {
       const res = await e.handle("agent.send", { agentId: rec.agentId, text: "look", images: [PNG] });
       expect(res).toMatchObject({ ok: true, delivered: true });
       const raw = readFileSync(join(home, "mailboxes", encodeURIComponent(rec.agentId) + ".jsonl"), "utf8");
-      expect(JSON.parse(raw.trim())).toMatchObject({ text: "look", images: [PNG] });
+      expect(JSON.parse(raw.trim())).toMatchObject({ message: { content: [{ type: "text", text: "look" }, { type: "image", ...PNG }] } });
     });
 
     it("accepts images: [] without error and omits it from the persisted record (normalized like absent)", async () => {
@@ -458,7 +458,7 @@ describe("Engine.handle", () => {
       const res = await e.handle("agent.send", { agentId: rec.agentId, text: "look at [img] and [img]", content: CONTENT });
       expect(res).toMatchObject({ ok: true, delivered: true });
       const raw = readFileSync(join(home, "mailboxes", encodeURIComponent(rec.agentId) + ".jsonl"), "utf8");
-      expect(JSON.parse(raw.trim())).toMatchObject({ text: "look at [img] and [img]", content: CONTENT });
+      expect(JSON.parse(raw.trim())).toMatchObject({ message: { content: CONTENT } });
     });
 
     it("a legacy {text, images[]} call (no content field) is unaffected — omits `content` from the persisted record", async () => {
@@ -470,8 +470,8 @@ describe("Engine.handle", () => {
       const res = await e.handle("agent.send", { agentId: rec.agentId, text: "look", images: [{ mediaType: "image/png", data: "aGVsbG8=" }] });
       expect(res).toMatchObject({ ok: true, delivered: true });
       const raw = readFileSync(join(home, "mailboxes", encodeURIComponent(rec.agentId) + ".jsonl"), "utf8");
-      expect(raw).not.toContain("\"content\"");
-      expect(JSON.parse(raw.trim())).toMatchObject({ text: "look", images: [{ mediaType: "image/png", data: "aGVsbG8=" }] });
+      expect(JSON.parse(raw)).not.toHaveProperty("content");
+      expect(JSON.parse(raw.trim())).toMatchObject({ message: { content: [{ type: "text", text: "look" }, { type: "image", mediaType: "image/png", data: "aGVsbG8=" }] } });
     });
 
     it("accepts content: [] without error and omits it from the persisted record (normalized like absent)", async () => {
@@ -482,7 +482,7 @@ describe("Engine.handle", () => {
       const rec = (await e.handle("agent.spawn", spawnBody())) as { agentId: string };
       await e.handle("agent.send", { agentId: rec.agentId, text: "look", content: [] });
       const raw = readFileSync(join(home, "mailboxes", encodeURIComponent(rec.agentId) + ".jsonl"), "utf8");
-      expect(raw).not.toContain("\"content\"");
+      expect(JSON.parse(raw)).not.toHaveProperty("content");
     });
 
     it("rejects a content block with an unknown `type`", async () => {

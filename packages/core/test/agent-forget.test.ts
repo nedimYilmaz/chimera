@@ -24,7 +24,7 @@ describe("agent.forget", () => {
     const b = await e.handle("agent.spawn", { spec: { prompt: "b", cwd: "/tmp", isolation: "none" } }) as { agentId: string };
     await flush();
 
-    const out = await e.handle("agent.forget", { agentIds: [a.agentId] }) as
+    const out = await e.handle("agent.forget", { agentIds: [a.agentId] }, { trustedLocalClient: true }) as
       { purged: number; agentIds: string[]; eventsRemoved: number; chronicleDocsRemoved: number };
     expect(out).toMatchObject({ purged: 1, agentIds: [a.agentId] });
     expect(() => e.supervisor.status(a.agentId)).toThrow();     // dismissed
@@ -45,7 +45,7 @@ describe("agent.forget", () => {
     const live = await e.handle("agent.spawn", { spec: { prompt: "live", cwd: "/tmp", isolation: "none" } }) as { agentId: string };
     await flush();
 
-    const out = await e.handle("agent.forget", { agentIds: [live.agentId] }) as { purged: number };
+    const out = await e.handle("agent.forget", { agentIds: [live.agentId] }, { trustedLocalClient: true }) as { purged: number };
     expect(out.purged).toBe(0);
     expect(e.supervisor.status(live.agentId)).toBeTruthy();
   });
@@ -54,7 +54,7 @@ describe("agent.forget", () => {
     const e = new Engine({ home: makeEngineHome(), backends: backends() });
     // Nothing purged, and so nothing rewritten: a forget that touched the log for an id it never
     // heard of would rewrite segments for no reason.
-    expect(await e.handle("agent.forget", { agentIds: ["nope"] }))
-      .toEqual({ purged: 0, agentIds: [], eventsRemoved: 0, chronicleDocsRemoved: 0 });
+    expect(await e.handle("agent.forget", { agentIds: ["nope"] }, { trustedLocalClient: true }))
+      .toEqual({ requested: 1, skipped: [{ agentId: "nope", reason: "unknown" }], purged: 0, agentIds: [], eventsRemoved: 0, chronicleDocsRemoved: 0 });
   });
 });

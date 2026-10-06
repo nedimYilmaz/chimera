@@ -1,3 +1,5 @@
+import type { AgentDelivery } from "@chimera/protocol";
+import { deliveryContent, requireTextContent, withMessageInput } from "../message-delivery.js";
 import { randomUUID } from "node:crypto";
 import type {
   AgentBackend, AgentHandle, BackendCapabilities, ChimeraEngineAccessor, EventSink,
@@ -140,6 +142,8 @@ export class GenericAgentBackend implements AgentBackend {
     private modelCatalog?: () => ModelMetadataLookup | undefined,
   ) {}
 
+  validateInput(content: ContentBlock[]): void { if (this.opts.vision === false) requireTextContent(content); }
+
   spawn(spec: ResolvedAgentSpec, sink: EventSink, decidePermission: PermissionDecider): AgentHandle {
     // Reject unsupported images before starting a provider request.
     if (this.opts.vision === false && spec.content?.some((b) => b.type === "image")) {
@@ -161,7 +165,7 @@ export class GenericAgentBackend implements AgentBackend {
 
     const messages: ChatMessage[] = [];
     if (spec.instructions) messages.push({ role: "system", content: spec.instructions });
-    if (!spec.resumeOnly) messages.push(userMessage(spec.prompt, undefined, spec.content));
+    if (!spec.resumeOnly) messages.push(userMessage(spec.prompt, undefined, spec.initialDelivery ? deliveryContent(spec.prompt, undefined, spec.content, spec.initialDelivery) : spec.content));
 
     const loop = new InterruptibleTurnLoop<Extract<ChatMessage, { role: "user" }>>();
     const keepAlive = spec.conductor || spec.persistent;
@@ -472,10 +476,10 @@ export class GenericAgentBackend implements AgentBackend {
     };
     void run();
 
-    return {
-      send: async (text: string, images?: Image[], content?: ContentBlock[]) => {
+    return withMessageInput({
+      send: async (text: string, images?: Image[], content?: ContentBlock[], delivery?: AgentDelivery) => {
         if (loop.ended || loop.closed) throw new Error("input stream closed");
-        loop.push(userMessage(text, images, content));
+        loop.push(userMessage(text, images, delivery ? deliveryContent(text, images, content, delivery) : content));
       },
       interrupt: async () => { loop.interrupt(); },
       kill: async () => { loop.kill(); },
@@ -502,6 +506,6 @@ export class GenericAgentBackend implements AgentBackend {
           after: { messages: report.afterMessages, chars: report.afterChars },
         };
       },
-    };
+    });
   }
 }

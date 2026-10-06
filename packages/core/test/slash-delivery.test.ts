@@ -36,18 +36,18 @@ describe("slash delivery", () => {
     expect(sent).toEqual(["/compact"]);
   }, SLOW);
 
-  it("prefixes an ordinary message, which is exactly what would mask a leading slash", async () => {
+  it("preserves ordinary message text; the adapter uses its separate delivery envelope", async () => {
     const { e, agentId, sent } = await rig();
     await e.handle("agent.send", { agentId, text: "/compact", from: "conductor" });
     await flush();
-    expect(sent).toEqual(["[from conductor] /compact"]);   // the backend sees prose, not a command
+    expect(sent).toEqual(["/compact"]);   // the backend sees prose, not a command
   }, SLOW);
 
   it("never guesses from a leading slash — an ordinary message may legitimately start with one", async () => {
     const { e, agentId, sent } = await rig();
     await e.handle("agent.send", { agentId, text: "/Users/alice/repo is ready", from: "worker" });
     await flush();
-    expect(sent[0]).toBe("[from worker] /Users/alice/repo is ready");
+    expect(sent[0]).toBe("/Users/alice/repo is ready");
   }, SLOW);
 
   it("a slash message is never coalesced with others — a command must be the whole turn", async () => {
@@ -56,7 +56,7 @@ describe("slash delivery", () => {
     await e.handle("agent.send", { agentId, text: "/compact", from: "a", slash: true });
     await e.handle("agent.send", { agentId, text: "two", from: "a" });
     await flush();
-    expect(sent).toEqual(["[from a] one", "/compact", "[from a] two"]);
+    expect(sent).toEqual(["one", "/compact", "two"]);
   }, SLOW);
 });
 

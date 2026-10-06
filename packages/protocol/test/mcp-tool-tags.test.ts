@@ -111,11 +111,11 @@ describe("granting a surface by tag", () => {
   });
 
   it("gives a conductor core PLUS conductor, including direct voice controls", () => {
-    // Pin the grant size, including the seven workspace group controls.
+    // Pin the grant size, including scoped terminal cleanup and workspace group controls.
     const granted = new Set(["core", "conductor"]);
     const got = MCP_TOOL_TABLE.filter((t) => t.tags.some((x) => granted.has(x)));
-    expect(got.length).toBe(60);
-    for (const name of ["group_list", "group_create", "group_update", "group_delete", "agent_set_groups", "agent_add_groups", "agent_remove_groups"]) {
+    expect(got.length).toBe(61);
+    for (const name of ["agent_forget", "group_list", "group_create", "group_update", "group_delete", "agent_set_groups", "agent_add_groups", "agent_remove_groups"]) {
       expect(got.map((t) => t.name)).toContain(name);
     }
   });

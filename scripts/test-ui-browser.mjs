@@ -1,3 +1,4 @@
+import { probeProjectDelete } from "./probes/project-delete.mjs";
 import { probeCompactHeader } from "./probes/compact-header.mjs";
 import { probeWorkspaceScale } from "./probes/workspace-scale.mjs";
 import { probeWorkspaceRecovery } from "./probes/workspace-recovery.mjs";
@@ -239,6 +240,8 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
   check("network guard blocks external fetch and websocket", networkGuard.fetchBlocked && networkGuard.websocketBlocked
     && networkGuard.attempts.length === 2 && networkGuard.attempts.every((attempt) => attempt.blocked), networkGuard);
 
+
+  await probeProjectDelete({ check, viewport, show, waitFor, evaluate, click, key, buttonKey, settleRender, screenshot });
 
   if (process.env.CHIMERA_BROWSER_GATE_HEADER_ONLY === "1") {
     await probeCompactHeader({ viewport, show, settleRender, waitFor, evaluate, check, screenshot, click, buttonKey, key, pointerPoint, call, sessionId, layoutAudit });

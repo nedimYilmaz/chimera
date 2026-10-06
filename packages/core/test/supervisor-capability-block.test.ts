@@ -32,51 +32,17 @@ describe("supervisor — capability block drift guard", () => {
     }
   });
 
-  // Pins the exact generated prose so a catalog edit that leaves every referenced name
-  // intact (renaming nothing, removing nothing) but is otherwise unnoticed still shows up
-  // as a visible diff here for review — and so this run's cache-prefix-change disclosure
-  // has a concrete byte-for-byte anchor.
-  // TOOL-AWARENESS-OVER-REGISTRATION: the last four tools were added because NAMING a tool is what
-  // makes deferring it free — an agent that knows the name calls it in one turn whether or not it
-  // was registered, and only an agent that has to search first pays an extra whole-context read.
-  // answer_question and subscribe are reactive (an agent does not go looking for them; they become
-  // necessary when something arrives), and terminal_read/terminal_write were shipped recently and
-  // named nowhere — which is how an agent came to insist it could not see a terminal that was open
-  // under it, while the daemon held that terminal's output the whole time.
-  // TOOL-TAGS: the trailing subject list is GENERATED from the catalog, so this literal doubles as
-  // a drift guard on the vocabulary — add a subject with two or more tools and this turns red until
-  // the block advertising it is regenerated. That is the point: a subject no agent is told about is
-  // a subject no agent ever searches, and nothing else fails when it goes missing.
-  // F25.QA: "review" joined the subject list when F25 added review_get/review_finding_add/
-  // review_finding_resolve (three tools ⇒ over the count>=2 floor). That is a CACHE-PREFIX
-  // CHANGE for every spawned agent — regenerating this literal is the conscious acknowledgement
-  // the guard exists to force, and F25's task-2 verify list never ran packages/core, so it
-  // landed on main red.
-  // F22 (conductor, 2026-09-04): it happened AGAIN, same way — "worktree" joined the subject list
-  // when [F22.2] added worktree_lease_handoff/worktree_lease_release/worktree_lease_list (three
-  // tools ⇒ over the count>=2 floor), and F22's verify lists ran scoped core tests, never
-  // packages/core, so main went red on landing. The literal below is regenerated from
-  // buildCapabilityBlock(), which IS the acknowledgement: every spawned agent's system prompt now
-  // advertises the worktree subject, and that is wanted — an agent refused by the single-writer
-  // lease can only find worktree_lease_handoff if it knows the subject exists. If you are here
-  // because this test is red again: the change is probably correct, but regenerate it DELIBERATELY
-  // and say in your report which tools moved the vocabulary.
-  // MAIN.capability-block (2026-09-05): F22 and F13.1 both landed clean but each reshuffled the
-  // ENTIRE subject list, not just added their own subject — mcpToolTags() sorted by count first,
-  // so a tool landing on "history" (F13.1) moved "artifact" relative to it even though artifact
-  // gained nothing. That made this guard red for every agent spawned between those landings, from
-  // a change neither PR's scoped verify list could see. mcpToolTags() now sorts by tag name only
-  // (see the CACHE-PREFIX STABILITY comment on it in mcp-tools.ts); a subject's position is fixed
-  // regardless of how many tools carry it, so only a genuinely new/removed subject can move these
-  // bytes going forward. packages/protocol/test/mcp-tool-tags.test.ts has the test proving it.
-  // VOICE (2026-09-1x): native-voice tools (voice_conversation_start/stop, voice_room_*) crossed
-  // the count>=2 floor and joined the subject list between "team" and "workflow" (alphabetical).
-  // Landed red the same way F25/F22 did — the landing PR's verify list never ran packages/core.
-  // Workspace evolution adds context, group and issues subjects to the advertised catalog.
-  it("generates the exact byte-for-byte AWARENESS block (cache-prefix-stable text)", () => {
-    expect(buildCapabilityBlock()).toBe(
-      "Chimera MCP tools available: agent_spawn/agent_status/agent_result/agent_wait to run sub-agents; ask_agent, agent_send, ask_team, my_team to reach teammates; ask_human to escalate. memory_search/memory_add (kind: decision|fact|todo) share durable knowledge across agents — search before starting related work. team_list + queue_push (set deliverTo to avoid polling) for task handoff. DISCOVER, don't preload: your context is lean by design — Skill and ToolSearch lazy-load skills/tools on demand. A chimera tool your brief names but you cannot see is DEFERRED, never missing: chimera_tools finds it by keyword and chimera_call runs it, with the same args. Never reach past this — chimera's daemon socket, its RPC framing and its source are not an interface, and hand-rolling a client for a tool that already exists is always the wrong turn. mcp_store_tools + mcp_store_call reach foreign MCP servers (Slack/Gmail/EKB/etc); engine_help describes this engine. CHIMERA-FIRST MCP ROUTING: before using any provider-native or directly configured MCP tool, use an already discovered suitable Chimera tool, or discover one via chimera_tools/chimera_call (engine tools) and mcp_store_tools/mcp_store_call (external services, browser and desktop computer use). Reuse discovery results within the task; do not search before every action. Use native MCP only when discovery confirms Chimera has no suitable tool for the required capability; briefly state the missing capability before falling back. A tool absent from your initial list may be deferred. A permission denial, busy desktop lease, connection failure or timeout is NOT a missing capability: resolve or report it, never bypass it through native tools. Keep desktop observation and actions on the Chimera route so ownership and activity remain visible. When a question or signal arrives for you, answer_question replies and subscribe sets up standing ones. terminal_read/terminal_write read and type into a terminal the operator opened under you. rename_self names you; daemon_status reports the engine's health. Tool subjects you can ask chimera_tools for: accounts, agent, artifact, ask, checkpoint, config, context, engine, events, group, history, hook, host, issues, job, mcp, memory, plugins, project, queue, review, role, secrets, skills, team, terminal, usage, voice, workflow, worktree. BATCH INDEPENDENT TOOL CALLS: when the next calls do not need each other's output, put them in ONE message and read every result together. A second turn re-reads your entire context, so three separate calls cost three times what one batched turn does."
-    );
+  it("keeps discovery and routing policy without repeating the registered tool catalog", () => {
+    const block = buildCapabilityBlock();
+    for (const tool of ["chimera_tools", "chimera_call", "mcp_store_tools", "mcp_store_call"]) {
+      expect(block).toContain(tool);
+    }
+    for (const tool of ["agent_spawn", "agent_status", "agent_wait", "terminal_read", "rename_self"]) {
+      expect(block).not.toContain(tool);
+    }
+    expect(block).toContain("never access the daemon socket directly");
+    expect(block.length).toBeLessThan(1_000);
+    expect(block).toContain("do not copy these shared instructions");
   });
 });
 
@@ -96,11 +62,11 @@ describe("Chimera-first MCP routing across providers", () => {
     });
     const agent = await sup.spawn({ prompt: "task", instructions: "role instructions", cwd: home, isolation: "none", orchestration: { allow: true } });
     const delivered = backend.spawns[0]!.instructions!;
-    expect(delivered).toContain("CHIMERA-FIRST MCP ROUTING");
-    expect(delivered).toContain("browser and desktop computer use");
-    expect(delivered).toContain("Use native MCP only when discovery confirms Chimera has no suitable tool");
-    expect(delivered).toContain("permission denial, busy desktop lease, connection failure or timeout is NOT a missing capability");
-    expect(delivered.indexOf("CHIMERA-FIRST MCP ROUTING")).toBeLessThan(delivered.indexOf("role instructions"));
+    expect(delivered).toContain("Use Chimera tools before provider-native MCP");
+    expect(delivered).toContain("browser/desktop");
+    expect(delivered).toContain("use a native fallback only if discovery finds no suitable tool");
+    expect(delivered).toContain("busy desktop lease, timeout or connection error is not a missing tool");
+    expect(delivered.indexOf("Use Chimera tools before provider-native MCP")).toBeLessThan(delivered.indexOf("role instructions"));
     expect(sup.status(agent.agentId).spec.instructions).toBe("role instructions");
     await sup.waitFor(agent.agentId, 1000);
   });

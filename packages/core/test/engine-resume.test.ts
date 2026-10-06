@@ -17,6 +17,18 @@ function engineWithScenarios(scenarios: FakeStep[][]): Engine {
 }
 
 describe("Engine.handle agent.resume", () => {
+  it.each(["agent.resume", "agent.resumeMany"])("%s preserves the continuation's caller", async method => {
+    const e = engineWithScenarios([[{ awaitSend: true }], [{ awaitSend: true }], [{ awaitSend: true }]]);
+    const sender = await e.supervisor.spawn({ prompt: "conduct", cwd: "/tmp", isolation: "none" });
+    const old = await e.supervisor.spawn({ prompt: "original", cwd: "/tmp", isolation: "none" });
+    await e.supervisor.kill(old.agentId);
+    const result = await e.handle(method, { ...(method.endsWith("Many") ? { agentIds: [old.agentId] } : { agentId: old.agentId }), prompt: "continue", callerAgentId: sender.agentId });
+    const resumed = e.supervisor.list().find(record => record.agentId !== sender.agentId && record.agentId !== old.agentId)!;
+    expect(result).toBeTruthy();
+    expect(resumed.initialAuthor).toMatchObject({ from: sender.agentId, source: "agent" });
+    expect(resumed.spec.prompt).toBe("continue");
+    await e.supervisor.kill(resumed.agentId); await e.supervisor.kill(sender.agentId);
+  });
   it("routes to supervisor.resume and returns a fresh record for a terminal agent", async () => {
     const e = engineWithScenarios([
       [{ emit: { kind: "agent_started", data: { sessionId: "sess-1" } } }, { awaitSend: true }],

@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { QueueSpecSchema, TaskRecordSchema, type QueueSpec, type TaskRecord, type TaskState, type TaskSummary, type QueueStatusSummary, type TaskStepCheckpoint, type ErrorClassName, type RetryPolicy, type HookCause } from "@chimera/protocol";
+import { QueueSpecSchema, TaskRecordSchema, type Principal, type QueueSpec, type TaskRecord, type TaskState, type TaskSummary, type QueueStatusSummary, type TaskStepCheckpoint, type ErrorClassName, type RetryPolicy, type HookCause } from "@chimera/protocol";
 import type { EventLog } from "./events.js";
 import type { StepJournal } from "./step-journal.js";
 import { writeFileDurable } from "./durable-write.js";
@@ -41,7 +41,7 @@ export type QueueUpdateInput = { retryLimit?: number; workflow?: string | null; 
 // PLAN-HOOKS.md §3.3 (HOOK-4): `cause` is engine-internal only, stamped by HookEngine's `push`
 // action — never forwarded by engine.ts's queue.push RPC handler literal (mirrors parentTaskId's
 // own convention above), so a caller can never fabricate a fake causation chain.
-export type TaskPush = { taskId?: string; prompt: string; tags?: string[]; priority?: number; role?: string | null; overrides?: Record<string, unknown>; dependsOn?: string[]; pushedBy?: string | null; originConductorId?: string | null; workflow?: string | null; parentTaskId?: string; cause?: HookCause | null };
+export type TaskPush = { author?: Principal; taskId?: string; prompt: string; tags?: string[]; priority?: number; role?: string | null; overrides?: Record<string, unknown>; dependsOn?: string[]; pushedBy?: string | null; originConductorId?: string | null; workflow?: string | null; parentTaskId?: string; cause?: HookCause | null };
 
 export class UnknownDependencyError extends Error { code = "protocol" as const; name = "UnknownDependencyError"; }
 // RETRY-BACKOFF: queue.requeue is the only way out of "dead_letter" — thrown when called on a
@@ -103,6 +103,8 @@ function compareDrainOrder(a: TaskRecord, b: TaskRecord): number {
 }
 
 export class QueueStore {
+  private principalFor?: (from: string) => Principal;
+  setPrincipalResolver(resolve: (from: string) => Principal): void { this.principalFor = resolve; }
   private queues = new Map<string, QueueSpec>();
   private tasks = new Map<string, TaskRecord>();     // Map preserves insertion order → stable FIFO
   private file: string;
@@ -125,7 +127,11 @@ export class QueueStore {
       try {
         const raw = JSON.parse(readFileSync(this.file, "utf8")) as { queues: unknown[]; tasks: unknown[] };
         for (const qs of raw.queues) { const s = QueueSpecSchema.parse(qs); this.queues.set(s.name, s); }
-        for (const t of raw.tasks) { const r = TaskRecordSchema.parse(t); this.tasks.set(r.taskId, r); }
+        for (const t of raw.tasks) {
+          const r = TaskRecordSchema.parse(t);
+          r.author ??= { from: r.pushedBy ?? "legacy-queue", source: "external", engineId: "local" };
+          this.tasks.set(r.taskId, r);
+        }
       } catch (err) {
         // AUDIT-2: unlike teams.json/toolpolicy.json (security-relevant, fail-fast on
         // purpose), queues.json is operational state — crash-looping the daemon over a
@@ -380,6 +386,7 @@ export class QueueStore {
     const task = TaskRecordSchema.parse({
       taskId: input.taskId ?? randomUUID(), queue: queueName, prompt: input.prompt,
       tags: input.tags ?? [],
+      author: input.author ?? this.principalFor?.(input.pushedBy ?? "system") ?? { from: input.pushedBy ?? "system", source: "external", engineId: "local" },
       role: input.role ?? null, overrides: input.overrides ?? {},
       priority: input.priority ?? 0, orderKey: this.orderCounter++, createdAt: now,
       pushedBy: input.pushedBy ?? null, originConductorId: input.originConductorId ?? null, pushedAt: now,
@@ -828,7 +835,7 @@ export class QueueStore {
     return this.push(original.queue, {
       prompt: original.prompt, priority: original.priority, role: original.role,
       overrides: original.overrides, dependsOn: original.dependsOn,
-      pushedBy: original.pushedBy, originConductorId: original.originConductorId,
+      author: original.author, pushedBy: original.pushedBy, originConductorId: original.originConductorId,
       workflow: original.workflowOverride,
     });
   }
@@ -938,6 +945,10 @@ export class QueueStore {
     // can express removing a tag.
     if (patch.tags !== undefined && !deepEqual(patch.tags, t.tags)) { changedFields.push("tags"); prior.tags = t.tags; t.tags = patch.tags; }
     if (changedFields.length === 0) return t;   // no-op edit — nothing to version or emit
+    if (changedFields.includes("prompt")) {
+      prior.author = t.author;
+      t.author = this.principalFor?.(editedBy ?? "operator") ?? { from: editedBy ?? "operator", source: "external", engineId: "local" };
+    }
     const version = t.versions.length + 1;
     t.versions = [...t.versions, { version, editedAt: Date.now(), editedBy, changedFields, prior }];
     this.save();

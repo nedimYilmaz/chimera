@@ -87,6 +87,7 @@ export type ProjectsLocalState = {
   assignOpen: boolean;        // "+ assign team ▾" menu
   confirmArchive: string | null;  // project name awaiting the ConfirmCard gate
   confirmDelete: string | null;   // project name awaiting the delete ConfirmCard gate
+  deleteConfirmationGeneration: number;
   confirmDeleteFiles: boolean;    // the delete card's "also delete files on disk" toggle (default OFF)
   /** DOUBLE-SUBMIT-SWEEP: true for the whole project.delete round-trip. Unlike
    * archiveProject/dissolveTeam/etc, deleteProject deliberately keeps the
@@ -134,6 +135,7 @@ const initialLocal: ProjectsLocalState = {
   assignOpen: false,
   confirmArchive: null,
   confirmDelete: null,
+  deleteConfirmationGeneration: 0,
   confirmDeleteFiles: false,
   deleting: false,
   deleteError: null,
@@ -162,7 +164,13 @@ export function createProjectsLocal(): ProjectsLocalStore {
   return {
     getState: () => state,
     set(patch) {
+      const generation = state.deleteConfirmationGeneration;
       state = { ...state, ...patch };
+      // A reopened dialog for the same project must not inherit consent or an
+      // in-flight response from its previous confirmation.
+      if (patch.confirmDelete !== undefined) {
+        state = { ...state, deleteConfirmationGeneration: generation + 1, confirmDeleteFiles: false, deleteError: null };
+      }
       for (const fn of listeners) fn();
     },
     subscribe(fn) {
@@ -170,7 +178,7 @@ export function createProjectsLocal(): ProjectsLocalStore {
       return () => { listeners.delete(fn); };
     },
     reset() {
-      state = initialLocal;
+      state = { ...initialLocal, deleteConfirmationGeneration: state.deleteConfirmationGeneration + 1 };
       for (const fn of listeners) fn();
     },
   };
@@ -434,19 +442,25 @@ export function createProjectsCommands(local: ProjectsLocalStore, store: UiStore
      * operator must close the card or act on the message themselves. */
     deleteProject: async (name: string, deleteFiles: boolean): Promise<void> => {
       if (local.getState().deleting) return;
+      const confirmation = local.getState();
+      const ownsConfirmation = (): boolean => {
+        const current = local.getState();
+        return confirmation.confirmDelete === name && current.confirmDelete === name
+          && current.deleteConfirmationGeneration === confirmation.deleteConfirmationGeneration;
+      };
       local.set({ deleting: true });
       let result: { orphanedTeams?: Array<{ team: string; queue?: string }> } | undefined;
       try {
         result = await request("project.delete", { name, ...(deleteFiles ? { deleteFiles: true } : {}) }) as typeof result;
       } catch (err) {
         const message = errMessage(err);
-        local.set({ deleting: false, deleteError: message });
+        local.set({ deleting: false, ...(ownsConfirmation() ? { deleteError: message } : {}) });
         store.dispatch({ type: "commandError", message });
         return;
       }
       const open = local.getState().detail;
       if (open?.spec["name"] === name) local.set({ detail: null });
-      local.set({ deleting: false, confirmDelete: null, confirmDeleteFiles: false, deleteError: null });
+      local.set({ deleting: false, ...(ownsConfirmation() ? { confirmDelete: null, confirmDeleteFiles: false, deleteError: null } : {}) });
       // ORPHANED-TEAMS-ON-DELETE: the project is gone but its teams and their bound queues are
       // not — they keep draining work that now belongs to no project. Said out loud, because the
       // way this surfaced instead was a fleet whose queue workers rendered under an unrelated

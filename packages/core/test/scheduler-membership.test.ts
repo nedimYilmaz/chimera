@@ -32,7 +32,7 @@ describe("QueueScheduler — membership injection (Task B1)", () => {
     expect(rig.fake.spawns[0]!.env["CHIMERA_AGENT_ID"]).toBeTruthy();
   });
 
-  it("instructions roster: the first worker's instructions mention team+role, and a second worker's roster (in its PROMPT, not instructions — SAFE-1 cache-prefix) lists the first worker's id-prefix+role", async () => {
+  it("keeps tasks verbatim and membership separate without snapshotting teammates", async () => {
     const WORKER: FakeStep[] = [{ emit: { kind: "agent_started", data: {} } }, { awaitSend: true }];
     const rig = makeCoordination([WORKER, WORKER]);
     rig.queues.create({ name: "work" });
@@ -44,20 +44,13 @@ describe("QueueScheduler — membership injection (Task B1)", () => {
     expect(rig.fake.spawns.length).toBe(2);
     expect(rig.fake.spawns[0]!.instructions).toContain("crew");
     expect(rig.fake.spawns[0]!.instructions).toContain("worker");
-    // SAFE-1 CACHE-PREFIX: roster/purpose ride the PROMPT (first user turn), not instructions
-    // (the Claude system-prompt append) — see scheduler.ts's teamContextPreamble/withTeamPreamble.
-    expect(rig.fake.spawns[0]!.prompt).toContain("none yet");   // no teammates yet when the first worker spawns
-
-    const firstAgentId = rig.fake.spawns[0]!.agentId;
-    const idPrefix = firstAgentId.slice(0, 8);
-    expect(rig.fake.spawns[1]!.prompt).toContain(idPrefix);
-    expect(rig.fake.spawns[1]!.prompt).toContain("worker");
-    // the system-bound instructions themselves stay byte-identical across both spawns —
-    // exactly the SAFE-1 acceptance bar (N agents share one Claude prompt-cache prefix).
+    expect(rig.fake.spawns[0]!.prompt).toBe("task1");
+    expect(rig.fake.spawns[1]!.prompt).toBe("task2");
+    expect(rig.fake.spawns[1]!.instructions).not.toContain(rig.fake.spawns[0]!.agentId.slice(0, 8));
     expect(rig.fake.spawns[1]!.instructions).toBe(rig.fake.spawns[0]!.instructions);
   });
 
-  it("SAFE-1 CACHE-PREFIX: team purpose rides the prompt, not instructions — two DIFFERENT teams' spawns share byte-identical instructions", async () => {
+  it("keeps team purpose in session instructions, not in task bodies", async () => {
     const WORKER: FakeStep[] = [{ end: { resultText: "ok", costUsd: 0 } }];
     const rig = makeCoordination([WORKER, WORKER]);
     rig.queues.create({ name: "workA" });
@@ -77,12 +70,10 @@ describe("QueueScheduler — membership injection (Task B1)", () => {
     await rig.scheduler.tick();
     await waitUntil(() => rig.queues.status("workA").counts.done === 1 && rig.queues.status("workB").counts.done === 1);
 
-    // purpose is visible in the PROMPT (first user turn)...
-    expect(rig.fake.spawns[0]!.prompt).toContain("ship the payments migration");
-    expect(rig.fake.spawns[1]!.prompt).toContain("audit the auth service");
-    // ...but never leaks into instructions (the Claude system-prompt append / cache prefix) at all.
-    expect(rig.fake.spawns[0]!.instructions).not.toContain("purpose");
-    expect(rig.fake.spawns[1]!.instructions).not.toContain("purpose");
+    expect(rig.fake.spawns[0]!.prompt).toBe("task1");
+    expect(rig.fake.spawns[1]!.prompt).toBe("task2");
+    expect(rig.fake.spawns[0]!.instructions).toContain("ship the payments migration");
+    expect(rig.fake.spawns[1]!.instructions).toContain("audit the auth service");
   });
 
   it("original instructions are preserved: the roster block is prepended, not replacing custom instructions", async () => {
@@ -145,7 +136,7 @@ describe("QueueScheduler — membership injection (Task B1)", () => {
     expect(rig.fake.spawns[0]!.instructions).toContain("dev");
   });
 
-  it("mixed team: an ephemeral worker's roster lists a running persistent teammate, and vice versa", async () => {
+  it("mixed teams retain membership without prefixing tasks with a roster", async () => {
     const rig = makeCoordination([
       [{ emit: { kind: "agent_started", data: {} } }, { awaitSend: true }],          // persistent worker: stays busy
       [{ end: { resultText: "ew", costUsd: 0 } }],                                    // ephemeral dev
@@ -165,12 +156,10 @@ describe("QueueScheduler — membership injection (Task B1)", () => {
     await waitUntil(() => rig.queues.status("work").counts.done === 1);
 
     expect(rig.fake.spawns.length).toBe(2);
-    const workerId = rig.fake.spawns[0]!.agentId;
-    // SAFE-1 CACHE-PREFIX: the roster rides the PROMPT now, not instructions — see the
-    // "instructions roster" test above for the same relocation on the single-role case.
-    const devPrompt = rig.fake.spawns[1]!.prompt!;
-    expect(devPrompt).toContain(workerId.slice(0, 8));
-    expect(devPrompt).toContain("worker");
+    expect(rig.fake.spawns[0]!.prompt).toBe("p1");
+    expect(rig.fake.spawns[1]!.prompt).toBe("d1");
+    expect(rig.fake.spawns[1]!.env["CHIMERA_TEAM"]).toBe("crew");
+    expect(rig.fake.spawns[1]!.env["CHIMERA_ROLE"]).toBe("dev");
   });
 
   it("non-team spawn unchanged: a direct supervisor.spawn(spec) with no membership opt has NO CHIMERA_TEAM/CHIMERA_ROLE in resolved env", async () => {

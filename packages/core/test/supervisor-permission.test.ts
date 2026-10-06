@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it, expect } from "vitest";
@@ -43,9 +43,8 @@ function makeKimiSupervisor(kimiScenarios: FakeStep[][]) {
 // acked). Read the raw per-agent JSONL directly to see every message ever enqueued,
 // drained or not, exactly the way this notice must actually reach the agent.
 function readAllMailboxMessages(dir: string, agentId: string): MailboxMessage[] {
-  const path = join(dir, "mailboxes", encodeURIComponent(agentId) + ".jsonl");
   try {
-    return readFileSync(path, "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l) as MailboxMessage);
+    return new MailboxStore(dir).history(agentId);
   } catch {
     return [];
   }

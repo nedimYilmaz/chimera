@@ -1,4 +1,5 @@
-import { describe, it, expect } from "vitest";
+import { createMessage } from "../src/message-delivery.js";
+import { describe, it, expect, vi } from "vitest";
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -11,7 +12,7 @@ import {
   KIMI_FANOUT_NOTE, KIMI_FANOUT_TOOL_TITLES,
   KimiAgentBackend, buildKimiAcpArgs, buildKimiMcpServers, closeOrphanedKimiToolCalls, describeKimiError, kimiModeFor,
   kimiModelOptions, mapKimiPermissionOptions, normalizeKimiEvent, resolveKimiCliPath, sanitizeKimiAcpLine,
-  type KimiFactory, type KimiAcpUpdate, type KimiMapCtx,
+  type KimiFactory, type KimiAcpUpdate, type KimiMapCtx, type KimiTextBlock,
 } from "@chimera/core/backends/kimi";
 
 function kmSpec(over: Record<string, unknown> = {}): ResolvedAgentSpec {
@@ -37,6 +38,7 @@ type ScriptedTurn = {
 };
 function fakeKimi(turnScripts: ScriptedTurn[]) {
   const prompts: string[] = [];
+  const promptBlocks: KimiTextBlock[][] = [];
   const killCalls: number[] = [];
   const cancelCalls: number[] = [];
   const decideCalls: unknown[] = [];
@@ -46,8 +48,9 @@ function fakeKimi(turnScripts: ScriptedTurn[]) {
     sawResume = spec.resume;
     const ready = Promise.resolve().then(async () => ({
       sessionId: "sess-fake-1",
-      prompt: async (text: string) => {
-        prompts.push(text);
+      prompt: async (content: KimiTextBlock[]) => {
+        promptBlocks.push(content);
+        prompts.push(content.map(block => block.text).join("\n\n"));
         const script = turnScripts[turnIdx++] ?? {};
         if (script.permission) {
           const decision = await deps.decidePermission({
@@ -64,7 +67,7 @@ function fakeKimi(turnScripts: ScriptedTurn[]) {
     }));
     return { ready, killNow: () => killCalls.push(1) };
   };
-  return { factory, prompts, killCalls, cancelCalls, decideCalls, resumeSeen: () => sawResume };
+  return { factory, prompts, promptBlocks, killCalls, cancelCalls, decideCalls, resumeSeen: () => sawResume };
 }
 
 const settle = () => new Promise((r) => setTimeout(r, 30));
@@ -585,7 +588,7 @@ describe("KimiAgentBackend.spawn — wiring, via a scripted fake ACP session", (
     const backend = new KimiAgentBackend({ kimiFactory: factory });
     const handle = backend.spawn(kmSpec({ persistent: true }), () => {}, async () => true);
     await settle();
-    await expect(handle.send("hi", [{ mediaType: "image/png", data: "AA==" }] as never)).rejects.toThrow(/not yet supported/);
+    await expect(handle.send("hi", [{ mediaType: "image/png", data: "AA==" }] as never)).rejects.toThrow(/does not support image content/);
   });
 
   it("send() after kill() rejects (input stream closed)", async () => {
@@ -926,7 +929,7 @@ describe("KimiAgentBackend — F49 grant ctx and first-turn notice", () => {
       captured = deps;
       const ready = Promise.resolve().then(async () => ({
         sessionId: "sess-cap-1",
-        prompt: async (text: string) => { prompts.push(text); return { stopReason: "end_turn" }; },
+        prompt: async (content: KimiTextBlock[]) => { prompts.push(content.map(block => block.text).join("\n\n")); return { stopReason: "end_turn" }; },
         cancel: async () => {},
         close: async () => {},
       }));
@@ -971,7 +974,7 @@ describe("KimiAgentBackend — F49 grant ctx and first-turn notice", () => {
         // Pre-F49 the notice was built in spawn(), before initialize() -- always "stdio-unsupported".
         // Only the connection knows the live verdict, so the prompt must quote THIS, not a rebuild.
         mcpNotice: { mcpServersWithheld: [{ name: "chimera", reason: "listener-disabled" as const }], settingSourcesUnsupported: false },
-        prompt: async (text: string) => { prompts.push(text); return { stopReason: "end_turn" }; },
+        prompt: async (content: KimiTextBlock[]) => { prompts.push(content.map(block => block.text).join("\n\n")); return { stopReason: "end_turn" }; },
         cancel: async () => {},
         close: async () => {},
       }),
@@ -1047,4 +1050,38 @@ describe("KimiAgentBackend.spawn — F49 grant against a REAL ACP-speaking child
     expect(await waitFor(() => spy.revokes >= 1)).toBe(true);
     await handle.kill();
   }, 15_000);
+});
+
+it("keeps peer provenance and body in separate ACP content blocks", async () => {
+  const { factory, prompts, promptBlocks } = fakeKimi([{}]);
+  const handle = new KimiAgentBackend({ kimiFactory: factory }).spawn(kmSpec({ persistent: true, resumeOnly: true }), () => {}, async () => true);
+  await settle();
+  const metadata = { from: "peer-id", source: "agent" as const, kind: "user_message" as const, engineId: "local", label: "Reviewer" };
+  await handle.send("Review this", undefined, undefined, { messages: [createMessage("Review this", metadata)] });
+  await settle();
+  expect(prompts).toEqual([JSON.stringify({ message: { from: metadata.from, source: metadata.source } }) + "\n\nReview this"]);
+  expect(promptBlocks).toEqual([[{ type: "text", text: JSON.stringify({ message: { from: metadata.from, source: metadata.source } }) }, { type: "text", text: "Review this" }]]);
+  await handle.kill();
+});
+
+it("preserves context, provenance and task as separate blocks on the real ACP wire", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "kimi-delivery-"));
+  const logPath = join(workdir, "requests.jsonl");
+  const metadata = { from: "conductor", source: "agent" as const, kind: "user_message" as const, engineId: "local" };
+  const spec = {
+    ...kmSpec({ cwd: workdir, instructions: "Review policy", providerOptions: { executable: fileURLToPath(new URL("./fixtures/kimi-acp-cli.mjs", import.meta.url)) } }),
+    initialDelivery: { messages: [createMessage("task", metadata)] },
+    env: { KIMI_FAKE_LOG: logPath },
+  };
+  const handle = new KimiAgentBackend().spawn(spec, () => {}, async () => true);
+  try {
+    await vi.waitFor(() => {
+      const requests = readFileSync(logPath, "utf8").trim().split("\n").map(line => JSON.parse(line));
+      expect(requests.find(request => request.method === "session/prompt")?.params.prompt).toEqual([
+        { type: "text", text: "Review policy" },
+        { type: "text", text: JSON.stringify({ message: { from: metadata.from, source: metadata.source } }) },
+        { type: "text", text: "task" },
+      ]);
+    }, { timeout: 5000 });
+  } finally { await handle.kill(); }
 });

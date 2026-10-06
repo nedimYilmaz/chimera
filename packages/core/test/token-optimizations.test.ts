@@ -3,7 +3,7 @@ import { Engine } from "@chimera/core/engine";
 import { FakeAgentBackend } from "@chimera/core/backends/fake";
 import type { AgentBackend } from "@chimera/core/backend";
 import { makeEngineHome } from "./helpers.js";
-import { groupDeliverable, buildCapabilityBlock, buildMemoryDisciplineBlock } from "@chimera/core/supervisor";
+import { groupDeliverable, buildCapabilityBlock } from "@chimera/core/supervisor";
 import type { MailboxMessage } from "@chimera/core/mailbox";
 
 // TOKEN-OPT: five measured wastes, each fixed without removing a capability. What these tests
@@ -17,9 +17,9 @@ const msg = (over: Partial<MailboxMessage> = {}): MailboxMessage =>
 // ---------------------------------------------------------------------------
 describe("shared instruction blocks lead the prompt", () => {
   it("two agents with different instructions still share a byte-identical opening", () => {
-    const shared = `${buildCapabilityBlock()}\n\n${buildMemoryDisciplineBlock()}`;
+    const shared = buildCapabilityBlock();
     // what launch() composes, in the order it composes it
-    const compose = (own: string) => [buildCapabilityBlock(), buildMemoryDisciplineBlock(), own].join("\n\n");
+    const compose = (own: string) => [buildCapabilityBlock(), own].join("\n\n");
     const a = compose("you are the frontend agent");
     const b = compose("you are the infrastructure agent");
     expect(a.startsWith(shared)).toBe(true);

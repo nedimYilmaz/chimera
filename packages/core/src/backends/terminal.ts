@@ -17,7 +17,9 @@
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { AgentBackend, AgentHandle, BackendCapabilities, EventSink, ResolvedAgentSpec } from "../backend.js";
+import type { AgentDelivery, ContentBlock } from "@chimera/protocol";
+import type { AgentBackend, AgentHandle, BackendCapabilities, EventSink, Image, ResolvedAgentSpec } from "../backend.js";
+import { deliveryContent, requireTextContent, withMessageInput } from "../message-delivery.js";
 import { TmuxTerminalHost, sessionNameFor } from "../terminal-runtime.js";
 
 /** Which CLI a provider is driven by when it runs in a terminal. An unlisted provider is a real
@@ -60,6 +62,8 @@ export class TerminalAgentBackend implements AgentBackend {
     this.host = deps.host ?? new TmuxTerminalHost();
   }
 
+  validateInput(content: ContentBlock[]): void { requireTextContent(content); }
+
   spawn(spec: ResolvedAgentSpec, sink: EventSink): AgentHandle {
     const session = sessionNameFor(spec.agentId);
     const cli = CLI_FOR_PROVIDER[spec.resolvedProvider];
@@ -96,7 +100,7 @@ export class TerminalAgentBackend implements AgentBackend {
       await fn();
     };
 
-    return {
+    return withMessageInput({
       // COMPACTION: backend.ts defines compactCommand as "chimera ASKING the provider's own agent
       // loop to compact, the same way an operator typing /compact into the native CLI does". Here
       // that is not an analogy — it is literally what happens. Per provider, because the command
@@ -106,14 +110,15 @@ export class TerminalAgentBackend implements AgentBackend {
         : {}),
       // The supervisor calls this to deliver a mailbox batch — an operator message, or mail from
       // another agent. Typed in and submitted, exactly as a human would.
-      send: (text: string) => afterStart(() => this.host.sendCommand(session, text)),
+      send: (text: string, _images?: Image[], _content?: ContentBlock[], delivery?: AgentDelivery) =>
+        afterStart(() => this.host.sendCommand(session, requireTextContent(deliveryContent(text, _images, _content, delivery)))),
       // Escape is the CLI's own "stop what you are doing" and leaves the session alive. Ctrl-C
       // would be a coarser signal that can take the process down — a different operation, and the
       // supervisor already has kill() for that.
       interrupt: () => afterStart(() => this.host.sendKey(session, "Escape")),
       kill: () => afterStart(() => this.host.stop(session)),
       close: () => afterStart(() => this.host.stop(session)),
-    };
+    });
   }
 
   /** The chimera MCP server, wired exactly as the SDK path wires it — same stdio server, same
@@ -142,7 +147,7 @@ export class TerminalAgentBackend implements AgentBackend {
     if (spec.model) args.push("--model", spec.model);
     // The agent's opening instruction. Passed as the initial prompt so the terminal starts on the
     // work rather than on an empty prompt someone has to notice and fill in.
-    if (spec.prompt) args.push(spec.prompt);
+    if (spec.prompt) args.push(requireTextContent(deliveryContent(spec.prompt, undefined, spec.content, spec.initialDelivery)));
     return args;
   }
 }

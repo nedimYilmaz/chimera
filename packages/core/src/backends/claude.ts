@@ -1,3 +1,5 @@
+import type { AgentDelivery } from "@chimera/protocol";
+import { deliveryContent, withMessageInput } from "../message-delivery.js";
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -336,10 +338,14 @@ export class ClaudeAgentBackend implements AgentBackend {
     // step-role switches all land in the same dir) — other agents' work may already be here,
     // and land-on-main is not this agent's call to make unconditionally. Only the plain
     // per-agent path (no workdirKey) gets the unconditional land-on-main instruction.
+    // TOKEN-OPT-ORIENTATION: structured lines, each path stated once and referenced by name
+    // after. The prose version repeated the worktree path, branch and main checkout four or five
+    // times (~1,050 chars for a worker); these carry the same facts and instructions.
+    const workspaceFacts = `- <worktree>: ${cwd}\n- <branch>: ${branch} (from main ${baseSha?.slice(0, 12)})\n- <main> checkout: ${mainRepo}`;
     const orientationText = spec.isolation === "worktree"
       ? spec.workdirKey
-        ? `ORIENTATION (precomputed — do NOT re-derive any of this): You are ALREADY inside a SHARED task workspace at ${cwd}, on branch ${branch}, branched from main commit ${baseSha?.slice(0, 12)}. Main checkout: ${mainRepo}. This worktree/branch is shared across every agent working this task (e.g. other workflow steps) — other agents' committed or uncommitted work may already be here; do NOT assume you're the only one, and do NOT discard work you didn't create. Do NOT call EnterWorktree/ExitWorktree. Do NOT run git rev-parse/--show-toplevel/branch --show-current/worktree list to orient — the facts above are authoritative. Do NOT merge to main or remove this worktree/branch unless your step instructions explicitly tell you to — otherwise leave it as-is for the next agent.`
-        : `ORIENTATION (precomputed — do NOT re-derive any of this): You are ALREADY inside your isolated git worktree at ${cwd}, on branch ${branch}, branched from main commit ${baseSha?.slice(0, 12)}. Main checkout: ${mainRepo}. Do NOT call EnterWorktree/ExitWorktree. Do NOT run git rev-parse/--show-toplevel/branch --show-current/worktree list to orient — the facts above are authoritative. LAND-ON-MAIN when functionally complete and verified: commit on ${branch} → git -C ${mainRepo} merge --no-ff ${branch} → git -C ${mainRepo} worktree remove --force ${cwd} → git -C ${mainRepo} branch -D ${branch} → report the merge commit hash.`
+        ? `WORKSPACE (shared by every agent on this task; already set up: don't re-check it with git rev-parse/branch --show-current/worktree list, and don't use EnterWorktree/ExitWorktree)\n${workspaceFacts}\n- Other agents' work may already be here: never discard work you didn't create.\n- Don't merge to main or remove this worktree/branch unless your instructions say so.`
+        : `WORKSPACE (already set up: don't re-check it with git rev-parse/branch --show-current/worktree list, and don't use EnterWorktree/ExitWorktree)\n${workspaceFacts}\n- When done and verified: commit, then \`git -C <main> merge --no-ff <branch>\`, \`git -C <main> worktree remove --force <worktree>\`, \`git -C <main> branch -D <branch>\`, and report the merge commit hash.`
       : existsSync(join(cwd, ".git")) ? "" : WORKSPACE_CONTAINER_INSTRUCTION;
     // SAFE-1 CACHE-PREFIX: orientation embeds THIS spawn's own worktree path/branch/base
     // sha — riding the Claude system-prompt append (as it used to) would make the system
@@ -364,7 +370,7 @@ export class ClaudeAgentBackend implements AgentBackend {
     // Task CR1: resumeOnly resumes the SDK session but does NOT seed it with the original
     // prompt — the agent resumes idle and waits for the first send() (re-attaching a persistent
     // conductor after a daemon restart must not replay its original spawn prompt as a new turn).
-    if (!spec.resumeOnly) input.push(userMessage(spec.prompt, undefined, spec.content, orientationForPrompt || undefined));
+    if (!spec.resumeOnly) input.push(userMessage(spec.prompt, undefined, spec.initialDelivery ? deliveryContent(spec.prompt, undefined, spec.content, spec.initialDelivery) : spec.content, orientationForPrompt || undefined));
 
     // AGENT-PROCESS-NOT-REAPED: captured by spawnClaudeCodeProcess below the moment the real CLI
     // subprocess exists, so kill()/the terminal `finally` can hard-terminate its process GROUP
@@ -566,9 +572,9 @@ export class ClaudeAgentBackend implements AgentBackend {
       // descriptions into every prompt. supervisor.ts decides the default; this only carries it.
       ...(spec.skills !== undefined ? { skills: spec.skills } : {}),
       env: claudeEnv,
-      // SAFE-1 CACHE-PREFIX: `append` now carries ONLY content that is byte-identical across
-      // every spawn (spec.instructions is itself scheduler-injected boilerplate + optional
-      // role/task text — see scheduler.ts's instructionsHeader/teamContextPreamble split;
+      // SAFE-1 CACHE-PREFIX: shared instructions precede session-specific role instructions
+      // so their prefix can be cached; task bodies and delivery metadata stay in user input.
+      // Workspace orientation normally accompanies the initial user input:
       // orientationForSystem is "" on every path except the rare resumeOnly reattach, which
       // has no first user turn to carry it instead). `excludeDynamicSections: true` additionally
       // hands the CLI's OWN dynamic bits (cwd/auto-memory/git status) the identical treatment —
@@ -1251,10 +1257,10 @@ export class ClaudeAgentBackend implements AgentBackend {
       }
     })();
 
-    return {
+    return withMessageInput({
       get processPid() { return cliExited ? null : cliProcess?.pid ?? null; },
-      send: async (text: string, images?: Image[], content?: ContentBlock[]) => {
-        input.push(userMessage(text, images, content));
+      send: async (text: string, images?: Image[], content?: ContentBlock[], delivery?: AgentDelivery) => {
+        input.push(userMessage(text, images, delivery ? deliveryContent(text, images, content, delivery) : content));
         armTurn();   // R2-TURN-LIFECYCLE: a fresh prompt is now in flight — (re)arm the watchdog
       },
       validateSlash: async (text: string) => {
@@ -1305,6 +1311,6 @@ export class ClaudeAgentBackend implements AgentBackend {
       // handler above with trigger:"manual". That handler predates this: the "manual" branch
       // existed for a trigger nothing in chimera could yet pull.
       compactCommand: "/compact",
-    };
+    });
   }
 }

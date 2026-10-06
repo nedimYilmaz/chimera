@@ -1,3 +1,5 @@
+import { contentText } from "../message-delivery.js";
+import type { AgentDelivery } from "@chimera/protocol";
 import { randomUUID } from "node:crypto";
 import type {
   AgentBackend, AgentHandle, BackendCapabilities, BackendEvent, ContentBlock, DialogDecider, EventSink, Image,
@@ -49,6 +51,7 @@ export class FakeAgentBackend implements AgentBackend {
   readonly provider: string;
   readonly capabilities: BackendCapabilities = { supportsResume: true, supportsMcpServers: true, supportsSettingSources: true, supportsVoiceRealtime: false };
   public spawns: ResolvedAgentSpec[] = [];
+  public deliveries: Array<{ text: string; delivery?: AgentDelivery; content?: ContentBlock[] }> = [];
 
   // REMOTE-CONTROL: default true (claude-shaped fake) so most scenarios get a handle
   // with a working remoteControl() for free; supervisor-cross-provider-style tests pass
@@ -182,12 +185,20 @@ export class FakeAgentBackend implements AgentBackend {
     };
     setTimeout(run, 0);
 
-    return {
+    const handle: AgentHandle = {
+      deliver: async function(input) {
+        if (input.type === "command") return this.send(input.text);
+        const content = input.messages.flatMap(message => message.content);
+        const send = input.mode === "steer" && this.steer ? this.steer : this.send;
+        const images = content.filter(block => block.type === "image").map(({ type: _type, ...image }) => image);
+        await send.call(this, contentText(content), images.length ? images : undefined, content, { messages: input.messages });
+      },
       // IMAGE.PASTE / D9: additive optional params, accepted for AgentHandle
       // interface parity — the fake backend doesn't act on attachments (echo
       // behavior is by text only), so they're intentionally ignored here.
-      send: async (text: string, images?: Image[], content?: ContentBlock[]) => {
-        void images; void content;
+      send: async (text: string, images?: Image[], content?: ContentBlock[], delivery?: AgentDelivery) => {
+        void images;
+        this.deliveries.push({ text, content, delivery });
         if (wakeSend) { const wake = wakeSend; wakeSend = null; wake(text); }
         else pendingSends.push(text);            // never drop: buffer until the script reaches awaitSend
       },
@@ -208,5 +219,6 @@ export class FakeAgentBackend implements AgentBackend {
         },
       } : {}),
     };
+    return handle;
   }
 }

@@ -488,6 +488,11 @@ const PRESENTATION: Record<EngineToolName, McpPresentation> = {
     ],
   },
   agent_kill: { description: "Abort a running agent", kind: "flat", rpc: "agent.kill", fields: [{ key: "agentId", label: "agentId", type: "string", required: true }] },
+  agent_forget: {
+    description: "Forget explicitly named finished agents and their run history; shared memory is preserved", kind: "raw", rpc: "agent.forget",
+    rawTemplate: '{"agentIds":[""]}',
+    note: "agentIds is a required array of 1–100 local IDs. Live agents are skipped; this never kills an agent. The operator path omits callerAgentId.",
+  },
   worktree_lease_list: { description: "List every held single-writer worktree lease", kind: "flat", rpc: "worktree.leaseList", fields: [] },
   worktree_lease_handoff: {
     description: "Hand off the single-writer worktree lease to another agent (refused unless caller is the current holder)", kind: "flat", rpc: "worktree.leaseHandoff",
@@ -1124,7 +1129,7 @@ const PRESENTATION: Record<EngineToolName, McpPresentation> = {
     fields: [{ key: "name", label: "name", type: "string", required: true }],
   },
   mcp_store_tools: {
-    description: "Discover MCP-store tools/schemas lazily. Use before mcp_store_call/native MCP; only missing capability permits native fallback, never denial/busy/connection errors. For app-directed typing, select intended app/window via fresh list_apps/list_windows/get_window_state; use the exact window target, not titles alone. Laya ranks; observe and verify. Laya confidence never authorizes desktop/frontmost substitution. Deliberate desktop tasks may type globally. Guidance, not an enforced target-identity guarantee.", kind: "flat", rpc: "mcpstore.tools",
+    description: "Discover MCP-store tools and their schemas (before mcp_store_call or a native MCP fallback). For app-directed typing, pick the app/window from a fresh list_apps/list_windows/get_window_state and use the exact window target, not a title alone. Laya ranks; Laya confidence never authorizes substituting the frontmost app or desktop, so observe and verify. Deliberate desktop tasks may type globally. Guidance, not an enforced target-identity guarantee.", kind: "flat", rpc: "mcpstore.tools",
     fields: [{ key: "query", label: "query", type: "string", hint: "(optional)" }],
   },
   operator_web_status: { description: "Operator panel availability (read only)", kind: "flat", rpc: "operatorweb.operatorStatus", fields: [] },

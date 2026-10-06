@@ -38,7 +38,7 @@ describe("QueueScheduler.assign — direct assignment (Task C1)", () => {
     // mailbox layer prefixes every delivered message with "[from <from>] "
     // (AgentSupervisor.deliverBatch) — "assign" is the `from` scheduler.assign passes.
     await waitUntil(() => rig.events.tail(rec.agentId, 50)
-      .some((e) => e.kind === "message_complete" && e.data["text"] === "echo:[from assign] hello direct"));
+      .some((e) => e.kind === "message_complete" && e.data["text"] === "echo:hello direct"));
   });
 
   it("team target (idle reuse): pushes onto the team's queue and routes to the already-idle persistent worker — no new spawn", async () => {

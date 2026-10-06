@@ -220,6 +220,7 @@ export class CodexAppServer implements CodexLike {
         config: {
           // Apply on resume as well as fresh starts, without writing config.toml.
           "features.realtime_conversation": this.realtimeEnabled,
+          ...(typeof options.developerInstructions === "string" ? { developer_instructions: options.developerInstructions } : {}),
           ...(options.webSearchMode ? { web_search: options.webSearchMode } : options.webSearchEnabled !== undefined ? { web_search: options.webSearchEnabled ? "live" : "disabled" } : {}),
           ...(options.networkAccessEnabled !== undefined ? { "sandbox_workspace_write.network_access": options.networkAccessEnabled } : {}),
           ...(options.additionalDirectories ? { "sandbox_workspace_write.writable_roots": options.additionalDirectories } : {}),
@@ -237,7 +238,7 @@ export class CodexAppServer implements CodexLike {
         result = await this.rpc.request("thread/start", {
           ...freshParams,
           config: { ...freshParams.config, developer_instructions: [
-            options.recoveryInstructions,
+            options.developerInstructions,
             "The previous Codex session could not be restored. This is a fresh session: prior conversation context is unavailable. Continue from the current user input without assuming earlier work or instructions you cannot see.",
           ].filter(Boolean).join("\n\n") },
         });

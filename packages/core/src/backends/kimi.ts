@@ -1,3 +1,5 @@
+import type { AgentDelivery, ContentBlock } from "@chimera/protocol";
+import { deliveryContent, requireTextContent, withMessageInput } from "../message-delivery.js";
 // KIMI-CLI-PROTOCOL: replaces S2's `@moonshot-ai/kimi-agent-sdk@0.1.8` transport, which could
 // never spawn a working session against the real installed CLI at all (S0's finding:
 // createSession() spawns the CLI with a bespoke `--wire`/`--work-dir` flag pair the real CLI
@@ -537,6 +539,7 @@ export function sanitizeKimiAcpLine(line: string): string {
 // initialize()+newSession()/loadSession() (and, if applicable, setSessionMode()) have all
 // succeeded; `killNow` is available IMMEDIATELY (before `ready` settles) so a kill() arriving
 // mid-handshake still reaches the real child process -- see connectKimiAcp().
+export type KimiTextBlock = Extract<ContentBlock, { type: "text" }>;
 export interface KimiAcpSessionLike {
   readonly sessionId: string;
   // F49: the POST-handshake notice. Only the connection knows what the CLI actually advertised
@@ -544,7 +547,7 @@ export interface KimiAcpSessionLike {
   // build (mcpCapabilities undefined => always "stdio-unsupported") is no longer authoritative.
   // Optional so every existing scripted-fake factory in the tests still satisfies the seam.
   readonly mcpNotice?: KimiMcpNotice;
-  prompt(text: string): Promise<{ stopReason: string }>;
+  prompt(content: KimiTextBlock[]): Promise<{ stopReason: string }>;
   cancel(): Promise<void>;
   close(): Promise<void>;
 }
@@ -908,7 +911,7 @@ export const connectKimiAcp: KimiFactory = (spec, cwd, deps) => {
     return {
       sessionId,
       mcpNotice: notice,
-      prompt: (text) => conn.prompt({ sessionId, prompt: [{ type: "text", text }] }),
+      prompt: (content) => conn.prompt({ sessionId, prompt: content }),
       cancel: async () => { await conn.cancel({ sessionId }); },
       close: async () => terminate(),
     };
@@ -956,6 +959,8 @@ export class KimiAgentBackend implements AgentBackend {
   // questions" language for yolo mode is the CLI's own docs' way of describing this), which this
   // file already answers via decidePermission. No live evidence of a separate dialog surface to
   // wire decideDialog against.
+  validateInput(content: ContentBlock[]): void { requireTextContent(content); }
+
   spawn(spec: ResolvedAgentSpec, sink: EventSink, decidePermission: PermissionDecider, _decideDialog?: DialogDecider): AgentHandle {
     const { workdir: cwd } = ensureWorkdir(spec);
     const effectiveModel = spec.model ?? findProvider("kimi")?.defaultModel;
@@ -974,7 +979,7 @@ export class KimiAgentBackend implements AgentBackend {
     let lastText = "";
     let turnFailed = false;
 
-    const loop = new InterruptibleTurnLoop();
+    const loop = new InterruptibleTurnLoop<KimiTextBlock[]>();
     const keepAlive = spec.conductor || spec.persistent;
 
     const acpHandle = (this.deps.kimiFactory ?? connectKimiAcp)(spec, cwd, {
@@ -1054,9 +1059,18 @@ export class KimiAgentBackend implements AgentBackend {
           : []),
       ];
       const capabilityNoticeText = capabilityNoticeLines.length > 0
-        ? `\n\n[chimera capability notice] ${capabilityNoticeLines.join(" ")}`
+        ? `[chimera capability notice] ${capabilityNoticeLines.join(" ")}`
         : "";
-      const firstInput = (spec.instructions ? `${spec.instructions}\n\n${spec.prompt}` : spec.prompt) + capabilityNoticeText;
+      // ACP has content blocks but no system-instructions channel. Keep its fallback
+      // instructions separate from the authored task and provenance on the wire too.
+      const sessionContext: KimiTextBlock[] = [spec.instructions, capabilityNoticeText]
+        .filter((text): text is string => !!text).map(text => ({ type: "text", text }));
+      const taskInput = deliveryContent(spec.prompt, undefined, spec.content, spec.initialDelivery) as KimiTextBlock[];
+      try { requireTextContent(taskInput); } catch (error) {
+        sink({ kind: "error", data: { message: String(error), phase: "input" } });
+        loop.end(); acpHandle.killNow(); return;
+      }
+      const firstInput = [...sessionContext, ...taskInput];
       // MODEL-ACTUAL-SURFACE + RESUME fix: unlike the old code (which fired this synchronously,
       // before any live event, defensively against S0's certain-crash finding), agent_started now
       // fires AFTER the real session exists -- see the module header's "agent_started timing"
@@ -1076,7 +1090,7 @@ export class KimiAgentBackend implements AgentBackend {
 
       if (!spec.resumeOnly) loop.push(firstInput);
       // Refresh shared rules on the first new task, keeping native slash commands intact.
-      let resumedInstructions = spec.resumeOnly ? (spec.instructions ?? "") + capabilityNoticeText : "";
+      let resumedInstructions = spec.resumeOnly ? sessionContext : [];
       try {
         while (!loop.killed) {
           let prompt = loop.shift();
@@ -1093,9 +1107,10 @@ export class KimiAgentBackend implements AgentBackend {
           controller.signal.addEventListener("abort", onAbort);
           let result: { stopReason: string };
           try {
-            const refreshInstructions = resumedInstructions && !/^\/[a-z][\w-]*(?:\s|$)/i.test(prompt.trimStart());
-            result = await session.prompt(refreshInstructions ? `${resumedInstructions}\n\n${prompt}` : prompt);
-            if (refreshInstructions) resumedInstructions = "";
+            const nativeCommand = prompt.length === 1 && /^\/[a-z][\w-]*(?:\s|$)/i.test(prompt[0]!.text.trimStart());
+            const refreshInstructions = resumedInstructions.length > 0 && !nativeCommand;
+            result = await session.prompt(refreshInstructions ? [...resumedInstructions, ...prompt] : prompt);
+            if (refreshInstructions) resumedInstructions = [];
           } catch (err) {
             if (loop.killed) break;
             // Orphan sweep BEFORE the error event: any tool call left open by the failed turn
@@ -1133,17 +1148,12 @@ export class KimiAgentBackend implements AgentBackend {
     };
     void run();
 
-    return {
-      send: async (text: string, images?: unknown[], content?: unknown[]) => {
+    return withMessageInput({
+      send: async (text: string, images?: import("../backend.js").Image[], content?: ContentBlock[], delivery?: AgentDelivery) => {
         if (loop.ended || loop.closed) throw new Error("input stream closed");
-        // IMAGE.PASTE: NOT wired in this slice (unchanged scope from S2) -- ACP's ContentBlock
-        // union DOES support image content (confirmed: initialize()'s
-        // promptCapabilities.image:true), a genuine capability the old SDK path never reached, but
-        // wiring it is a future increment, not required here.
-        if ((images && images.length > 0) || (content && content.length > 0)) {
-          throw new Error("kimi backend: images/content blocks are not yet supported (send is text-only)");
-        }
-        loop.push(text);
+        const blocks = deliveryContent(text, images, content, delivery);
+        requireTextContent(blocks); // Explicit refusal instead of silently dropping attachments.
+        loop.push(blocks as KimiTextBlock[]);
       },
       // KIMI-COMPACT-COMMAND: answered from what this agent advertised, not from a constant.
       // MANUAL-COMPACT-ANY-PROVIDER asks a backend for the slash command its CLI understands as
@@ -1162,6 +1172,6 @@ export class KimiAgentBackend implements AgentBackend {
       // mid-handshake via `killNow`.
       kill: async () => { loop.kill(); acpHandle.killNow(); },
       close: async () => { loop.kill(); acpHandle.killNow(); },
-    };
+    });
   }
 }

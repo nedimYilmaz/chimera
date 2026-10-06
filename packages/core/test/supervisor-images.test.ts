@@ -28,7 +28,7 @@ describe("AgentSupervisor.send: images (IMAGE.PASTE)", () => {
     await sup.send(rec.agentId, "look at this", "tester", [PNG]);
     await new Promise((r) => setTimeout(r, 0));
 
-    expect(seen).toEqual([{ text: "[from tester] look at this", images: [PNG] }]);
+    expect(seen).toEqual([{ text: "look at this", images: [PNG] }]);
     void dir;
   });
 
@@ -44,7 +44,7 @@ describe("AgentSupervisor.send: images (IMAGE.PASTE)", () => {
     await sup.send(rec.agentId, "no pics");
     await new Promise((r) => setTimeout(r, 0));
 
-    expect(seen).toEqual([{ text: "[from caller] no pics", images: undefined }]);
+    expect(seen).toEqual([{ text: "no pics", images: undefined }]);
   });
 
   it("multiple images in one send() are forwarded to handle.send() in the SAME order", async () => {
@@ -82,7 +82,8 @@ describe("AgentSupervisor.send: images (IMAGE.PASTE)", () => {
     const rec = await sup.spawn({ prompt: "x", cwd: "/tmp", account: "main", isolation: "none" });
     await sup.send(rec.agentId, "hi", "tester", [PNG]);
     const parsed = JSON.parse(mailboxRaw(dir, rec.agentId).trim());
-    expect(parsed.images).toEqual([PNG]);
+    expect(parsed.message.content).toEqual([{ type: "text", text: "hi" }, { type: "image", ...PNG }]);
+    expect(parsed).not.toHaveProperty("images");
   });
 
   it("re-enqueues a failed image-carrying message with its `images` field intact (no silent image loss on retry)", async () => {
@@ -127,7 +128,7 @@ describe("AgentSupervisor.send: images (IMAGE.PASTE)", () => {
     await new Promise((r) => setTimeout(r, 0));
 
     expect(calls).toBe(2);
-    expect(sent).toEqual([{ text: "[from a] one", images: undefined }]);
+    expect(sent).toEqual([{ text: "one", images: undefined }]);
     const pending = new MailboxStore(dir).pending(rec.agentId);
     expect(pending.map((m) => m.text)).toEqual(["two", "three"]);
     expect(pending[0]).toMatchObject({ from: "b", text: "two", images: [PNG] });   // the failed image message keeps its image

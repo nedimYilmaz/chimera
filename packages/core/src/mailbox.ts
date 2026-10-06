@@ -1,8 +1,9 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { EventLogDurabilityConfigSchema, type EventLogDurabilityConfig } from "@chimera/protocol";
+import { EventLogDurabilityConfigSchema, type EventLogDurabilityConfig, type AgentMessage, type Principal } from "@chimera/protocol";
 import { DurableAppendLog, realDurableWriteDeps, type ClearTimerFn, type DurableWriteDeps, type TimerFn } from "./durable-write.js";
+import { createMessage, contentText } from "./message-delivery.js";
 import type { ContentBlock, Image } from "./backend.js";
 
 // R2-DURABLE-LOG: same append-only-log durability need as EventLog (see events.ts) — one shared
@@ -10,7 +11,10 @@ import type { ContentBlock, Image } from "./backend.js";
 const DEFAULT_DURABILITY: EventLogDurabilityConfig = EventLogDurabilityConfigSchema.parse({});
 
 export type MailboxMessage = {
+  // Queue attempt ID (ACK watermark); message.id survives retried attempts.
   id: string; ts: number; from: string;
+  message?: AgentMessage;
+  legacyImages?: boolean;
   // AGENT-FAILURE-REACHES-CONDUCTOR: "child_failed" mirrors "child_result" — the deliverTo
   // notification for a child that ended in "failed" rather than "done" (see markFailed /
   // notifyChildFailed in supervisor.ts). A distinct kind, not a meta flag, so a conductor (or any
@@ -49,6 +53,18 @@ export type MailboxStoreOptions = {
 
 export class MailboxStore {
   private dir: string;
+  private principalFor?: (from: string, engineId: string) => Principal;
+
+  setPrincipalResolver(resolve: (from: string, engineId: string) => Principal): void {
+    this.principalFor = resolve;
+  }
+
+  // Legacy rows lack authenticated provenance; never upgrade them using today's roster.
+  envelope(msg: MailboxMessage): AgentMessage {
+    return msg.message ?? createMessage(msg.text, { from: msg.from, source: "external", engineId: msg.engineId }, {
+      id: msg.id, createdAt: msg.ts, kind: msg.kind, content: msg.content, images: msg.images,
+    });
+  }
   private durability: EventLogDurabilityConfig;
   private ioDeps: DurableWriteDeps;
   private setTimerFn?: TimerFn;
@@ -100,8 +116,14 @@ export class MailboxStore {
     const deduped = msg.content && msg.content.length > 0 && msg.images && msg.images.length > 0
       ? (({ images: _images, ...rest }) => rest)(msg)
       : msg;
-    const full: MailboxMessage = { ...deduped, id: msg.id ?? randomUUID(), ts: msg.ts ?? Date.now(), engineId: msg.engineId ?? "local" };
-    this.appendLogFor(agentId).append(JSON.stringify(full) + "\n");
+    const full: MailboxMessage = { ...deduped, id: msg.id ?? msg.message?.id ?? randomUUID(), ts: msg.ts ?? Date.now(), engineId: msg.engineId ?? "local" };
+    if (msg.images?.length && !msg.content?.length) full.legacyImages = true;
+    full.message = structuredClone(msg.message ?? createMessage(full.text,
+      this.principalFor?.(full.from, full.engineId) ?? { from: full.from, source: "external", engineId: full.engineId },
+      { id: full.id, createdAt: full.ts, kind: full.kind, content: full.content, images: full.images }));
+    // Store one body; compatibility fields are reconstructed for older consumers.
+    const { from: _from, kind: _kind, text: _text, images: _images, content: _content, ...stored } = full;
+    this.appendLogFor(agentId).append(JSON.stringify(stored) + "\n");
     return full;
   }
 
@@ -131,7 +153,15 @@ export class MailboxStore {
     for (const l of readFileSync(this.file(agentId), "utf8").trim().split("\n")) {
       if (!l) continue;
       try {
-        all.push(JSON.parse(l) as MailboxMessage);
+        const msg = JSON.parse(l) as MailboxMessage;
+        if (msg.message) {
+          msg.from = msg.message.author.from; msg.kind = msg.message.kind;
+          msg.text = contentText(msg.message.content);
+          msg.engineId = msg.message.author.engineId;
+          if (msg.legacyImages) msg.images = msg.message.content.filter(block => block.type === "image").map(({ type: _type, ...image }) => image);
+          else if (msg.message.content.some(block => block.type === "image") || msg.message.content.length > 1) msg.content = msg.message.content;
+        }
+        all.push(msg);
       } catch {
         // torn/partial line from a crash mid-appendFileSync (the restart scenario
         // this store is built to survive): the message was never durably written,

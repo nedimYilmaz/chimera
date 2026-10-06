@@ -138,7 +138,7 @@ describe("AgentSupervisor conductor close", () => {
     await sup.send(rec.agentId, "status update please", "mcp");
     await settle();                                           // deliverPending's handle.send is fire-and-forget
     const delivered = events.tail(rec.agentId, 50).find((e) => e.kind === "status" && e.data["delivered"] === true);
-    expect(delivered?.data).toEqual({ delivered: true, from: "mcp", text: "status update please" });
+    expect(delivered?.data).toMatchObject({ delivered: true, from: "mcp", text: "status update please", messageMetadata: { from: "mcp", source: "external" } });
   });
 
   it("permission policy \"tui\" emits permission_request and honors respondPermission", async () => {

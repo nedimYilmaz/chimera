@@ -153,3 +153,30 @@ describe("dispatch — direct", () => {
     expect(e.supervisor.list()).toHaveLength(before);   // no new agent spawned — the existing conductor was messaged
   });
 });
+
+it("preserves the actual sender through queued dispatch and direct assignment", async () => {
+  const fake = new FakeAgentBackend([RUNNING, RUNNING]);
+  const e = new Engine({ home: makeEngineHome(), backends: new Map([["claude", fake]]) });
+  const sender = await e.supervisor.spawn({ prompt: "conduct", cwd: "/tmp", isolation: "none", account: "main" });
+  const receiver = await e.supervisor.spawn({ prompt: "wait", cwd: "/tmp", isolation: "none", account: "main" });
+  await e.handle("queue.create", { spec: { name: "q1" } });
+  await e.handle("project.create", { name: "alpha", path: makeDir(), queue: "q1", autoConductor: false });
+  await e.handle("dispatch", { projectName: "alpha", prompt: "queued task", callerAgentId: sender.agentId });
+  const state = await e.handle("queue.status", { queue: "q1" }) as QueueStatus;
+  expect(state.tasks[0]!.pushedBy).toBe(sender.agentId);
+  expect(state.tasks[0]!.author).toMatchObject({ from: sender.agentId, source: "agent" });
+  expect(state.tasks[0]!.prompt).toBe("queued task");
+  await e.handle("assign", { target: { agentId: receiver.agentId }, prompt: "direct task", callerAgentId: sender.agentId });
+  await vi.waitFor(() => expect(fake.deliveries).toHaveLength(1));
+  expect(fake.deliveries[0]).toMatchObject({ text: "direct task", delivery: { messages: [{ author: { from: sender.agentId, source: "agent" } }] } });
+  await e.supervisor.kill(sender.agentId);
+});
+
+it("keeps operator authorship on queued tasks", async () => {
+  const e = engineOn(makeEngineHome());
+  await e.handle("queue.create", { spec: { name: "q1" } });
+  await e.handle("project.create", { name: "alpha", path: makeDir(), queue: "q1", autoConductor: false });
+  await e.handle("dispatch", { projectName: "alpha", prompt: "queued task" });
+  const state = await e.handle("queue.status", { queue: "q1" }) as QueueStatus;
+  expect(state.tasks[0]!.author).toMatchObject({ source: "operator" });
+});

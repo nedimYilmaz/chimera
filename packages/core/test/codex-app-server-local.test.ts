@@ -1,3 +1,4 @@
+import * as zlib from "node:zlib";
 import { it, expect, vi } from "vitest";
 import { createServer } from "node:http";
 import { mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs";
@@ -18,8 +19,15 @@ it.skipIf(process.env.CHIMERA_CODEX_APP_SERVER_LOCAL !== "1")("real CLI recovers
   const voiceHeaders: Array<string | string[] | undefined> = [];
   let compactionRequests = 0;
   let compacting = false;
-  const server = createServer((req, res) => {
-    req.resume();
+  const inputs: Array<Array<{ role?: string; content?: unknown }>> = [];
+  const server = createServer(async (req, res) => {
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) chunks.push(Buffer.from(chunk));
+    if (req.method === "POST" && req.url?.endsWith("/responses")) {
+      const body = Buffer.concat(chunks);
+      const decoded = req.headers["content-encoding"]?.includes("zstd") ? zlib.zstdDecompressSync(body) : body;
+      inputs.push(JSON.parse(decoded.toString()).input ?? []);
+    }
     if (req.url?.includes("responses/compact")) {
       compactionRequests++;
       res.writeHead(200, { "Content-Type": "application/json" });
@@ -56,7 +64,7 @@ it.skipIf(process.env.CHIMERA_CODEX_APP_SERVER_LOCAL !== "1")("real CLI recovers
   const localConfig = { openai_base_url: `http://127.0.0.1:${port}/v1`, experimental_realtime_webrtc_call_base_url: `http://127.0.0.1:${port}/realtime/calls`, experimental_realtime_ws_base_url: `ws://127.0.0.1:${port}/realtime`, mcp_servers: {}, check_for_update_on_startup: false };
   const client = new CodexAppServer({ apiKey: "local-only-key", env: { ...env, CODEX_HOME: home }, config: localConfig }, async () => false);
   try {
-    const thread = client.resumeThread("00000000-0000-4000-8000-000000000000", { model: "gpt-6-astra", workingDirectory: home, sandboxMode: "read-only", approvalPolicy: "never" });
+    const thread = client.resumeThread("00000000-0000-4000-8000-000000000000", { model: "gpt-6-astra", workingDirectory: home, sandboxMode: "read-only", approvalPolicy: "never", developerInstructions: "CHIMERA_TEST_SESSION_POLICY" });
     const { events } = await thread.runStreamed("Say local-ok without using tools.", { signal: AbortSignal.timeout(20_000) });
     const received = []; for await (const event of events) received.push(event);
     expect(received).toContainEqual(expect.objectContaining({ type: "thread.resume_fallback", previousThreadId: "00000000-0000-4000-8000-000000000000" }));
@@ -65,6 +73,8 @@ it.skipIf(process.env.CHIMERA_CODEX_APP_SERVER_LOCAL !== "1")("real CLI recovers
     expect(received.some((event) => event.type === "turn.failed")).toBe(false);
     // The CLI may attempt WebSocket negotiation before falling back to SSE.
     expect(auth.length).toBeGreaterThan(0);
+    expect(inputs.some(input => input.some(item => item.role === "developer" && JSON.stringify(item).includes("CHIMERA_TEST_SESSION_POLICY")))).toBe(true);
+    expect(inputs.every(input => input.filter(item => item.role === "user").every(item => !JSON.stringify(item).includes("CHIMERA_TEST_SESSION_POLICY")))).toBe(true);
     expect(new Set(auth)).toEqual(new Set(["Bearer local-only-key"]));
     expect(readFileSync(join(home, "auth.json"), "utf8")).toBe(previousAuth);
     // CLI 0.157 accepts realtime RPCs even when the feature flag is false.

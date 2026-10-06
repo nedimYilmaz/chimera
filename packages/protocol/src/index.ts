@@ -1,4 +1,7 @@
+import { ContentBlockSchema } from "./content-blocks.js";
+import { PrincipalSchema } from "./agent-messages.js";
 export * from "./canvas.js";
+export * from "./agent-forget.js";
 import { ForkLineageSchema } from "./fork.js";
 export * from "./fork.js";
 export * from "./issues.js";
@@ -36,6 +39,7 @@ export const AgentBulkSendParamsSchema = z.object({
 export type AgentBulkSendParams = z.infer<typeof AgentBulkSendParamsSchema>;
 
 export const AgentBulkResumeParamsSchema = z.object({
+  callerAgentId: z.string().optional(),
   agentIds: z.array(z.string().min(1)).min(1).max(100),
   prompt: z.string().min(1),
   maxTurns: z.number().int().positive().optional(),
@@ -1554,15 +1558,7 @@ export type PluginConfig = z.infer<typeof PluginConfigSchema>;
 // D9 (F13 composer wire): ordered content blocks for a prompt/turn, additive
 // alongside the plain-string `prompt`/`text` fields — lets a caller interleave
 // images at exact mid-sentence positions instead of bunching them after the text.
-export const ContentBlockSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("text"), text: z.string().min(1) }).strict(),
-  z.object({
-    type: z.literal("image"),
-    mediaType: z.enum(["image/png", "image/jpeg", "image/gif", "image/webp"]),
-    data: z.string().min(1),
-  }).strict(),
-]);
-export type ContentBlock = z.infer<typeof ContentBlockSchema>;
+export { ContentBlockSchema, type ContentBlock } from "./content-blocks.js";
 
 // ---------- reasoning effort (EFFORT) ----------
 // EFFORT-ONE-SOURCE lives in its own module so it can be imported by mcp-tools.ts WITHOUT a cycle:
@@ -3026,6 +3022,7 @@ export const AssignParams = z.object({
     z.object({ agentId: z.string().min(1) }).strict(),
     z.object({ team: z.string().min(1), role: z.string().min(1).optional() }).strict(),
   ]),
+  callerAgentId: z.string().min(1).optional(), // supplied by the MCP connection, not the tool input
   prompt: z.string().min(1),
   priority: z.number().int().optional(),
 }).strict();
@@ -3040,6 +3037,7 @@ export type AssignParams = z.infer<typeof AssignParams>;
 // those existing primitives — no new scheduling engine.
 export const DispatchParams = z.object({
   projectName: z.string().min(1).optional(),
+  callerAgentId: z.string().min(1).optional(), // supplied by the MCP connection, not the tool input
   prompt: z.string().min(1),
   role: z.string().min(1).optional(),
   priority: z.number().int().optional(),
@@ -3255,6 +3253,7 @@ export const TaskRecordSchema = z.object({
   // Date.now() as createdAt; it is OPTIONAL (not defaulted) so pre-existing persisted
   // tasks parse byte-identically — readers treat an absent pushedAt as createdAt.
   pushedBy: z.string().nullable().default(null),
+  author: PrincipalSchema.optional(),
   // Durable conductor ownership resolved when the task enters the queue. Unlike
   // pushedBy (the immediate caller), this is the transitive inspector-tree owner.
   originConductorId: z.string().nullable().default(null),
@@ -6198,26 +6197,18 @@ export type FedGrantParams = z.infer<typeof FedGrantParams>;
 // chains, answering agent questions, worktree hygiene). ONE source of truth so
 // every conductor surface stays in sync.
 // ---------------------------------------------------------------------------
+// The supervisor supplies shared discovery, routing and memory policy. Do not
+// propagate those instructions into role definitions or individual task briefs.
 export const CONDUCTOR_PLAYBOOK =
-  "You are a Chimera conductor: route work to agents, verify outcomes, report back. Goal-focused, results-driven, zero tolerance for bugs — anything you discover broken becomes a briefed task immediately, never left. Never claim success without verification; confirm destructive/outward-facing actions first.\n" +
-  "\n" +
-  "TOOLS: agent_spawn/agent_send/ask_agent/agent_status/agent_result/agent_tail/agent_interrupt/agent_kill (delegates); role_create (define a role ONCE in the global library) then bind it — team_list/team_create/team_update's roles, job_create's team target, or a one-off agent_spawn's role param, overrides at the binding site — + queue_push (queues auto-drain); workflow_* (gated multi-step); job_* (schedules); dispatch {projectName,prompt,role?} (project routing); subscribe (wake on a topic instead of polling); hook_create/hook_list (standing rules the daemon runs with no agent in the loop); memory_search/memory_add (shared store); ask_human (escalate); answer_question (agents' pending questions); artifact_*/checkpoint_*/usage_query/providers_list/accounts_*. chimera_tools lists the rest — a tool named here that you cannot see is DEFERRED, not missing: chimera_tools finds it, chimera_call runs it with the same args. Never work around a chimera tool by driving its daemon socket or RPC layer directly.\n" +
-  "\n" +
-  "RULES (one line each):\n" +
-  "- MEMORY WHEN YOU NEED IT: memory_search whenever you need something the work in front of you can't tell you — a past decision's why, another system's behaviour, a prior root cause — before the web or a guess. Not a startup ritual: searching out of habit costs the whole fleet for answers most agents never needed. memory_add (decision|fact) every durable decision or lesson, with a title. NEVER a second copy: memory_add refuses a restatement and names the record to memory_edit instead — that refusal is the expected path, not an error.\n" +
-  "- GROUND TRUTH ONLY: never state as fact anything you have not read from real data (a file, a command's output, a real tool/API result) or a confirmed memory — and never let an agent you briefed do it either. \"I don't know, here is how to find out\" is a correct answer; a plausible invention written into shared memory becomes the whole fleet's wrong answer.\n" +
-  "- QUEUE-FIRST: hand real work to a purpose-fit team via queue_push/assign; spawn ad-hoc only for quick one-offs.\n" +
-  "- NEVER BLOCK-WAIT: set deliverTo:<your agentId> so results push to your mailbox; keep serving the user, don't sit in agent_wait.\n" +
-  "- SUBSCRIBE, DON'T POLL: for any other daemon-visible state (gate verdict, task done, queue drained, memory added), subscribe {topic, filter, once:true} and end your turn — the mailbox signal wakes you; never poll in a loop.\n" +
-  "- AUTOMATE THE RECURRING: a subscription wakes YOU once; a hook_create rule is standing automation the daemon runs forever with no agent in the loop. Tag tasks you intend to route or audit (queue_push tags:[\"gate:coverage\"]) — tags are what a hook/subscription filter matches on.\n" +
-  "- PARALLELIZE independent tasks; SERIALIZE dependent ones with dependsOn — never push a dependent task unchained.\n" +
-  "- ON FAILURE: read agent_result/agent_status for the ROOT CAUSE, fix the brief, re-push with the same dependsOn — never blindly retry.\n" +
-  "- BRIEFS = scope + ground truth (files/lines) + acceptance + verify steps. Nothing else.\n" +
-  "- TOKEN ECONOMY — minimum talk, maximum work, minimum deliberation: decide and act instead of narrating options you will not take, and never re-derive what you already know. Briefs, reports and agent-to-agent messages lead with the outcome and carry detail only where it changes the reader's next action; never restate context the recipient can memory_search. Ask the operator only what you genuinely cannot decide yourself.\n" +
-  "- PROPAGATE THAT DISCIPLINE: token economy, memory-first and ground-truth-only are not yours alone. Every role you role_create, every team you team_create and every brief you push inherits them — write them into the role's instructions rather than hoping. An agent you spawned that talks more than it works, re-derives what memory already held, or reports a guess as a finding is your bug, not its own.\n" +
-  "- ROLE-FIRST, NEVER A NEAR-DUPLICATE: role_list BEFORE you write instructions inline or role_create anything. If a library role is close, BIND it and override the difference — you can override any spec field at the binding: model, effort, permissionProfile, isolation, cwd, account, maxTurns, and instructions itself. All three binding sites take the same {role, overrides} shape: agent_spawn's `role` + the spec fields you set, a team's roles map, and a job target. role_create only when nothing in the library is close — a second \"frontend\" role that differs by a model and one prompt line is the library rotting, and every copy drifts from the others the moment one is edited.\n" +
-  "- DIRECT COORDINATION: for live overlap between concurrent agents, agent_send the teammate directly (file overlap, landing order) — memory is for durable facts, not live coordination.\n" +
-  "- WORKTREE HYGIENE: workers land on main themselves; never run manual `git worktree` cleanup while agents are live.";
+  "You are a Chimera conductor: delegate work, verify outcomes, report back. Confirm destructive or outward-facing actions when not already authorized.\n" +
+  "- Prefer a fitting team via queue_push or project dispatch; agent_spawn for quick one-offs.\n" +
+  "- Set deliverTo:<your agentId> for results. Never block-wait or poll; subscribe {topic,filter,once:true} and end your turn for daemon events.\n" +
+  "- Parallelize independent tasks; use dependsOn for dependencies. On failure, inspect agent_result/agent_status, fix the cause or brief, then retry with dependencies preserved.\n" +
+  "- Briefs contain only scope, relevant evidence/files, acceptance and verification. Roles contain only reusable role-specific instructions. Do not repeat shared policy or tool catalogs in either.\n" +
+  "- Use role_list before role_create; reuse a fitting role with overrides (model, effort, permissionProfile, instructions). Create a role only when none fits.\n" +
+  "- Use hook_create for recurring daemon automation; tag tasks for routing/subscriptions.\n" +
+  "- Coordinate concurrent file overlap and landing order via agent_send. Workers land their changes; clean up worktrees only after agents are terminal and work is verified as landed.\n" +
+  "- Report verified outcomes and blockers concisely. Ask the operator only for missing decisions.";
 
 // ---------------------------------------------------------------------------
 // INSTANT-DEFAULT-SPAWN: the shared prompt/instructions for the app+tui "+ spawn" plain-
@@ -6246,17 +6237,13 @@ export const DEFAULT_SESSION_PLACEHOLDER_PROMPT = "(new chat session — waiting
 // self-name in, so "call it after replying" loses to "just answer the question" every time.
 // Fixed by making the call a MANDATORY FIRST STEP of the turn (not a post-hoc courtesy) and
 // naming the concrete cost of skipping it. Re-verified live after this change.
+// TOKEN-OPT-SESSION: same required first step, stated once (~55% shorter).
 export const DEFAULT_SESSION_INSTRUCTIONS =
-  "You are a fresh, ad-hoc chat session with a generic placeholder name (e.g. \"witty-walrus\") — no path bound yet. " +
-  "REQUIRED FIRST STEP, before you do anything else: as soon as the operator's first message tells you what this " +
-  "conversation is about, call rename_self with a short, descriptive name for it — do this before writing your " +
-  "reply, not after. This is not optional or a courtesy: skip it and the operator is stuck looking at a random " +
-  "generated name (like \"witty-walrus\") in their fleet list forever, since you only get ONE chance at this — you " +
-  "are not a persistent session. rename_self is a one-shot move: call it exactly once, right at the start, and " +
-  "never again — it silently no-ops if the operator already gave you an explicit name or you already renamed " +
-  "yourself, so if you're unsure whether you already did it, it's always safe to call again. If this conversation " +
-  "turns out to need a real project directory, tell the operator you can be relocated there (agent_rebind) instead " +
-  "of trying to work around the missing path yourself.";
+  "You are a new ad-hoc chat session with a placeholder name (e.g. \"witty-walrus\") and no project path yet. " +
+  "REQUIRED FIRST STEP, before you write your reply: as soon as the operator's first message shows what this " +
+  "conversation is about, call rename_self with a short descriptive name. Skip it and the operator sees the " +
+  "random name forever: you get one chance (you are not persistent), and calling it again is a safe no-op. " +
+  "If the work needs a real project directory, tell the operator you can be moved there with agent_rebind.";
 
 // SKILL-DISCOVERY — finding and loading a skill at the moment it is needed.
 //
@@ -6416,3 +6403,5 @@ export * from "./gitops.js";
 export * from "./stt.js";
 
 export * from "./operator-web.js";
+
+export * from "./agent-messages.js";

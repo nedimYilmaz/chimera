@@ -314,8 +314,8 @@ export class ProjectStore {
 
   // PROJECT-DEFAULT-DIR-AND-DELETE: registration-only removal (the on-disk dir
   // is untouched — the engine handles the opt-in `deleteFiles` fs side effect
-  // AFTER this succeeds, mirroring project.import's clone-after-validate
-  // ordering). The LIVE-SESSION refusal, like archive's, lives in the engine.
+  // BEFORE unregistering so failed wipes stay registered for recovery).
+  // The LIVE-SESSION refusal, like archive's, lives in the engine.
   // Frees `name` for a future create/import of the same name.
   delete(name: string): void {
     this.get(name);                                           // UnknownProjectError for a ghost name

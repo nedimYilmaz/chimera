@@ -151,6 +151,30 @@
 
 /* the delete confirm card's "also delete files" warning + inline conflict
    error — same block rhythm as ConfirmCard's own .note, tinted danger. */
+.deleteFilesChoice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 8px;
+  cursor: pointer;
+}
+
+.deleteFilesChoice input {
+  flex-shrink: 0;
+  accent-color: var(--danger);
+}
+
+.deleteFilesChoice input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.deleteFilesPath {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  font-family: var(--font-mono);
+}
+
 .deleteFilesWarning {
   color: var(--danger);
   font-size: var(--fs-meta);

@@ -203,7 +203,7 @@ describe("QueueScheduler step-role switch (F16.1 Phase 3, WF-8)", () => {
     await waitUntil(() => rig.queues.status("work").counts.done === 2, 15000);
 
     expect(rig.fake.spawns).toHaveLength(2);   // the idle reviewer + a fresh planner — NO third spawn (reused, not respawned)
-    const reuseSend = sendSpy.mock.calls.find((c) => c[2] === "scheduler" && (c[1] as string).includes("review"));
+    const reuseSend = sendSpy.mock.calls.find((c) => c[2] === "system" && (c[1] as string).includes("review"));
     expect(reuseSend).toBeDefined();
     expect(rig.queues.getTask(task.taskId).state).toBe("done");
   });

@@ -35,7 +35,7 @@ describe("queue.editTask (Engine RPC)", () => {
     const done = e.queues.status("work").tasks.find((x) => x.taskId === t.taskId)!;
     // SAFE-1 CACHE-PREFIX: fresh spawns get "Current teammates: ...\n\n" prepended to the
     // first user turn (scheduler.ts withTeamPreamble) — solo crew, so roster reads "none yet".
-    expect(done.resultText).toBe("fake:Current teammates: none yet.\n\nnew brief");   // the spawn consumed the edited prompt
+    expect(done.resultText).toBe("fake:new brief");   // the spawn consumed the edited prompt
   });
 
   it("stamps editedBy from the caller's agent identity (pushedBy-style seam)", async () => {

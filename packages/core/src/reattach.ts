@@ -113,6 +113,8 @@ export function reattachConductors(
         { ...a.spec, resume: a.sessionId ?? null, resumeOnly: true },
         { agentId: a.agentId, treeId: a.treeId, depth: a.depth, parentId: a.parentId,
           projectId: a.projectId, originConductorId: a.originConductorId ?? null,
+          ...(a.promptFrom ? { promptFrom: a.promptFrom } : {}),
+          ...(a.initialAuthor ? { promptAuthor: a.initialAuthor } : {}),
           ...(a.forkLineage ? { forkLineage: a.forkLineage } : {}),
           ...(a.forkLineage && a.membership ? { membership: a.membership, principal: a.principal } : {}),
           ...(a.attentionAt !== undefined ? { attentionAt: a.attentionAt } : {}),

@@ -45,7 +45,7 @@ describe("AgentSupervisor: LATE-MESSAGE-RESUME (checkPendingOnSettle)", () => {
     // the resumed run actually received the stranded message (fake's awaitSend echoes it back;
     // deliverBatch prefixes the text with "[from <sender>] " for every non-slash delivery).
     const tail = events.tail("agent-1", 100);
-    expect(tail.some((e) => e.kind === "message_complete" && e.data["text"] === "echo:[from tui] are you still there?")).toBe(true);
+    expect(tail.some((e) => e.kind === "message_complete" && e.data["text"] === "echo:are you still there?")).toBe(true);
   });
 
   it("a done agent with pending mail but no sessionId emits an undelivered-message status event instead of resuming", async () => {

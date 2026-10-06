@@ -22,7 +22,7 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  PROTOCOL_VERSION, AgentBulkParamsSchema, AgentReleaseParamsSchema, AccountUncoolParamsSchema,
+  PROTOCOL_VERSION, AgentBulkParamsSchema, AgentForgetParamsSchema, type AgentForgetResult, AgentReleaseParamsSchema, AccountUncoolParamsSchema,
   AgentRenameParamsSchema, AgentReconfigureParamsSchema,
   SecretSetParams, SecretNameParams, SecretGrantParams, SecretRevokeParams, SecretForAgentParams, SecretReadParams, AgentFindParamsSchema, QuestionAnswerSchema, QuestionOptionSchema, QuestionDefaultSchema,
   AgentMarkSeenParamsSchema, isAgentUnseen,
@@ -184,6 +184,7 @@ const SpawnParams = z.object({ spec: z.unknown(), depth: z.number().int().min(0)
 // brief, plus optional turn-budget/delivery overrides (everything else is inherited server-side
 // from the dead agent's own spec). Local to engine.ts, mirroring SpawnParams/WaitParams above.
 const ResumeParams = z.object({
+  callerAgentId: z.string().optional(),
   agentId: z.string().min(1),
   prompt: z.string().min(1),
   maxTurns: z.number().int().positive().optional(),
@@ -346,37 +347,11 @@ const ProjectSetSetupHookParams = z.object({ project: z.string().min(1), hook: W
 // deterministically — the conductor reaches for it directly rather than
 // re-deriving the policy itself.
 function projectConductorInstructions(name: string): string {
-  // PROMPT-CACHE-PREFIX: the FIXED playbook comes first and the project-specific line last, so
-  // every conductor in the fleet — main and per-project — shares one identical prompt prefix
-  // that a provider's prefix cache can actually hit. The previous order put the project name in
-  // front, which diverged the prefix on the very first tokens and made the whole playbook
-  // re-billed per project. Same reasoning the default-spawn instructions already document
-  // ("a fixed, spec-setting-shaped string ... still a shared cache prefix across the fleet").
-  // PROJECT-CONDUCTOR-DEFAULTS: the on-demand line sits BEFORE the project-specific sentence and
-  // names no project, so it stays part of the shared, cacheable prefix (see the ordering rule
-  // above) — one variant for the whole fleet of project conductors, not one per project.
-  //
-  // It exists because the operator's ask was "let them find these and load them on the fly", NOT
-  // "preload them": measured on this fleet, handing a conductor the machine's full skill catalogue
-  // is 734 SKILL.md files / ~54k tokens of listing in EVERY prompt, and the foreign MCP catalogue
-  // was already established as the most expensive line in the fleet. Both stay lazy; what was
-  // missing is that nothing told the conductor the lazy paths exist, so they went unused — the same
-  // failure the capability block was originally written to fix (0 memory/ask_* calls in ~39k
-  // events because no instruction surface named them).
+  // Shared policy is injected by the supervisor; only project routing belongs here.
   return `${CONDUCTOR_PLAYBOOK}\n\n` +
-    `ON DEMAND, NOT PRELOADED: your MCP and skill surface is deliberately lean — nothing here is ` +
-    `missing, it is lazy. Foreign MCP servers (Slack/Jira/gateways/etc) are NOT in your tool list: ` +
-    `mcp_store_tools finds a server's tools by keyword and mcp_store_call runs one, same args. A ` +
-    `capability missing from the store may use a provider-native MCP fallback after discovery confirms the gap; ` +
-    `say what is missing. You can PROPOSE a missing shared server with mcp_store_add (a stdio command or ` +
-    `a remote url): it is saved disabled and untrusted, and the operator reviews, enables and authorizes ` +
-    `it in Settings → MCP store — you cannot enable it or finish its OAuth sign-in. Your project's own .claude/ — CLAUDE.md, commands, ` +
-    `skills — IS already loaded natively; the machine-wide catalogue is not, and reading a ` +
-    `SKILL.md off disk is the way to pull one in when you need it. Pull a capability in when the ` +
-    `work needs it; never front-load one because it might.\n\n` +
-    `You are the conductor for PROJECT "${name}". Route this project's work with dispatch ` +
-    `({projectName:"${name}", prompt, role?}) — it picks queue-first → own-team role → global team → direct for you. ` +
-    `team_list/project_status show what's assigned here.`;
+    `You are the conductor for PROJECT "${name}". Route work with dispatch ` +
+    `({projectName:"${name}", prompt, role?}); it selects the queue/team/role. ` +
+    `team_list/project_status show project assignments.`;
 }
 // FEATURE MAIN-CONDUCTOR-PERSISTENT: identical wording to packages/app's own lazily-spawned
 // main conductor (commands.agents.ts) — one source of truth for what "the MAIN session" means,
@@ -1723,7 +1698,7 @@ export class Engine {
         const task = this.queues.push(p.queue, {
           prompt: p.prompt, priority: p.priority, role: p.role ?? null, overrides: p.overrides,
           tags: p.tags,   // TASK-TAGS
-          dependsOn: p.dependsOn, pushedBy: p.pushedBy ?? null,   // WD Stage 1 (coverage B9)
+          dependsOn: p.dependsOn, author: this.supervisor.principalFor(p.pushedBy ?? "operator"), pushedBy: p.pushedBy ?? null,   // WD Stage 1 (coverage B9)
           originConductorId,
           workflow: p.workflow ?? null,   // D12
         });
@@ -3033,10 +3008,34 @@ export class Engine {
         // a daemon predating the filter would silently ignore an unknown field and purge the
         // WHOLE terminal roster, so a harmless version skew here would have cost the operator
         // every finished transcript there. An unknown method fails loudly instead.
-        // Terminal-only is enforced by supervisor.purgeTerminal, not re-decided here.
+        // MCP callers must be current conductors; discovery tags are not authorization.
+        // Identity-free cleanup requires transport-supplied local client trust.
         case "agent.forget": {
-          const ids = [...new Set(AgentBulkParamsSchema.parse(params).agentIds)];
-          const purged = this.supervisor.purgeTerminal(ids);
+          const p = AgentForgetParamsSchema.parse(params);
+          if (!p.callerAgentId && !route?.trustedLocalClient) {
+            throw rpcError("forbidden", "Forgetting agents requires an authenticated conductor or trusted local client route");
+          }
+          const ids = [...new Set(p.agentIds)];
+          const records = new Map(this.supervisor.list().map(a => [a.agentId, a]));
+          const caller = p.callerAgentId ? records.get(p.callerAgentId) : undefined;
+          if (p.callerAgentId && (!caller || caller.spec.conductor !== true || caller.shadow
+            || ["done", "failed", "killed"].includes(caller.state))) {
+            throw rpcError("forbidden", "Forgetting agents requires a current conductor");
+          }
+          // Fleet authority belongs to the persisted MAIN seat, not every projectless conductor.
+          const fleetScope = caller?.agentId === this.mainConductorStore.get();
+          const skipped: AgentForgetResult["skipped"] = [];
+          const eligible: string[] = [];
+          for (const agentId of ids) {
+            const target = records.get(agentId);
+            if (agentId === p.callerAgentId) skipped.push({ agentId, reason: "self" });
+            else if (!target) skipped.push({ agentId, reason: "unknown" });
+            else if (caller && !fleetScope && target.projectId !== caller.projectId) skipped.push({ agentId, reason: "outside_scope" });
+            else if (target.shadow || !["done", "failed", "killed"].includes(target.state)) skipped.push({ agentId, reason: "live", state: target.state });
+            else eligible.push(agentId);
+          }
+          // The supervisor remains the terminal-only authority for the actual deletion.
+          const purged = this.supervisor.purgeTerminal(eligible);
           for (const agentId of purged) {
             this.agentArchive.remove(agentId);
             this.mailboxes.remove(agentId);
@@ -3059,9 +3058,10 @@ export class Engine {
             });
           }
           return {
+            requested: ids.length, skipped,
             purged: purged.length, agentIds: purged,
             eventsRemoved: forgotten.removed, chronicleDocsRemoved: forgottenDocs,
-          };
+          } satisfies AgentForgetResult;
         }
         case "agent.killMany": {
           const ids = [...new Set(AgentBulkParamsSchema.parse(params).agentIds)];
@@ -3099,7 +3099,7 @@ export class Engine {
           for (const agentId of ids) {
             try {
               await this.supervisor.resume(agentId, {
-                prompt: p.prompt,
+                prompt: p.prompt, author: this.supervisor.principalFor(p.callerAgentId ?? "operator"),
                 ...(p.maxTurns !== undefined ? { maxTurns: p.maxTurns } : {}),
                 ...(p.turnLimitPolicy !== undefined ? { turnLimitPolicy: p.turnLimitPolicy } : {}),
               });
@@ -3219,6 +3219,7 @@ export class Engine {
         case "agent.resume": {
           const p = ResumeParams.parse(params);
           return await this.supervisor.resume(p.agentId, {
+            author: this.supervisor.principalFor(p.callerAgentId ?? "operator"),
             prompt: p.prompt,
             ...(p.maxTurns !== undefined ? { maxTurns: p.maxTurns } : {}),
             ...(p.turnLimitPolicy !== undefined ? { turnLimitPolicy: p.turnLimitPolicy } : {}),
@@ -3318,7 +3319,7 @@ export class Engine {
         // handler bodies now living in packages/core/src/rpc/team-rpc.ts (TeamRpc).
         case "assign": {
           const p = AssignParams.parse(params);
-          return await this.scheduler.assign(p.target, p.prompt, p.priority);
+          return await this.scheduler.assign(p.target, p.prompt, p.priority, p.callerAgentId);
         }
         // PLAN-PROJECT-CONDUCTOR-ROUTING D2/§3 (P2-T2): the preference resolver —
         // queue-first → own-team role-match → global team → direct. Local-only
@@ -3634,6 +3635,19 @@ export class Engine {
           await this.stopOwnConductors(spec);
           const refusal = this.liveSessionRefusal(spec, "deleting");
           if (refusal) throw new ProjectConflictError(refusal);
+          // Keep the registration until the requested wipe succeeds: a failed recursive
+          // removal may leave only part of the directory, which must stay discoverable
+          // for retry or an explicit registration-only delete.
+          if (p.deleteFiles) {
+            try { rmSync(spec.path, { recursive: true, force: true }); }
+            catch (err) {
+              const reason = err instanceof Error ? err.message : String(err);
+              throw rpcError("filesystem",
+                `failed to delete project "${p.name}" directory "${spec.path}": ${reason}. ` +
+                `Registration retained; directory may be partially removed. ` +
+                `Fix the filesystem error and retry, or delete registration only with deleteFiles:false.`);
+            }
+          }
           // ORPHANED-TEAMS-ON-DELETE: a project's teams and their bound queues OUTLIVE it, and
           // nothing said so. The observed cost: a deleted project's three teams kept draining
           // their queues, but no project claimed those queues any more — so
@@ -3658,11 +3672,7 @@ export class Engine {
             });
           }
           const orphaned = orphanedTeams.length > 0 ? { orphanedTeams } : {};
-          if (p.deleteFiles) {
-            try { rmSync(spec.path, { recursive: true, force: true }); }
-            catch (e) { console.error(`chimerad: failed to delete project directory ${spec.path}: ${String((e as Error).message)}`); }
-            return { deleted: true, ...orphaned };
-          }
+          if (p.deleteFiles) return { deleted: true, ...orphaned };
           // PROJECT-DEFAULT-DIR-LEFTOVER: flag it when this was an auto-minted
           // dir (path == resolveProjectBaseDir/<name>, the exact shape project.create's
           // no-path branch mints) so a caller knows a future pathless create of the
@@ -5098,7 +5108,7 @@ export class Engine {
       if (hinted?.queue) queueName = hinted.queue;
     }
     if (queueName) {
-      const task = this.queues.push(queueName, { prompt: p.prompt, role: p.role ?? null, priority: p.priority ?? 0, overrides: {},
+      const task = this.queues.push(queueName, { prompt: p.prompt, role: p.role ?? null, priority: p.priority ?? 0, overrides: {}, author: this.supervisor.principalFor(p.callerAgentId ?? "operator"), pushedBy: p.callerAgentId ?? null,
         originConductorId: project?.conductorId ?? await this.resolveTaskOriginConductor(queueName, null) });
       await this.scheduler.tick();
       return { via: "queue", target: queueName, taskId: task.taskId };
@@ -5110,7 +5120,7 @@ export class Engine {
         const team = this.teams.list().find((t) => t.name === teamName);
         if (!team || !team.queue) continue;                       // unbound: skip, don't use
         if (p.role && !(p.role in team.roles)) continue;           // not a role-match
-        const result = await this.scheduler.assign({ team: teamName, role: p.role }, p.prompt, p.priority);
+        const result = await this.scheduler.assign({ team: teamName, role: p.role }, p.prompt, p.priority, p.callerAgentId);
         return { via: "team", target: teamName, taskId: "taskId" in result ? result.taskId : undefined };
       }
     }
@@ -5119,7 +5129,7 @@ export class Engine {
     const globalTeamName = this.cfg.globalTeam;
     const globalTeam = globalTeamName ? this.teams.list().find((t) => t.name === globalTeamName) : undefined;
     if (globalTeam?.queue) {
-      const result = await this.scheduler.assign({ team: globalTeam.name, role: p.role }, p.prompt, p.priority);
+      const result = await this.scheduler.assign({ team: globalTeam.name, role: p.role }, p.prompt, p.priority, p.callerAgentId);
       return { via: "global", target: globalTeam.name, taskId: "taskId" in result ? result.taskId : undefined };
     }
 
@@ -5127,13 +5137,13 @@ export class Engine {
     if (project) {
       const conductor = this.liveConductorRecord(project.conductorId);
       if (conductor) {
-        await this.supervisor.send(conductor.agentId, p.prompt, "dispatch");
+        await this.supervisor.send(conductor.agentId, p.prompt, p.callerAgentId ?? "operator");
         return { via: "direct", target: conductor.agentId };
       }
-      const record = await this.supervisor.spawn({ prompt: p.prompt, cwd: project.path, isolation: "none" }, { projectId: project.name });
+      const record = await this.supervisor.spawn({ prompt: p.prompt, cwd: project.path, isolation: "none" }, { projectId: project.name, promptFrom: p.callerAgentId });
       return { via: "direct", target: record.agentId };
     }
-    const record = await this.supervisor.spawn({ prompt: p.prompt, cwd: this.home, isolation: "none" });
+    const record = await this.supervisor.spawn({ prompt: p.prompt, cwd: this.home, isolation: "none" }, { promptFrom: p.callerAgentId });
     return { via: "direct", target: record.agentId };
   }
 
@@ -5690,7 +5700,7 @@ export class Engine {
             throw rpcError("guardrail", `peer "${peerEngineId}" at maxConcurrent (${peer.maxConcurrent})`);
           // Remote-supplied depth/maxDepthCap are ADVISORY — LOCAL caps stay authoritative
           // (supervisor.spawn's own maxDepthCap guardrail enforces this, unchanged from Phase 1).
-          const rec = await this.supervisor.spawn(spec, { depth: p.depth ?? 0, maxDepthCap: p.maxDepthCap, principal });
+          const rec = await this.supervisor.spawn(spec, { depth: p.depth ?? 0, maxDepthCap: p.maxDepthCap, principal, promptAuthor: { from: `${peerEngineId}/caller`, source: "external", engineId: peerEngineId } });
           this.fedSpawnIds.set(cacheKey, rec.agentId);
           return scrubRec(rec);
         }
@@ -5700,7 +5710,7 @@ export class Engine {
           if (this.mailboxes.hasMessage(p.agentId, p.message.id)) return { ok: true, deduped: true };
           const bareFrom = parseAgentAddress(p.message.from).localId;
           this.mailboxes.enqueue(p.agentId, {
-            ...p.message,
+            ...p.message, message: undefined,
             from: formatAgentAddress(peerEngineId, bareFrom),              // origin authenticated, never claimed
             engineId: peerEngineId,
           });
@@ -5715,7 +5725,7 @@ export class Engine {
         case "agent.send": {
           const p = z.object({ agentId: z.string(), text: z.string().min(1), from: z.string().default("caller") }).parse(params);
           requireBare(p.agentId);
-          return this.handle("agent.send", { ...p, from: formatAgentAddress(peerEngineId, parseAgentAddress(p.from).localId) });
+          return this.supervisor.send(p.agentId, p.text, formatAgentAddress(peerEngineId, parseAgentAddress(p.from).localId), undefined, false, undefined, { engineId: peerEngineId });
         }
         case "agent.status": {
           const { agentId } = Id.parse(params);

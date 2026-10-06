@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { ContentBlock, Image } from "../backend.js";
 
 export type CodexInput = string | Array<{ type: "text"; text: string } | { type: "local_image"; path: string }>;
-export type CodexTurnInput = { text: string; images?: Image[]; content?: ContentBlock[]; preamble?: string };
+export type CodexTurnInput = { text: string; images?: Image[]; content?: ContentBlock[]; preamble?: string; preserveBlocks?: boolean };
 
 // The SDK accepts local paths only. Materialize attachments just for the active
 // turn, outside the checkout, and never retain base64 in CLI arguments or logs.
@@ -16,6 +16,7 @@ export function prepareCodexInput(turn: CodexTurnInput): { input: CodexInput; cl
   const cleanup = () => { if (directory) rmSync(directory, { recursive: true, force: true }); };
   try {
     if (!blocks.some((b) => b.type === "image")) {
+      if (turn.preserveBlocks) return { input: [...(turn.preamble ? [{ type: "text" as const, text: turn.preamble }] : []), ...blocks as Array<{ type: "text"; text: string }>], cleanup };
       const text = blocks.map((b) => b.type === "text" ? b.text : "").join("\n\n");
       return { input: turn.preamble ? `${turn.preamble}\n\n${text}` : text, cleanup };
     }

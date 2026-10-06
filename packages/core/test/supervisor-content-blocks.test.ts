@@ -24,7 +24,7 @@ function mailboxRaw(dir: string, agentId: string): string {
 }
 
 describe("AgentSupervisor.send: content[] blocks (D9)", () => {
-  it("folds the '[from …] ' attribution into the FIRST content block, leaving every other block's position untouched", async () => {
+  it("passes authored blocks unchanged; sender identity uses the separate delivery argument", async () => {
     const { sup } = makeSupervisor([[{ awaitSend: true }, { end: { resultText: "done" } }]]);
     const rec = await sup.spawn({ prompt: "x", cwd: "/tmp", account: "main", isolation: "none" });
 
@@ -37,9 +37,9 @@ describe("AgentSupervisor.send: content[] blocks (D9)", () => {
     await new Promise((r) => setTimeout(r, 0));
 
     expect(seen).toEqual([{
-      text: "[from tester] look at [img] and [img]",
+      text: "look at \n\n and ",
       content: [
-        { type: "text", text: "[from tester] look at " },
+        { type: "text", text: "look at " },
         { type: "image", mediaType: "image/png", data: "AAA" },
         { type: "text", text: " and " },
         { type: "image", mediaType: "image/jpeg", data: "BBB" },
@@ -47,26 +47,20 @@ describe("AgentSupervisor.send: content[] blocks (D9)", () => {
     }]);
   });
 
-  it("a slash-command send forwards content[] VERBATIM (no attribution prefix)", async () => {
-    const { sup } = makeSupervisor([[{ awaitSend: true }, { end: { resultText: "done" } }]]);
-    const rec = await sup.spawn({ prompt: "x", cwd: "/tmp", account: "main", isolation: "none" });
-
-    const seen: Array<ContentBlock[] | undefined> = [];
-    const handles = (sup as unknown as { handles: Map<string, { send(t: string, images?: unknown, content?: ContentBlock[]): Promise<void> }> }).handles;
-    const real = handles.get(rec.agentId)!;
-    handles.set(rec.agentId, { ...real, send: async (t, images, content) => { seen.push(content); await real.send(t, images, content); } });
-
-    await sup.send(rec.agentId, "/cmd", "tui", undefined, true, CONTENT);
-    await new Promise((r) => setTimeout(r, 0));
-
-    expect(seen).toEqual([CONTENT]);
+  it("rejects attachments on control-plane commands", async () => {
+    const { sup } = makeSupervisor([[{ awaitSend: true }]]);
+    const rec = await sup.spawn({ prompt: "x", cwd: "/tmp", isolation: "none" });
+    await expect(sup.send(rec.agentId, "/cmd", "app", undefined, true, CONTENT)).rejects.toThrow("without attachments");
+    await sup.kill(rec.agentId);
   });
 
   it("omits the `content` key entirely from the persisted mailbox record when not provided (backward compat)", async () => {
     const { sup, dir } = makeSupervisor([[{ awaitSend: true }, { end: { resultText: "done" } }]]);
     const rec = await sup.spawn({ prompt: "x", cwd: "/tmp", account: "main", isolation: "none" });
     await sup.send(rec.agentId, "hi", "tester");
-    expect(mailboxRaw(dir, rec.agentId)).not.toContain("content");
+    const stored = JSON.parse(mailboxRaw(dir, rec.agentId));
+    expect(stored).not.toHaveProperty("content");
+    expect(stored.message.content).toEqual([{ type: "text", text: "hi" }]);
   });
 
   it("persists a non-empty content array verbatim, in order", async () => {
@@ -74,7 +68,7 @@ describe("AgentSupervisor.send: content[] blocks (D9)", () => {
     const rec = await sup.spawn({ prompt: "x", cwd: "/tmp", account: "main", isolation: "none" });
     await sup.send(rec.agentId, "hi", "tester", undefined, false, CONTENT);
     const parsed = JSON.parse(mailboxRaw(dir, rec.agentId).trim());
-    expect(parsed.content).toEqual(CONTENT);
+    expect(parsed.message.content).toEqual(CONTENT);
   });
 
   it("mirrors `content` onto the persisted 'delivered' event, in the same order as the original send (replay parity)", async () => {
@@ -106,6 +100,6 @@ describe("AgentSupervisor.send: content[] blocks (D9)", () => {
 
     const pending = new MailboxStore(dir).pending(rec.agentId);
     expect(pending).toHaveLength(1);
-    expect(pending[0]).toMatchObject({ from: "tester", kind: "user_message", text: "hello", content: CONTENT });
+    expect(pending[0]).toMatchObject({ from: "tester", kind: "user_message", text: "look at \n\n and ", content: CONTENT });
   });
 });

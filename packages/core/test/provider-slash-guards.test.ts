@@ -106,7 +106,7 @@ describe("Codex native command guards", () => {
     const r = await engine.supervisor.spawn({ prompt: "fixture", cwd: home, isolation: "none", provider: "codex", conductor: true });
     try {
       await vi.waitFor(() => expect(engine.supervisor.status(r.agentId).sessionId).toBe("native-session"));
-      await expect(engine.supervisor.send(r.agentId, "/goal ship it", "app", images, true, content as Parameters<typeof engine.supervisor.send>[5])).rejects.toThrow("Send Codex native commands without attachments");
+      await expect(engine.supervisor.send(r.agentId, "/goal ship it", "app", images, true, content as Parameters<typeof engine.supervisor.send>[5])).rejects.toThrow("Send native commands without attachments");
       expect(command).not.toHaveBeenCalled();
       expect(fake.spawns).toHaveLength(1);
     } finally { await engine.supervisor.suspendForShutdown(); }

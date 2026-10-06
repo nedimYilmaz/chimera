@@ -188,6 +188,57 @@ describe("PROJECT-DELETE-UI: deleteProject", () => {
     expect(calls.filter((c) => c.method === "project.delete")).toHaveLength(1);   // no retry
   });
 
+  for (const target of ["x", "y"]) {
+    for (const outcome of ["resolve", "reject"] as const) {
+      it(`an old ${outcome} response cannot alter a reopened ${target} confirmation`, async () => {
+        let resolveDelete!: (value: unknown) => void;
+        let rejectDelete!: (error: unknown) => void;
+        const pending = new Promise((resolve, reject) => { resolveDelete = resolve; rejectDelete = reject; });
+        const { store, local, commands, calls } = harness({
+          "project.delete": () => pending,
+          "project.list": [],
+          "project.status": (params: unknown) => ({ spec: { name: (params as { name: string }).name, path: `/repo/${(params as { name: string }).name}`, teams: [] }, sessions: [], teams: [] }),
+        });
+        local.set({ confirmDelete: "x" });
+        const deleting = commands.deleteProject("x", true);
+        local.set({ confirmDelete: null });
+        local.set({ confirmDelete: target });
+        local.set({ confirmDeleteFiles: true, deleteError: "new dialog error" });
+        await commands.openDetail(target);
+        if (outcome === "resolve") resolveDelete({ deleted: true });
+        else rejectDelete(new Error("old delete refusal"));
+        await deleting;
+
+        expect(local.getState()).toMatchObject({ confirmDelete: target, confirmDeleteFiles: true, deleteError: "new dialog error", deleting: false });
+        expect(calls.filter((c) => c.method === "project.delete")).toHaveLength(1);
+        expect(calls.filter((c) => c.method === "project.list")).toHaveLength(outcome === "resolve" ? 1 : 0);
+        if (target === "y") expect(local.getState().detail?.spec["name"]).toBe("y");
+        if (outcome === "reject") expect(store.getState().lastError).toBe("old delete refusal");
+      });
+    }
+  }
+
+  for (const outcome of ["resolve", "reject"] as const) {
+    it(`the latest matching confirmation receives its deferred ${outcome} response`, async () => {
+      let resolveDelete!: (value: unknown) => void;
+      let rejectDelete!: (error: unknown) => void;
+      const pending = new Promise((resolve, reject) => { resolveDelete = resolve; rejectDelete = reject; });
+      const { store, local, commands, calls } = harness({ "project.delete": () => pending, "project.list": [] });
+      local.set({ confirmDelete: "x" });
+      local.set({ confirmDeleteFiles: true });
+      const deleting = commands.deleteProject("x", true);
+      if (outcome === "resolve") resolveDelete({ deleted: true, orphanedTeams: [{ team: "retained-team" }] });
+      else rejectDelete(new Error("current refusal"));
+      await deleting;
+      expect(local.getState()).toMatchObject(outcome === "resolve"
+        ? { confirmDelete: null, confirmDeleteFiles: false, deleteError: null, deleting: false }
+        : { confirmDelete: "x", confirmDeleteFiles: true, deleteError: "current refusal", deleting: false });
+      if (outcome === "resolve") expect(store.getState().notice).toContain("retained-team");
+      else expect(store.getState().lastError).toBe("current refusal");
+      expect(calls.filter((c) => c.method === "project.delete")).toHaveLength(1);
+    });
+  }
+
   // DOUBLE-SUBMIT-SWEEP: unlike archiveProject/dissolveTeam/etc, deleteProject
   // deliberately keeps confirmDelete non-null (dialog mounted, ConfirmCard's
   // confirm chip still clickable) for the WHOLE round-trip on a refusal, so

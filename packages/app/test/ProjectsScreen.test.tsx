@@ -174,14 +174,48 @@ describe("PROJECT-DELETE-UI — delete confirm flow", () => {
     act(() => runAction("projects.delete", appStore));
 
     const root = mounted!.root;
-    act(() => root.find((n) => "data-delete-files-toggle" in n.props).props.onClick());
+    act(() => root.find((n) => "data-delete-files-toggle" in n.props).props.onChange({ currentTarget: { checked: true } }));
     expect(root.findAll((n) => "data-delete-files-warning" in n.props)).toHaveLength(1);
+    const checkbox = root.find((n) => "data-delete-files-toggle" in n.props);
+    expect(checkbox.type).toBe("input");
+    expect(checkbox.props.type).toBe("checkbox");
+    expect(checkbox.parent?.type).toBe("label");
+    expect(checkbox.props.checked).toBe(true);
+    expect(root.find((n) => "data-delete-files-path" in n.props).props.children).toBe(PROJECT.path);
 
     act(() => root.find((n) => n.props["data-confirm"] !== undefined).props.onClick());
     await flush();
 
     const call = rpcImpl.mock.calls.find(([m]) => m === "project.delete");
     expect(call?.[1]).toEqual({ name: "demo", deleteFiles: true });
+  });
+
+  it("dismiss/reopen and a different confirmation target reset file deletion consent", async () => {
+    act(() => { mounted = create(React.createElement(ProjectsScreen)); });
+    await flush(); await flush();
+    act(() => runAction("projects.delete", appStore));
+    const root = mounted!.root;
+    const checkbox = () => root.find((n) => "data-delete-files-toggle" in n.props);
+    expect(checkbox().props.checked).toBe(false);
+    act(() => checkbox().props.onChange({ currentTarget: { checked: true } }));
+    act(() => root.find((n) => n.type === "button" && "data-confirm-cancel" in n.props).props.onClick());
+    expect(projectsLocal.getState().confirmDeleteFiles).toBe(false);
+    act(() => runAction("projects.delete", appStore));
+    expect(checkbox().props.checked).toBe(false);
+    act(() => checkbox().props.onChange({ currentTarget: { checked: true } }));
+    act(() => projectsLocal.set({ confirmDelete: "another-project" }));
+    expect(checkbox().props.checked).toBe(false);
+  });
+
+  it("changing the selected project dismisses the old confirmation and resets consent", async () => {
+    act(() => { mounted = create(React.createElement(ProjectsScreen)); });
+    await flush(); await flush();
+    act(() => runAction("projects.delete", appStore));
+    act(() => mounted!.root.find((n) => "data-delete-files-toggle" in n.props).props.onChange({ currentTarget: { checked: true } }));
+    act(() => projectsLocal.set({ items: [PROJECT, { ...PROJECT, name: "second", path: "/tmp/second" }], cursor: 1 }));
+    expect(projectsLocal.getState().confirmDelete).toBeNull();
+    expect(projectsLocal.getState().confirmDeleteFiles).toBe(false);
+    expect(rpcImpl.mock.calls.filter(([m]) => m === "project.delete")).toHaveLength(0);
   });
 
   it("on {code:'conflict'} the daemon's message renders INLINE and the gate stays open (no retry)", async () => {
@@ -192,9 +226,12 @@ describe("PROJECT-DELETE-UI — delete confirm flow", () => {
     act(() => runAction("projects.delete", appStore));
 
     const root = mounted!.root;
+    act(() => root.find((n) => "data-delete-files-toggle" in n.props).props.onChange({ currentTarget: { checked: true } }));
     act(() => root.find((n) => n.props["data-confirm"] !== undefined).props.onClick());
     await flush();
 
+    expect(projectsLocal.getState().confirmDeleteFiles).toBe(true);
+    expect(root.find((n) => "data-delete-files-toggle" in n.props).props.checked).toBe(true);
     expect(projectsLocal.getState().confirmDelete).toBe("demo");   // gate stays open
     const errorNodes = root.findAll((n) => "data-delete-error" in n.props);
     expect(errorNodes).toHaveLength(1);

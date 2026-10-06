@@ -1,3 +1,5 @@
+import type { AgentDelivery } from "@chimera/protocol";
+import { deliveryContent, withMessageInput } from "../message-delivery.js";
 import { Codex } from "@openai/codex-sdk";
 import { fileURLToPath } from "node:url";
 import type {
@@ -100,13 +102,13 @@ type CodexLoopInput = CodexTurnInput & { steered?: true };
 // send must not run first and leave the force stuck behind it. Ordinary sends queued after the
 // last force-send stay queued, and a slash command ends the fold wherever it appears.
 function takeForcedFold(first: CodexLoopInput, loop: InterruptibleTurnLoop<CodexLoopInput>): CodexLoopInput {
-  if (CODEX_SLASH_INPUT.test(first.text.trimStart())) return first;
+  if (!first.preserveBlocks && CODEX_SLASH_INPUT.test(first.text.trimStart())) return first;
   const queued = loop.pending();
   let lastForced = -1;
   for (const [index, input] of queued.entries()) if (input.steered) lastForced = index;
   const folded: CodexLoopInput[] = [first];
   for (let index = 0; index <= lastForced; index++) {
-    if (CODEX_SLASH_INPUT.test(queued[index]!.text.trimStart())) break;
+    if (!queued[index]!.preserveBlocks && CODEX_SLASH_INPUT.test(queued[index]!.text.trimStart())) break;
     folded.push(loop.shift()!);
   }
   return mergeTurnInputs(folded);
@@ -124,6 +126,7 @@ function mergeTurnInputs(inputs: CodexLoopInput[]): CodexLoopInput {
     // text-only blocks too, otherwise a differing content/text pair silently collapses to `text`.
     ...(inputs.some((input) => input.content?.length || input.images?.length) ? { content: inputs.flatMap(blocks) } : {}),
     ...(preamble ? { preamble } : {}),
+    ...(inputs.some(input => input.preserveBlocks) ? { preserveBlocks: true } : {}),
   };
 }
 
@@ -487,6 +490,7 @@ export function buildCodexOptions(spec: ResolvedAgentSpec): CodexFactoryOptions 
     // Agent-local opt-in. Also override an ambient account-wide enable so ordinary
     // agents never acquire realtime just because they share a CODEX_HOME.
     "features.realtime_conversation": spec.providerOptions["codexRealtime"] === true,
+    ...(spec.instructions !== undefined ? { developer_instructions: spec.instructions } : {}),
     // SAFE-2: command-line config overrides outrank ambient CODEX_HOME config, so a user's
     // model_provider setting cannot silently select a provider with namespace_tools=false.
     model_provider: CODEX_MODEL_PROVIDER,
@@ -547,7 +551,7 @@ export class CodexAgentBackend implements AgentBackend {
     const { workdir: cwd } = ensureWorkdir(spec);
     const factoryOptions = buildCodexOptions(spec);
     const threadOptions = buildThreadOptions(spec, cwd);
-    if (transport === "app-server") threadOptions["recoveryInstructions"] = spec.instructions;
+    if (transport === "app-server") threadOptions["developerInstructions"] = spec.instructions;
     // Injected SDK fakes retain deterministic validation; real sessions consult
     // the same configured binary used for execution, including future models.
     if (this.deps.codexFactory && !this.deps.validateModel) assertCodexToolDeferral(factoryOptions, threadOptions);
@@ -563,12 +567,14 @@ export class CodexAgentBackend implements AgentBackend {
     const effectiveModel = threadOptions["model"] as string | undefined;
     const effectiveEffort = threadOptions["modelReasoningEffort"] as string | undefined;
 
-    // BACKEND-KIT: codex has no systemPrompt option — instructions prefix turn 1. resumeOnly
-    // attaches idle without replaying the original prompt; the first send() starts the turn.
     const loop = new InterruptibleTurnLoop<CodexLoopInput>({ graceMs: this.deps.interruptGraceMs });
-    if (!spec.resumeOnly) loop.push({ text: spec.prompt, content: spec.content, preamble: spec.instructions });
-    // Reattached sessions must receive current fleet rules without replaying the old task.
-    let resumedInstructions = spec.resumeOnly ? spec.instructions : undefined;
+    // Session instructions use Codex's developer channel on both transports and
+    // resume paths. They must never become part of an operator/peer's task body.
+    if (!spec.resumeOnly) loop.push({ text: spec.prompt,
+      content: spec.initialDelivery ? deliveryContent(spec.prompt, undefined, spec.content, spec.initialDelivery) : spec.content,
+      ...(spec.initialDelivery ? { preserveBlocks: true } : {}),
+    });
+
     const keepAlive = spec.conductor || spec.persistent;
     // R2-TURN-LIFECYCLE: stream-idle + hard max-duration watchdog over the runStreamed() call
     // below. Undefined idleTimeoutMs/maxTurnDurationMs (the default) ⇒ fully inert. Heartbeat
@@ -735,8 +741,7 @@ export class CodexAgentBackend implements AgentBackend {
                 }
                 controller.signal.throwIfAborted();
               }
-              const refreshInstructions = resumedInstructions && !CODEX_SLASH_INPUT.test(prompt.text.trimStart());
-              prepared = prepareCodexInput(refreshInstructions ? { ...prompt, preamble: resumedInstructions } : prompt);
+              prepared = prepareCodexInput(prompt);
               const { events } = await thread.runStreamed(prepared.input, {
                 signal: controller.signal,
                 // W2-1 STRUCTURED-RETURNS: verified against pinned SDK 0.145.0's dist/index.d.ts —
@@ -751,7 +756,6 @@ export class CodexAgentBackend implements AgentBackend {
                 ...(spec.resultSchema ? { outputSchema: spec.resultSchema } : {}),
               });
               markReady();
-              if (refreshInstructions) resumedInstructions = undefined;
               for await (const raw of events) {
                 if (loop.killed) return;
                 // Drain the cancelled SDK invocation to process exit before a
@@ -889,31 +893,32 @@ export class CodexAgentBackend implements AgentBackend {
     };
     void run();
 
-    return {
+    return withMessageInput({
       get processPid() { return codex instanceof CodexAppServer ? codex.processPid : null; },
       ...(codex instanceof CodexAppServer ? { command: (text: string) => codex.command(text) } : {}),
       isTurnActive: () => executingTurn || codex instanceof CodexAppServer && codex.isTurnActive(),
       ...(codex instanceof CodexAppServer ? { compact: () => codex.compact(), compactOwner: "sdk" as const, remoteControl: (enable: boolean) => codex.remoteControl(enable) } : {}),
       ...(codex instanceof CodexAppServer && codex.realtimeEnabled ? { nativeVoice: codex.nativeVoice } : {}),
-      send: async (text: string, images?: Image[], content?: ContentBlock[]) => {
+      send: async (text: string, images?: Image[], content?: ContentBlock[], delivery?: AgentDelivery) => {
         if (loop.ended || loop.closed) throw new Error("input stream closed");
-        loop.push({ text, images, content });
+        loop.push({ text, images, content: delivery ? deliveryContent(text, images, content, delivery) : content, ...((delivery || content?.length) ? { preserveBlocks: true } : {}) });
       },
       interrupt: async () => { loop.interrupt(); if (codex instanceof CodexAppServer) await codex.interruptActiveTurn(); },
       kill: async () => { loop.kill(); codex.close?.(); },
       close: async () => { loop.close(); },
-      steer: async (text: string, images?: Image[], content?: ContentBlock[]) => {
+      steer: async (text: string, images?: Image[], content?: ContentBlock[], delivery?: AgentDelivery) => {
+        if (delivery) content = deliveryContent(text, images, content, delivery);
         if (loop.ended || loop.closed) throw new Error("input stream closed");
         if (thread.steer) {
           // turn/start may still be in flight when the operator force-sends.
           await readyForSteer;
           if (loop.ended || loop.closed) throw new Error("input stream closed");
-          const prepared = prepareCodexInput({ text, images, content });
+          const prepared = prepareCodexInput({ text, images, content, preserveBlocks: !!delivery || !!content?.length });
           try {
             if (!await thread.steer(prepared.input)) {
               prepared.cleanup();
               if (loop.ended || loop.closed) throw new Error("input stream closed");
-              loop.push({ text, images, content });
+              loop.push({ text, images, content, ...((delivery || content?.length) ? { preserveBlocks: true } : {}) });
             } else if (executingTurn || codex instanceof CodexAppServer && codex.isTurnActive()) {
               // Codex may read an accepted image at its next inference step.
               steerCleanups.add(prepared.cleanup);
@@ -924,12 +929,12 @@ export class CodexAgentBackend implements AgentBackend {
         // SDK exec has no live input channel. Queue first, then interrupt the
         // active invocation; the same Thread resumes its rollout with this input.
         // Ordinary send() remains FIFO and never interrupts a running turn.
-        loop.push({ text, images, content, steered: true });
+        loop.push({ text, images, content, preserveBlocks: !!delivery || !!content?.length, steered: true });
         if (executingTurn) {
           interruptForSteer = true;
           if (execTurnStarted) loop.interrupt();
         }
       },
-    };
+    });
   }
 }

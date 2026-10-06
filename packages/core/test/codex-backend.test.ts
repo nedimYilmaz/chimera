@@ -690,11 +690,12 @@ describe("CodexAgentBackend.spawn — additional branch/edge coverage", () => {
     expect(codexCalls).toHaveLength(0);
   });
 
-  it("prefixes the first turn's input with instructions when present", async () => {
+  it("keeps instructions in developer config and the task body unchanged", async () => {
     const { factory, threads } = fakeCodex([[{ type: "turn.completed", usage: zeroUsage }]]);
     new CodexAgentBackend({ codexFactory: factory }).spawn(cxSpec({ instructions: "be concise" }), () => {}, async () => true);
+    expect(buildCodexOptions(cxSpec({ instructions: "be concise" })).config?.developer_instructions).toBe("be concise");
     await settle();
-    expect(threads[0]!.runs[0]!.input).toBe("be concise\n\ntask");
+    expect(threads[0]!.runs[0]!.input).toBe("task");
   });
 
   it("uses the bare prompt as the first turn's input when instructions are absent", async () => {
@@ -833,12 +834,12 @@ describe("CodexAgentBackend option mapping", () => {
     expect(codexCalls[0]!["apiKey"]).toBe("sk-cdx");     // Task 1 added CODEX_API_KEY to InjectAs for exactly this
   });
 
-  it("prefixes instructions onto the first turn input and passes model", async () => {
+  it("separates instructions from the first turn and passes model", async () => {
     const { factory, threads } = fakeCodex([TURN_MIN]);
     new CodexAgentBackend({ codexFactory: factory })
       .spawn(cxSpec({ instructions: "Be terse.", model: "gpt-5.2-codex" }), () => {}, async () => true);
     await settle();
-    expect(threads[0]!.runs[0]!.input).toBe("Be terse.\n\ntask");
+    expect(threads[0]!.runs[0]!.input).toBe("task");
     expect(threads[0]!.options?.["model"]).toBe("gpt-5.2-codex");
   });
 
@@ -976,7 +977,7 @@ describe("CodexAgentBackend turns and lifecycle", () => {
     expect(threads[0]!.runs.map((r) => r.input)).toEqual(["hi"]);
   });
 
-  it("refreshes instructions once after idle reattach without replaying the task or changing slash commands", async () => {
+  it("keeps instructions out of follow-ups after idle reattach", async () => {
     const { factory, threads } = fakeCodex([turnWith("compacted"), turnWith("first"), turnWith("second")]);
     const handle = new CodexAgentBackend({ codexFactory: factory }).spawn(
       cxSpec({ persistent: true, resume: "sess-1", resumeOnly: true, instructions: "Chimera MCP first." }), () => {}, async () => true,
@@ -986,7 +987,7 @@ describe("CodexAgentBackend turns and lifecycle", () => {
     await handle.send("/compact"); await settle();
     await handle.send("/tmp/project: new task"); await settle();
     await handle.send("follow up"); await settle();
-    expect(threads[0]!.runs.map(r => r.input)).toEqual(["/compact", "Chimera MCP first.\n\n/tmp/project: new task", "follow up"]);
+    expect(threads[0]!.runs.map(r => r.input)).toEqual(["/compact", "/tmp/project: new task", "follow up"]);
     await handle.kill();
   });
 
@@ -997,12 +998,12 @@ describe("CodexAgentBackend turns and lifecycle", () => {
     let h: AgentHandle;
     const sink = (e: BackendEvent) => {
       evs.push(e);
-      if (e.kind === "turn_complete" && !sent) { sent = true; void h.send("[from tester] go on"); }
+      if (e.kind === "turn_complete" && !sent) { sent = true; void h.send("from: tester\ngo on"); }
     };
     h = new CodexAgentBackend({ codexFactory: factory }).spawn(cxSpec(), sink, async () => true);
     await settle();
     expect(threads.length).toBe(1);                                  // ONE thread, two runs
-    expect(threads[0]!.runs.map((r) => r.input)).toEqual(["task", "[from tester] go on"]);
+    expect(threads[0]!.runs.map((r) => r.input)).toEqual(["task", "from: tester\ngo on"]);
     expect(evs.filter((e) => e.kind === "turn_complete").length).toBe(2);
     const result = evs.find((e) => e.kind === "result")!;
     expect(result.data["text"]).toBe("second");
@@ -1431,7 +1432,7 @@ describe("Codex rapid force-sends while the first exec abort is unwinding", () =
     await handle.steer!("A (summary)", undefined, [{ type: "text", text: "A (model-visible)" }]);
     await handle.steer!("B");
     releaseExit();
-    await vi.waitFor(() => expect(inputs.slice(1)).toEqual(["A (model-visible)\n\nB"]));
+    await vi.waitFor(() => expect(inputs.slice(1)).toEqual([[{ type: "text", text: "A (model-visible)" }, { type: "text", text: "B" }]]));
     await handle.kill();
   });
 

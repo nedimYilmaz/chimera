@@ -12,6 +12,20 @@ function rig() {
 }
 
 describe("QueueStore", () => {
+  it("loads legacy tasks conservatively and preserves new immutable authors across reload", () => {
+    const { q, dir, events } = rig();
+    q.create({ name: "work" });
+    const old = q.push("work", { prompt: "old" });
+    const author = { from: "worker", source: "agent" as const, engineId: "local", role: "reviewer" };
+    const fresh = q.push("work", { prompt: "new", author });
+    const path = join(dir, "queues.json");
+    const data = JSON.parse(readFileSync(path, "utf8"));
+    delete data.tasks.find((task: { taskId: string }) => task.taskId === old.taskId).author;
+    writeFileSync(path, JSON.stringify(data));
+    const reloaded = new QueueStore(dir, events);
+    expect(reloaded.task(old.taskId).author).toMatchObject({ source: "external" });
+    expect(reloaded.task(fresh.taskId).author).toEqual(author);
+  });
   it("creates queues, pushes tasks with defaults, orders by priority then FIFO", () => {
     const { q } = rig();
     q.create({ name: "work", retryLimit: 1 });

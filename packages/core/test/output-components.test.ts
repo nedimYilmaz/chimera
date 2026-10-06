@@ -75,7 +75,7 @@ describe("AgentSupervisor: F21/D17 output-components cheatsheet gate", () => {
     });
     const text = fake.spawns[0]!.instructions!;
     const roleIdx = text.indexOf("role instructions");
-    const capIdx = text.indexOf("Chimera MCP tools available");
+    const capIdx = text.indexOf("CHIMERA TOOLS");
     const cheatsheetIdx = text.indexOf("OUTPUT COMPONENTS");
     expect(capIdx).toBe(0);                          // the very first byte is shared
     expect(cheatsheetIdx).toBeGreaterThan(capIdx);

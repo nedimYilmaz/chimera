@@ -5,6 +5,20 @@ import { EventLog } from "@chimera/core/events";
 import { MailboxStore } from "@chimera/core/mailbox";
 import { makeSupervisor } from "./helpers.js";
 
+it("orchestration-enabled agents receive follow-ups without replaying shared instructions", async () => {
+  const { sup, dir, fake } = makeSupervisor([[
+    { awaitSend: true }, { awaitSend: true }, { end: { resultText: "done" } },
+  ]]);
+  const rec = await sup.spawn({ prompt: "task", cwd: "/tmp", isolation: "none", orchestration: { allow: true } });
+  expect(fake.spawns[0]!.instructions).toContain("chimera_tools");
+  await sup.send(rec.agentId, "user follow-up", "app");
+  await sup.send(rec.agentId, "peer follow-up", "peer");
+  await sup.waitFor(rec.agentId, 1000);
+  const messages = new EventLog(dir).tail(rec.agentId, 100)
+    .filter(e => e.kind === "message_complete").map(e => e.data["text"]);
+  expect(messages).toEqual(["echo:user follow-up", "echo:peer follow-up"]);
+});
+
 describe("AgentSupervisor mailboxes", () => {
   it("send() enqueues and delivers to a live agent", async () => {
     const scenario: FakeStep[] = [{ awaitSend: true }, { end: { resultText: "after msg" } }];
@@ -14,7 +28,7 @@ describe("AgentSupervisor mailboxes", () => {
     const final = await sup.waitFor(rec.agentId, 1000);
     expect(final.state).toBe("done");
     const echo = new EventLog(dir).tail(rec.agentId, 50).find((e) => e.kind === "message_complete");
-    expect(echo?.data["text"]).toBe("echo:[from tester] extra instruction");
+    expect(echo?.data["text"]).toBe("echo:extra instruction");
   });
 
   it("send() to an unknown agent throws UnknownAgentError", async () => {
@@ -34,7 +48,7 @@ describe("AgentSupervisor mailboxes", () => {
     const final = await sup.waitFor(rec.agentId, 1000);
     expect(final.state).toBe("done");
     const echo = new EventLog(dir).tail(rec.agentId, 50).find((e) => e.kind === "message_complete");
-    expect(echo?.data["text"]).toBe("echo:[from tester] hi");
+    expect(echo?.data["text"]).toBe("echo:hi");
   });
 
   it("send() to an unknown short id still throws UnknownAgentError (no accidental partial match)", async () => {
@@ -59,7 +73,36 @@ describe("AgentSupervisor mailboxes", () => {
     const pFinal = await sup.waitFor(p.agentId, 1000);           // child result woke the parent
     expect(pFinal.state).toBe("done");
     const echo = new EventLog(dir).tail(p.agentId, 50).find((e) => e.kind === "message_complete");
-    expect(echo?.data["text"]).toBe(`echo:[from ${c.agentId}] child done`);
+    // An unlabelled local agent is named by the 8-char id prefix agent_send resolves.
+    expect(echo?.data["text"]).toBe(`echo:child done`);
+  });
+
+  // SENDER-OUT-OF-THE-TEXT: a named agent is introduced by its label and short id on its own line;
+  // the operator's own surfaces get nothing in front of the message at all.
+  it("keeps the body intact when the sender has a display label", async () => {
+    const receiver: FakeStep[] = [{ awaitSend: true }, { end: { resultText: "ok" } }];
+    const sender: FakeStep[] = [{ awaitSend: true }, { end: { resultText: "ok" } }];
+    const { sup, dir } = makeSupervisor([receiver, sender]);
+    const r = await sup.spawn({ prompt: "x", cwd: "/tmp", account: "main", isolation: "none" });
+    const a = await sup.spawn({ prompt: "x", cwd: "/tmp", account: "second", isolation: "none" });
+    await sup.renameAgent(a.agentId, "reviewer");
+    await sup.send(r.agentId, "found a bug", a.agentId);
+    await sup.waitFor(r.agentId, 1000);
+    const echo = new EventLog(dir).tail(r.agentId, 50).find((e) => e.kind === "message_complete");
+    expect(echo?.data["text"]).toBe(`echo:found a bug`);
+    await sup.kill(a.agentId);
+  });
+
+  it("keeps a failed child's notice body intact", async () => {
+    const receiver: FakeStep[] = [{ awaitSend: true }, { end: { resultText: "ok" } }];
+    const { sup, dir } = makeSupervisor([receiver]);
+    const r = await sup.spawn({ prompt: "x", cwd: "/tmp", account: "main", isolation: "none" });
+    const mailboxes = (sup as unknown as { deps: { mailboxes: MailboxStore } }).deps.mailboxes;
+    mailboxes.enqueue(r.agentId, { from: "job:nightly", kind: "child_failed", text: "the build crashed" });
+    await (sup as unknown as { deliverPending(id: string): Promise<void> }).deliverPending(r.agentId);
+    await sup.waitFor(r.agentId, 1000);
+    const echo = new EventLog(dir).tail(r.agentId, 50).find((e) => e.kind === "message_complete");
+    expect(echo?.data["text"]).toBe("echo:the build crashed");
   });
 });
 
@@ -73,7 +116,7 @@ describe("AgentSupervisor: send() additional branches", () => {
     await sup.send(rec.agentId, "hi");                    // no `from` argument
     await sup.waitFor(rec.agentId, 1000);
     const echo = new EventLog(dir).tail(rec.agentId, 50).find((e) => e.kind === "message_complete");
-    expect(echo?.data["text"]).toBe("echo:[from caller] hi");
+    expect(echo?.data["text"]).toBe("echo:hi");
   });
 
   it("send() to a killed agent rejects with AgentNotRunningError", async () => {
@@ -210,7 +253,7 @@ describe("AgentSupervisor: re-enqueue on handle.send() rejection (no-drop, spec 
     await new Promise((r) => setTimeout(r, 0));
 
     expect(calls).toBe(2);
-    expect(sent).toEqual(["[from a] one"]);                                    // first turn delivered, NOT re-enqueued
+    expect(sent).toEqual(["one"]);                                    // first turn delivered, NOT re-enqueued
     expect(new MailboxStore(dir).pending(rec.agentId).map((m) => m.text)).toEqual(["/compact", "three"]);  // failed + tail, in order
   });
 
@@ -248,7 +291,7 @@ describe("AgentSupervisor: re-enqueue on handle.send() rejection (no-drop, spec 
 
     // one send, not two — but nothing is lost: both attributions survive inside the turn, in
     // arrival order, which is what the agent actually needs to tell them apart
-    expect(sent).toEqual(["[from a] one\n\n[from b] two"]);
+    expect(sent).toEqual(["one\n\ntwo"]);
     expect(new MailboxStore(dir).pending(rec.agentId)).toEqual([]);            // whole batch acked, nothing left
   });
 });
@@ -267,7 +310,7 @@ describe("AgentSupervisor: turn_complete triggers deliverPending", () => {
     const final = await sup.waitFor(rec.agentId, 1000);
     expect(final.state).toBe("done");
     const echo = new EventLog(dir).tail(rec.agentId, 50).find((e) => e.kind === "message_complete");
-    expect(echo?.data["text"]).toBe("echo:[from direct] hello");
+    expect(echo?.data["text"]).toBe("echo:hello");
   });
 });
 
@@ -325,7 +368,7 @@ it("explicit force steers an active backend before visible turn events, preservi
   handle.isTurnActive = () => true;
   handle.steer = steer;
   await sup.send(rec.agentId, "fallback", "app", undefined, false, [{ type: "text", text: "first" }, { type: "text", text: "second" }], { force: true });
-  expect(steer).toHaveBeenCalledWith("[from app] fallback", undefined, [{ type: "text", text: "[from app] first" }, { type: "text", text: "second" }]);
+  expect(steer).toHaveBeenCalledWith("first\n\nsecond", undefined, [{ type: "text", text: "first" }, { type: "text", text: "second" }], expect.objectContaining({ messages: expect.any(Array) }));
   expect(send).not.toHaveBeenCalled();
   await sup.kill(rec.agentId);
 });
@@ -372,7 +415,7 @@ it("force keeps older mail first without turning a peer result into a forced mes
   expect(new MailboxStore(dir).pending(rec.agentId)).toHaveLength(1);
   await sup.send(rec.agentId, "now", "app", undefined, false, undefined, { force: true });
   await new Promise(resolve => setTimeout(resolve, 0));
-  expect(sent).toEqual(["send:[from peer] earlier", "force:[from app] now"]);
+  expect(sent).toEqual(["send:earlier", "force:now"]);
   await sup.kill(rec.agentId);
 });
 

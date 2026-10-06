@@ -111,7 +111,7 @@ describe("CodexAgentBackend first-request tool capture", () => {
       const cwd = mkdtempSync(join(tmpdir(), "chimera-codex-cwd-"));
       tempDirs.push(home, cwd);
       const base = cxSpec({
-        cwd,
+        cwd, instructions: "CHIMERA_TEST_SESSION_POLICY",
         // Use a non-Lite model in the bundled catalog; removed models fall back to metadata
         // without tool search and cannot exercise deferred MCP discovery.
         model: "gpt-5.5",
@@ -153,6 +153,9 @@ describe("CodexAgentBackend first-request tool capture", () => {
     // Capture the REAL provider payload produced by the pinned SDK/CLI after MCP initialize +
     // tools/list and enabled_tools filtering. The literal first provider request defers MCP
     // schemas behind tool_search, so it contains only the server source — never concrete names.
+    const input = requests[2]!["input"] as Array<Record<string, unknown>>;
+    expect(input.filter(item => item.role === "developer").some(item => JSON.stringify(item).includes("CHIMERA_TEST_SESSION_POLICY"))).toBe(true);
+    expect(input.filter(item => item.role === "user").every(item => !JSON.stringify(item).includes("CHIMERA_TEST_SESSION_POLICY"))).toBe(true);
     const firstRequest = JSON.stringify(requests[2]);
     expect(firstRequest).toContain('"type":"tool_search"');
     expect(firstRequest).toContain("- probe");

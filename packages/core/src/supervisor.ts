@@ -1,13 +1,13 @@
+import { createMessage, deliverAgentInput, UnsupportedContentError } from "./message-delivery.js";
 import { randomUUID } from "node:crypto";
 import { parseCodexCommand } from "./backends/codex-commands.js";
 import { existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import { execFile } from "node:child_process";
-import { AgentSetGroupsParamsSchema, AgentSpecSchema, ATTENTION_EVENT_KINDS, parseAgentAddress, effectiveContextLimitFor, clampCompactionThresholdForProvider, type AccountQuotaWindow, type AgentSpec, type CompactResult, type EffortLevel, type ModelMetadataLookup, type CodexContextLimits, type QuestionAnswer, type QuestionOption, type QuestionDefault, type RemoteControlStatus, type DynamicCapConfig, type ExplainCheck, type WorktreeSetupHook, type AgentSendResult, type PromptStall, type FailureDisposition, type UsageScope } from "@chimera/protocol";
+import { AgentSetGroupsParamsSchema, AgentSpecSchema, ATTENTION_EVENT_KINDS, parseAgentAddress, effectiveContextLimitFor, clampCompactionThresholdForProvider, type Principal, type AccountQuotaWindow, type AgentSpec, type CompactResult, type EffortLevel, type ModelMetadataLookup, type CodexContextLimits, type QuestionAnswer, type QuestionOption, type QuestionDefault, type RemoteControlStatus, type DynamicCapConfig, type ExplainCheck, type WorktreeSetupHook, type AgentSendResult, type PromptStall, type FailureDisposition, type UsageScope } from "@chimera/protocol";
 import type { DynamicCapTracker } from "./dynamic-cap.js";
 import type { EngineToolName } from "@chimera/protocol/engine-help";
-import { mcpToolTags } from "@chimera/protocol";
 import { ConfigError, type AccountRegistry } from "./accounts.js";
 import { redact, type CredentialResolver } from "./credentials.js";
 import type { AgentBackend, AgentHandle, BackendEvent, CompactionThresholdSource, ContentBlock, DialogDecision, DialogRequest, Image, PermissionRequest, ResolvedAgentSpec } from "./backend.js";
@@ -37,119 +37,26 @@ import { SentenceChunker } from "./voice-tts.js";
 import { PromptAckWatch, PROMPT_STALL_MS } from "./prompt-ack.js";
 import { isTurnOpening } from "./turn-kinds.js";
 
-// CAPABILITY-BLOCK-DRIFT: every tool name this block names is typed against
-// EngineToolName (the union derived from @chimera/protocol/engine-help's
-// ENGINE_TOOL_NAMES — the same catalog server.ts/tui/app consume), so a rename or
-// removal in the catalog fails `tsc -b` here. test/supervisor-capability-block.test.ts
-// additionally asserts membership at runtime (protecting `vitest`-only runs, and
-// documenting the intent for anyone reading the test suite) and pins the exact
-// generated string so a catalog EDIT that leaves these names intact but changes their
-// meaning still gets a visible diff to review.
-//
-// This is NOT a full listing of ENGINE_TOOL_NAMES — see mcpTools.ts (tui) /
-// commands.system.ts (app) for the exhaustive 1:1 palettes. This is the curated
-// AWARENESS nudge (see launch() below): a handful of tools worth naming up front,
-// plus a pointer at chimera_tools/mcp_store_tools for live discovery of the rest. A
-// catalog addition doesn't require touching this list; a catalog rename/removal of a
-// name used here does, and the compiler enforces that.
+// Tool schemas carry the catalog. Keep only discovery and cross-tool policy here;
+// repeating the catalog on every spawn adds context without adding capabilities.
 export const CAPABILITY_BLOCK_TOOLS = {
-  agentSpawn: "agent_spawn", agentStatus: "agent_status", agentResult: "agent_result",
-  agentWait: "agent_wait", askAgent: "ask_agent", agentSend: "agent_send", askTeam: "ask_team",
-  myTeam: "my_team", askHuman: "ask_human", memorySearch: "memory_search", memoryAdd: "memory_add",
-  memoryEdit: "memory_edit", memoryGet: "memory_get",
-  chronicleSearch: "chronicle_search", chronicleGet: "chronicle_get",
-  teamList: "team_list", queuePush: "queue_push", chimeraTools: "chimera_tools",
-  chimeraCall: "chimera_call", mcpStoreTools: "mcp_store_tools", mcpStoreCall: "mcp_store_call",
-  engineHelp: "engine_help",
-  // TOOL-AWARENESS-OVER-REGISTRATION: named here because naming is what makes a DEFERRED tool
-  // free. An agent that knows the name calls chimera_call with it directly — one turn, exactly as
-  // if the tool had been registered; only an agent that has to SEARCH first pays an extra turn,
-  // and a turn is a whole context re-read.
-  //
-  // These six were the gap. answer_question and subscribe are REACTIVE — an agent does not go
-  // looking for them, they become necessary when something arrives — and terminal_read /
-  // terminal_write were added recently and named nowhere, which is how the operator found an agent
-  // insisting it could not see a terminal that was open under it.
-  answerQuestion: "answer_question", subscribe: "subscribe", renameSelf: "rename_self",
-  daemonStatus: "daemon_status", terminalRead: "terminal_read", terminalWrite: "terminal_write",
+  chimeraTools: "chimera_tools", chimeraCall: "chimera_call",
+  mcpStoreTools: "mcp_store_tools", mcpStoreCall: "mcp_store_call",
 } as const satisfies Record<string, EngineToolName>;
 
-// MEMORY-DISCIPLINE: the fleet's standing rule about knowledge, stated once and given to every
-// agent that can actually reach the memory tools. Three things it has to establish, in the order
-// an agent needs them:
-//
-//   1. WHERE TO LOOK WHEN YOU NEED TO KNOW SOMETHING. An agent that doesn't know something will
-//      otherwise guess, or go straight to the web and re-derive what a sibling already
-//      established and wrote down. The pool exists precisely so that cost is paid once.
-//      Deliberately NOT a startup ritual: an unconditional session-start search would make every
-//      agent in the fleet pay for a lookup most of them never needed, which is the same waste
-//      this file's other TOKEN-OPT comments exist to remove. The project in front of the agent
-//      answers questions about itself; memory answers what the project cannot.
-//   2. WHAT TO WRITE BACK, and that a second copy is not an option. The no-duplicate half is
-//      enforced in MemoryStore.add, not here — this block exists so the refusal reads as the
-//      expected path rather than as an error.
-//   3. NO INVENTED FACTS. The strongest line in the block, and the reason the other two matter:
-//      a memory pool that accumulates plausible-sounding guesses is worse than no pool, because
-//      the next agent reads them as confirmed. Admitting ignorance is cheap; a fabricated fact
-//      that gets written down is permanent.
-//
-// Deliberately short. The same token-economy rule this fleet applies to everything else applies
-// here — a discipline nobody reads because it is 400 words long is not a discipline.
-export function buildMemoryDisciplineBlock(): string {
-  const t = CAPABILITY_BLOCK_TOOLS;
-  return `MEMORY DISCIPLINE — chimera memory is the fleet's shared knowledge: what the work in ` +
-    `front of you cannot tell you, and what you learn that outlives this task.
-- Need to know something the project itself doesn't answer — why a decision was made, how another system behaves, a past root cause, where something lives? ${t.memorySearch} it BEFORE the web or a guess; ${t.memoryGet} reads a hit in full and follows its [[links]]. No need to search at startup or out of habit — search when you actually need an answer. Not knowing is fine; not looking it up is not.
-- Compacted, and unsure what you already tried? ${t.chronicleSearch} searches YOUR past turns/commands/results by meaning — the events outlive your context; ${t.chronicleGet} reads a hit in full. Redoing work you already did is the expensive mistake.
-- Learned something durable of that same kind? ${t.memoryAdd} it before you finish, with a title so it is findable.
-- Never a second copy: ${t.memoryAdd} REFUSES a note that restates an existing one and hands you its id — ${t.memoryEdit} that record instead. Correcting or extending what is there beats adding beside it.
-- Never state as fact anything you have not read from real data (a file, a command's output, a real API/tool result) or a confirmed memory. If you can't confirm it, say what you don't know and how to find out. A guess written into memory becomes everyone's wrong answer.`;
-}
+// Operator messages need no attribution; peer messages retain their sender identity.
+const OPERATOR_SENDERS: ReadonlySet<string> = new Set(["app", "tui", "caller", "external", "operator"]);
 
-// BATCH-INDEPENDENT-CALLS: measured across ~47k model calls, agents average 1.14 tool calls per
-// turn and 89.7% of tool-calling turns carry exactly ONE — while turns with fifteen blocks exist in
-// the log, so nothing is stopping them. Nothing was asking, either.
-//
-// The wording is narrow on purpose. "Do more per turn" would be advice agents already follow where
-// it applies: 85% of Bash commands are already chained with && or ; and half are multi-line
-// scripts, because DEPENDENT steps cannot be parallel blocks — the model has to see A's result
-// before it can write B. The untouched case is the INDEPENDENT one, and that is the only thing
-// this asks for.
-//
-// Costs ~50 tokens in every prompt. Batching at 3 per turn removes ~14,000 model calls across a
-// run of this size, and every removed call is one fewer whole-context read — 1.43x on its own,
-// which multiplies with anything that shrinks the context itself.
-/** The subjects worth naming in every prompt: real topics, with more than one tool. */
-function searchableToolSubjects(): string[] {
-  const skip = new Set(["core", "extended", "conductor", "discovery"]);
-  return mcpToolTags().filter((t) => t.count >= 2 && !skip.has(t.tag)).map((t) => t.tag);
-}
-
-// TOOL-TAGS: the subject list is GENERATED from the catalog, not written here. It is the one part
-// of this block that would otherwise rot invisibly — a new subject nobody names is a subject no
-// agent ever searches, and nothing fails when it is merely missing. Filtered to subjects with more
-// than one tool, since a one-member category is not worth a word in every prompt.
-//
-// It earns its ~60 tokens by removing a hop: an agent that can see the vocabulary asks
-// chimera_tools for a subject directly, instead of calling it bare to find out what to ask for.
-//
-// The tiers are excluded on purpose: "core" is what the agent already holds, "conductor" is a role
-// rather than a subject, and "discovery" is the tool it would be using to ask. Naming those would
-// invite a search that returns what the agent is already looking at.
-export function buildCapabilityBlock(opts: { skillsUsable?: boolean } = {}): string {
+export function buildCapabilityBlock(opts: { skillsUsable?: boolean; provider?: string } = {}): string {
   const t = CAPABILITY_BLOCK_TOOLS;
-  // SKILL-PROMISE-MATCHES-REALITY: two stable variants, not a per-agent string — the same
-  // cache-prefix reasoning AGENT-AUTONOMY's line already documents. `skillsUsable` defaults TRUE so
-  // every existing caller and test keeps the byte-identical block it had; only a spawn that has
-  // actually had skills switched off gets the other variant.
-  //
-  // When they are off, the agent is pointed at what still works instead of simply losing a
-  // sentence: the skill FILES stay on disk and readable (the SDK's doc says so in as many words),
-  // so "find it and load it on the fly" remains true — it just is not the Skill tool that does it.
-  const discover = opts.skillsUsable === false
-    ? "DISCOVER, don't preload: your context is lean by design — ToolSearch lazy-loads tools on demand. The Skill tool is OFF for you: skills are not listed and it will refuse one by name, but their SKILL.md files are still on disk (~/.claude/skills, plugin caches, and this repo's own .claude/skills) — locate one and read it when you need it."
-    : "DISCOVER, don't preload: your context is lean by design — Skill and ToolSearch lazy-load skills/tools on demand.";
-  return `Chimera MCP tools available: ${t.agentSpawn}/${t.agentStatus}/${t.agentResult}/${t.agentWait} to run sub-agents; ${t.askAgent}, ${t.agentSend}, ${t.askTeam}, ${t.myTeam} to reach teammates; ${t.askHuman} to escalate. ${t.memorySearch}/${t.memoryAdd} (kind: decision|fact|todo) share durable knowledge across agents — search before starting related work. ${t.teamList} + ${t.queuePush} (set deliverTo to avoid polling) for task handoff. ${discover} A chimera tool your brief names but you cannot see is DEFERRED, never missing: ${t.chimeraTools} finds it by keyword and ${t.chimeraCall} runs it, with the same args. Never reach past this — chimera's daemon socket, its RPC framing and its source are not an interface, and hand-rolling a client for a tool that already exists is always the wrong turn. ${t.mcpStoreTools} + ${t.mcpStoreCall} reach foreign MCP servers (Slack/Gmail/EKB/etc); ${t.engineHelp} describes this engine. CHIMERA-FIRST MCP ROUTING: before using any provider-native or directly configured MCP tool, use an already discovered suitable Chimera tool, or discover one via ${t.chimeraTools}/${t.chimeraCall} (engine tools) and ${t.mcpStoreTools}/${t.mcpStoreCall} (external services, browser and desktop computer use). Reuse discovery results within the task; do not search before every action. Use native MCP only when discovery confirms Chimera has no suitable tool for the required capability; briefly state the missing capability before falling back. A tool absent from your initial list may be deferred. A permission denial, busy desktop lease, connection failure or timeout is NOT a missing capability: resolve or report it, never bypass it through native tools. Keep desktop observation and actions on the Chimera route so ownership and activity remain visible. When a question or signal arrives for you, ${t.answerQuestion} replies and ${t.subscribe} sets up standing ones. ${t.terminalRead}/${t.terminalWrite} read and type into a terminal the operator opened under you. ${t.renameSelf} names you; ${t.daemonStatus} reports the engine's health. Tool subjects you can ask ${t.chimeraTools} for: ${searchableToolSubjects().join(", ")}. BATCH INDEPENDENT TOOL CALLS: when the next calls do not need each other's output, put them in ONE message and read every result together. A second turn re-reads your entire context, so three separate calls cost three times what one batched turn does.`;
+  // Only Claude has this Skill allowlist. Other providers must not be promised a
+  // Claude-specific tool, or told that their native skill discovery is disabled.
+  const skills = opts.provider !== undefined && opts.provider !== "claude" ? ""
+    : opts.skillsUsable === false ? "\nSkill tool is off; read a relevant SKILL.md from project/user skill directories when needed." : "";
+  return `CHIMERA TOOLS
+Discover unlisted tools with ${t.chimeraTools}; invoke them with ${t.chimeraCall}. Other services (including browser/desktop): ${t.mcpStoreTools}/${t.mcpStoreCall}. Reuse discovered schemas.
+Use Chimera tools before provider-native MCP; use a native fallback only if discovery finds no suitable tool, and report the gap. A denial, busy desktop lease, timeout or connection error is not a missing tool: resolve or report it, never bypass it. Keep desktop actions on Chimera; never access the daemon socket directly.
+Batch independent tool calls. Keep messages focused on outcomes; do not copy these shared instructions into roles or task briefs.${skills}`;
 }
 
 // AGENT-RECONFIGURE: the spec fields a live agent can be respawned-into-its-own-session with.
@@ -363,6 +270,9 @@ export type AgentRecord = {
   // left undefined) so a fresh record is never confused with a pre-P3-T1 one. Replaces the
   // depth+createdAt parent-reconstruction heuristic in ui-state/reducer.ts's treeOrder.
   parentId: string | null;
+  promptFrom?: string;
+  // Initial body lives only in spec; retain just its immutable author here.
+  initialAuthor?: Principal;
   forkLineage?: import("@chimera/protocol").ForkLineage;
   // CROSS-PROVIDER-HANDOFF: the reverse edge from parentId above. parentId answers "who
   // called agent.spawn to create me" (a live spawning agent); handoffFrom answers "whose
@@ -1125,6 +1035,7 @@ export class AgentSupervisor {
   private promptStallMs: number;
 
   constructor(private deps: SupervisorDeps) {
+    deps.mailboxes.setPrincipalResolver((from, engineId) => this.principalFor(from, engineId));
     this.promptStallMs = deps.promptStallMs ?? PROMPT_STALL_MS;
     this.promptAck = new PromptAckWatch({
       now: () => this.now(),
@@ -1274,6 +1185,8 @@ export class AgentSupervisor {
       // engine.ts RPC layer threads this from an explicit caller-supplied param). Absent ⇒
       // record.parentId is null (no live spawning agent for this spawn).
       parentId?: string | null;
+      promptFrom?: string;
+      promptAuthor?: Principal;
       // CROSS-PROVIDER-HANDOFF: OPTIONAL — supervisor.handoff() passes the SOURCE agentId here
       // for the fresh target it spawns. Absent ⇒ record.handoffFrom stays undefined (every
       // non-handoff spawn). Deliberately NOT threaded onto opts.parentId — a handoff target
@@ -1418,6 +1331,8 @@ export class AgentSupervisor {
       ...(spec.displayLabel !== undefined ? { displayLabel: spec.displayLabel, displayLabelPinned: true } : {}),
       state: "running", depth, treeId, createdAt: Date.now(), principal, attempts: [], costUsd: 0,
       parentId: opts.parentId ?? null, originConductorId: opts.originConductorId ?? null, projectId,
+      ...(opts.promptFrom ? { promptFrom: opts.promptFrom } : {}),
+      initialAuthor: structuredClone(opts.promptAuthor ?? this.principalFor(opts.promptFrom ?? opts.parentId ?? "operator")),
       ...(opts.forkLineage ? { forkLineage: opts.forkLineage } : {}),
       ...(opts.handoffFrom !== undefined ? { handoffFrom: opts.handoffFrom } : {}),
       ...(opts.membership ? { membership: opts.membership } : {}),
@@ -1717,44 +1632,22 @@ export class AgentSupervisor {
       env[account.provider === "codex" ? "CODEX_HOME" : "CLAUDE_CONFIG_DIR"] = account.auth.homeDir;
     }
 
-    // AWARENESS (the promised Phase-3 capability injection, both backends' single
-    // choke point): an agent GRANTED the chimera MCP is told what it can actually
-    // do with it — otherwise the tools sit unused (audited: 0 memory/ask_* calls
-    // in ~39k events because no instruction surface ever named them). Appended
-    // after any caller instructions so role/team headers keep first position.
-    // TOKEN-OPT-P6: trimmed now that chimera_tools/chimera_call (TOKEN-OPT-P2) gives
-    // every orchestration-enabled agent a live discovery path for the rarer
-    // "extended"-tier tools (accounts/job/workflow/project/checkpoint/etc admin) —
-    // this block only needs to name the handful of "core" tools worth a proactive
-    // nudge, not enumerate the full surface, and points at chimera_tools for the rest.
-    // SKILL-PROMISE-MATCHES-REALITY: whether the Skill tool can actually load anything, resolved
-    // HERE because the block below tells the agent it can. The lean default (leanAgentSkills, an
-    // empty allowlist out of the box) hands the SDK `skills: []`, and the SDK's own doc is explicit
-    // that an unlisted skill is "hidden from the model's listing AND REJECTED BY THE SKILL TOOL" —
-    // not deferred. So the unconditional "Skill lazy-loads skills on demand" promised a path that
-    // refuses on arrival, which is the same defect the memoryBlock below already guards against
-    // ("telling an agent with no memory tools to search memory first would be an instruction it
-    // cannot follow"). Mirrors the resolution further down rather than duplicating its intent: an
-    // explicit spec opinion wins, else a lean claude spawn gets the operator's allowlist, else the
-    // SDK's own default (omitted ⇒ every skill).
+    // Shared routing policy belongs to the session, not to individual messages.
+    // Discovery comes from tool schemas; memory usage is task-dependent.
     const leanSkillsCandidate = account.provider === "claude" && this.deps.leanAgentContext?.() === true;
     const skillsUsable = record.spec.skills !== undefined
       ? record.spec.skills.length > 0
       : !leanSkillsCandidate || (this.deps.leanAgentSkills?.() ?? []).length > 0;
     const capabilityBlock = record.spec.orchestration?.allow
-      ? buildCapabilityBlock({ skillsUsable })
+      ? buildCapabilityBlock({ skillsUsable, provider: account.provider })
       : null;
-    // MEMORY-DISCIPLINE: gated on the SAME grant as the capability block, because that grant is
-    // what injects the chimera MCP server (see CHIMERA_MCP_PREFIX above). Telling an agent with
-    // no memory tools to search memory first would be an instruction it cannot follow.
-    const memoryBlock = record.spec.orchestration?.allow ? buildMemoryDisciplineBlock() : null;
     // F21/D17: same AWARENESS discipline as capabilityBlock above — only appended when
     // the gate is live, so a deployment where no client ever declared "ui.components"
     // (uiComponentsEnabled absent, or present and false) stays byte-identical.
     const componentsBlock = this.deps.uiComponentsEnabled?.() ? OUTPUT_COMPONENTS_CHEATSHEET : null;
-    const extraBlocks = [capabilityBlock, memoryBlock, componentsBlock].filter((b): b is string => b !== null);
+    const extraBlocks = [capabilityBlock, componentsBlock].filter((b): b is string => b !== null);
     // TOKEN-OPT-CACHE-PREFIX: shared blocks go FIRST, per-agent instructions after. Anthropic's
-    // prompt cache matches on an exact PREFIX, so ordering decides whether these ~1.6KB are paid
+    // prompt cache matches on an exact PREFIX, so ordering decides whether shared policy is paid
     // once per daemon or once per agent. With the caller's own instructions in front — which is
     // where they used to be — two agents shared no prefix at all beyond the preset, and every
     // spawn re-created this identical text as fresh tokens. Leading with it makes it one cached
@@ -1866,7 +1759,11 @@ export class AgentSupervisor {
     const resolved: ResolvedAgentSpec = {
       ...record.spec, ...pluginExclusions, ...(withCapabilities !== undefined ? { instructions: withCapabilities } : {}), agentId: record.agentId, accountName,
       resolvedProvider: account.provider, env, depth: record.depth,
-      ...(recoveryPrompt ? { prompt: recoveryPrompt, resumeOnly: false, images: undefined, content: undefined } : {}),
+      ...(!record.spec.resumeOnly ? {
+        initialDelivery: { messages: [createMessage(record.spec.prompt,
+          record.initialAuthor ?? this.principalFor(record.promptFrom ?? record.parentId ?? "operator"), { id: `${record.agentId}:initial`, createdAt: record.createdAt, content: record.spec.content })] },
+      } : {}),
+      ...(recoveryPrompt ? { prompt: recoveryPrompt, resumeOnly: false, images: undefined, content: undefined, initialDelivery: { messages: [createMessage(recoveryPrompt, this.principalFor("system"))] } } : {}),
       // COMPACTION-THRESHOLD-CLEARED: record.spec can carry an explicit null — agent_reconfigure's
       // only way to say "drop my override", since an absent key means "unchanged" in a sparse
       // patch. The spread above would carry that null through, and claude.ts gates on
@@ -2832,7 +2729,7 @@ export class AgentSupervisor {
     if (stranded && stranded.length > 0) {
       for (const m of stranded) {
         this.deps.mailboxes.enqueue(record.agentId, {
-          from: m.from, kind: m.kind, text: m.text,
+          from: m.from, kind: m.kind, text: m.text, engineId: m.engineId, message: this.deps.mailboxes.envelope(m), id: randomUUID(),
           ...(m.meta ? { meta: m.meta } : {}),
           ...(m.images ? { images: m.images } : {}),
           ...(m.content ? { content: m.content } : {}),
@@ -3167,7 +3064,7 @@ export class AgentSupervisor {
     const stranded = this.inFlight.get(agentId) ?? [];
     for (const m of stranded) {
       this.deps.mailboxes.enqueue(agentId, {
-        from: m.from, kind: m.kind, text: m.text,
+        from: m.from, kind: m.kind, text: m.text, engineId: m.engineId, message: this.deps.mailboxes.envelope(m), id: randomUUID(),
         ...(m.meta ? { meta: m.meta } : {}),
         ...(m.images ? { images: m.images } : {}),
         ...(m.content ? { content: m.content } : {}),
@@ -3808,8 +3705,7 @@ export class AgentSupervisor {
     // The cost is per-turn and scales with the conversation, so it grows exactly where it hurts
     // most (a long-lived conductor fanning out work).
     //
-    // Consecutive PLAIN-TEXT messages are folded into one turn, keeping their "[from …]"
-    // attribution so the agent can still tell them apart. A message that cannot be concatenated
+    // Consecutive plain-text messages share one turn with separate delivery metadata. A message that cannot be concatenated
     // breaks the run and is sent on its own: a slash command must arrive verbatim as the whole
     // turn (a prefix would stop the backend recognizing it), and anything carrying images or
     // ordered content blocks keeps its exact block order. Nothing is dropped or reordered, and
@@ -3825,38 +3721,19 @@ export class AgentSupervisor {
       // Re-evaluate each group: a preceding delivery may have started a turn.
       const midTurn = handle.isTurnActive?.() ?? this.promptAck.isMidTurn(agentId);
       try {
-        // IMAGE.PASTE: forward the message's images (if any) through unchanged —
-        // same envelope as text, per the additive AgentHandle.send(text, images?) signature.
-        // PARITY WS-B: a real SDK slash command (m.slash) is delivered VERBATIM so its
-        // leading "/" survives — the "[from …] " prefix would otherwise mask it and the
-        // backend would never interpret it as a command. Everything else is prefixed as
-        // before, and the delivered status record below is still appended either way.
-        // D9: when `content` blocks are present, the "[from …] " attribution is folded
-        // into the FIRST block instead (see prefixContent) so every block's position —
-        // in particular a mid-sentence image — is preserved exactly as authored.
-        // AGENT-FAILURE-REACHES-CONDUCTOR: a child_failed message gets a visibly distinct
-        // prefix — a conductor reading its own chat turn must not mistake a failure notice for
-        // an ordinary "[from …]" result.
-        const prefixOf = (msg: MailboxMessage): string =>
-          msg.kind === "child_failed" ? `[FAILED: agent ${msg.from}] ` : `[from ${msg.from}] `;
-        const prefix = prefixOf(m);
-        const contentToSend = m.content && m.content.length > 0
-          ? (m.slash ? m.content : this.prefixContent(m.content, prefix))
-          : undefined;
-        // A coalesced group is always plain text (groupDeliverable never folds a slash or a
-        // block-carrying message in with others), so joining the prefixed bodies IS the turn.
-        const text = m.slash ? m.text : group.map((msg) => `${prefixOf(msg)}${msg.text}`).join("\n\n");
+        const messages = group.map(msg => this.deps.mailboxes.envelope(msg));
+        const record = this.agents.get(agentId)!;
+        const backend = this.deps.backends.get(record.spec.runtime === "terminal" ? "terminal" : record.provider);
+        for (const message of messages) backend?.validateInput?.(message.content);
         // F09 race: read the seq BEFORE the send, because the backend can emit its first
         // turn-opening event while we are still awaiting it — see PromptAckWatch's ALREADY-OPENED
         // branch. It is passed ALONGSIDE the post-send `lastSeq` rather than replacing it:
         // `lastSeq` is reported verbatim in PromptStall.lastSeq ("the event seq the agent was
         // parked at"), which must stay the position at arming time.
         const preSendSeq = this.deps.events.currentSeq();
-        if (m.force && midTurn && handle.steer && !m.slash) {
-          await handle.steer(text, m.images, contentToSend);
-        } else {
-          await handle.send(text, m.images, contentToSend);
-        }
+        await deliverAgentInput(handle, m.slash
+          ? { type: "command", text: m.text }
+          : { type: "messages", messages, mode: m.force && midTurn ? "steer" : "enqueue" });
         for (const msg of group) this.inFlight.get(agentId)?.push(msg);
         // F09: the delivery happened — arm the ack watch. Keyed by every message id in the
         // group, because a coalesced group can carry several callers' sends and each must get
@@ -3878,7 +3755,7 @@ export class AgentSupervisor {
           this.deps.events.append({
             agentId, kind: "status",
             data: this.scrub({
-              delivered: true, from: msg.from, text: msg.text,
+              delivered: true, from: msg.from, text: msg.text, messageMetadata: { ...this.deps.mailboxes.envelope(msg).author, kind: msg.kind }, messageId: this.deps.mailboxes.envelope(msg).id,
               // SLASH-COMMAND-IN-FLIGHT: say that this turn is a COMMAND, not prose. A client
               // cannot tell from the text alone (an ordinary message may start with "/"), and a
               // slow command — /compact on a large context runs for a minute or more — otherwise
@@ -3890,12 +3767,19 @@ export class AgentSupervisor {
             }),
           });
         }
-      } catch {
+      } catch (error) {
+        if (error instanceof UnsupportedContentError) {
+          for (const msg of group) this.deps.events.append({ agentId, kind: "status", data: {
+            deliveryRejected: true, messageId: this.deps.mailboxes.envelope(msg).id,
+            deliveryId: msg.id, reason: error.message,
+          } });
+          continue; // A permanent content mismatch must not block later messages.
+        }
         for (const r of groups.slice(i).flat()) {
           // IMAGE.PASTE: re-enqueue must preserve `images` too, or a mid-batch
           // send failure would silently drop the attachment on retry.
           this.deps.mailboxes.enqueue(agentId, {
-            from: r.from, kind: r.kind, text: r.text,
+            from: r.from, kind: r.kind, text: r.text, engineId: r.engineId, message: this.deps.mailboxes.envelope(r), id: randomUUID(),
             ...(r.meta ? { meta: r.meta } : {}),
             ...(r.images ? { images: r.images } : {}),
             // D9: preserve `content` on re-enqueue too, for the same reason as `images`.
@@ -3911,14 +3795,18 @@ export class AgentSupervisor {
     }
   }
 
-  // D9: fold an attribution prefix into a content-block array's FIRST block —
-  // extending its text if it's already a text block, else inserting a new
-  // leading text block — so every other block (in particular an image) keeps
-  // its exact original position.
-  private prefixContent(content: ContentBlock[], prefix: string): ContentBlock[] {
-    const [first, ...rest] = content;
-    if (first?.type === "text") return [{ type: "text", text: prefix + first.text }, ...rest];
-    return [{ type: "text", text: prefix }, ...content];
+  // Identity comes from the daemon registry, never message text or caller-supplied
+  // metadata. A remote engine cannot impersonate a local operator or teammate.
+  principalFor(from: string, engineId = "local"): Principal {
+    const agent = engineId === "local" ? this.agents.get(from) : undefined;
+    const source = engineId !== "local" ? "external" : agent ? "agent"
+      : OPERATOR_SENDERS.has(from) ? "operator" : ["system", "scheduler"].includes(from) ? "system" : "external";
+    const label = agent ? this.displayLabelOf(from) : undefined;
+    return {
+      from, source, engineId,
+      ...(label && label !== from ? { label } : {}),
+      ...(agent?.membership ? { team: agent.membership.team, role: agent.membership.role } : {}),
+    };
   }
 
   // spec §8: "auto" decides instantly from the permission profile; "poke:caller"
@@ -4427,7 +4315,7 @@ export class AgentSupervisor {
   // near its cap. That is a separate decision from preserving identity and is left alone.
   private respawnOpts(record: AgentRecord): {
     agentId: string; treeId: string; depth: number; principal: string;
-    parentId: string | null; originConductorId: string | null; projectId: string | null;
+    parentId: string | null; originConductorId: string | null; projectId: string | null; promptFrom?: string; promptAuthor?: Principal;
     membership?: { team: string; role: string };
     sessionRole?: string | null;
     sessionRoleOverrides?: Record<string, unknown> | null;
@@ -4438,6 +4326,8 @@ export class AgentSupervisor {
       agentId: record.agentId, treeId: record.treeId, depth: record.depth,
       principal: record.principal,
       parentId: record.parentId,
+      ...(record.promptFrom ? { promptFrom: record.promptFrom } : {}),
+      ...(record.initialAuthor ? { promptAuthor: record.initialAuthor } : {}),
       originConductorId: record.originConductorId ?? null,
       // Explicit, never re-derived: spawn() falls back to projectFor(spec.cwd) when this is
       // undefined, which silently drops the projectId of any agent whose cwd is not itself a
@@ -4683,7 +4573,7 @@ export class AgentSupervisor {
       await this.delivering.get(agentId);
       controller.signal.throwIfAborted();
       const stranded = this.inFlight.get(agentId) ?? [];
-      for (const message of stranded) this.deps.mailboxes.enqueue(agentId, { ...message, id: undefined });
+      for (const message of stranded) this.deps.mailboxes.enqueue(agentId, { ...message, id: randomUUID(), message: this.deps.mailboxes.envelope(message) });
       this.inFlight.delete(agentId);
       await this.handles.get(agentId)?.kill();
       this.handles.delete(agentId);
@@ -4801,7 +4691,7 @@ export class AgentSupervisor {
     if (stranded && stranded.length > 0) {
       for (const m of stranded) {
         this.deps.mailboxes.enqueue(agentId, {
-          from: m.from, kind: m.kind, text: m.text,
+          from: m.from, kind: m.kind, text: m.text, engineId: m.engineId, message: this.deps.mailboxes.envelope(m), id: randomUUID(),
           ...(m.meta ? { meta: m.meta } : {}),
           ...(m.images ? { images: m.images } : {}),
           ...(m.content ? { content: m.content } : {}),
@@ -4866,7 +4756,7 @@ export class AgentSupervisor {
     const toForward = this.deps.mailboxes.pending(agentId);
     for (const m of toForward) {
       this.deps.mailboxes.enqueue(newAgentId, {
-        from: m.from, kind: m.kind, text: m.text,
+        from: m.from, kind: m.kind, text: m.text, engineId: m.engineId, message: this.deps.mailboxes.envelope(m), id: randomUUID(),
         ...(m.meta ? { meta: m.meta } : {}),
         ...(m.images ? { images: m.images } : {}),
         ...(m.content ? { content: m.content } : {}),
@@ -4980,7 +4870,7 @@ export class AgentSupervisor {
     if (stranded && stranded.length > 0) {
       for (const m of stranded) {
         this.deps.mailboxes.enqueue(agentId, {
-          from: m.from, kind: m.kind, text: m.text,
+          from: m.from, kind: m.kind, text: m.text, engineId: m.engineId, message: this.deps.mailboxes.envelope(m), id: randomUUID(),
           ...(m.meta ? { meta: m.meta } : {}),
           ...(m.images ? { images: m.images } : {}),
           ...(m.content ? { content: m.content } : {}),
@@ -5053,7 +4943,7 @@ export class AgentSupervisor {
     const toForward = this.deps.mailboxes.pending(agentId);
     for (const m of toForward) {
       this.deps.mailboxes.enqueue(newAgentId, {
-        from: m.from, kind: m.kind, text: m.text,
+        from: m.from, kind: m.kind, text: m.text, engineId: m.engineId, message: this.deps.mailboxes.envelope(m), id: randomUUID(),
         ...(m.meta ? { meta: m.meta } : {}),
         ...(m.images ? { images: m.images } : {}),
         ...(m.content ? { content: m.content } : {}),
@@ -5096,7 +4986,7 @@ export class AgentSupervisor {
   // gone (spawn fresh) — both ResumeRefusedError so the caller gets actionable guidance.
   async resume(
     agentId: string,
-    opts: { prompt: string; maxTurns?: number; turnLimitPolicy?: AgentSpec["turnLimitPolicy"]; deliverTo?: string },
+    opts: { prompt: string; author?: Principal; maxTurns?: number; turnLimitPolicy?: AgentSpec["turnLimitPolicy"]; deliverTo?: string },
   ): Promise<AgentRecord> {
     const r = this.status(agentId);   // throws UnknownAgentError for a ghost
     if (!this.isTerminal(r.state)) {
@@ -5129,7 +5019,7 @@ export class AgentSupervisor {
     // OWN maxBudgetUsd instead registers a fresh bounded node for the continuation (not re-nested
     // under the dead agent's ancestor); that's an acceptable recovery semantic, not lineage we
     // try to reconstruct here.
-    return await this.spawn(spec, { treeId: r.treeId, depth: r.depth });
+    return await this.spawn(spec, { treeId: r.treeId, depth: r.depth, promptAuthor: opts.author ?? this.principalFor("operator") });
   }
 
   // TOKEN-OPT-P5: best-effort routing of a single upcoming turn (the workflow
@@ -5603,7 +5493,11 @@ export class AgentSupervisor {
     return { ok: true, delivered: true, turnStarted: false, ack: "command", ackMs: null, deliveryId: randomUUID(), stallThresholdMs: this.promptStallMs };
   }
 
-  async send(agentId: string, text: string, from = "caller", images?: Image[], slash = false, content?: ContentBlock[], opts?: { awaitAckMs?: number; messageId?: string; force?: boolean }): Promise<AgentSendResult> {
+  async send(agentId: string, text: string, from = "caller", images?: Image[], slash = false, content?: ContentBlock[], opts?: { awaitAckMs?: number; messageId?: string; force?: boolean; author?: Principal; engineId?: string; taskId?: string }): Promise<AgentSendResult> {
+    if (slash && (images?.length || content?.length)) throw new GuardrailError("Send native commands without attachments");
+    const author = opts?.author ?? this.principalFor(from, opts?.engineId);
+    from = author.from;
+    const message = createMessage(text, author, { id: opts?.messageId, content, images, ...(opts?.taskId ? { context: { taskId: opts.taskId } } : {}) });
     agentId = this.resolveAgentId(agentId);
     let r: AgentRecord;
     try {
@@ -5613,6 +5507,8 @@ export class AgentSupervisor {
         throw new UnknownAgentError(`unknown agent ${agentId} — call my_team or team_list for the live roster's full agent ids`);
       throw err;
     }
+    const inputBackend = this.deps.backends.get(r.spec.runtime === "terminal" ? "terminal" : r.provider);
+    inputBackend?.validateInput?.(message.content);
     if (slash && r.spec.runtime !== "terminal") {
       if (r.provider === "codex") {
         if (images?.length || content?.length) throw new GuardrailError("Send Codex native commands without attachments");
@@ -5659,7 +5555,7 @@ export class AgentSupervisor {
     // decision about circuit breakers, not part of what a hold means.
     if (r.state === "paused" && r.pauseReason === "operator-hold") {
       const held = this.deps.mailboxes.enqueue(agentId, {
-        from, kind: "user_message", text,
+        from, kind: "user_message", text, message, engineId: author.engineId,
         ...(images && images.length > 0 ? { images } : {}),
         ...(content && content.length > 0 ? { content } : {}),
         ...(slash ? { slash: true } : {}),
@@ -5685,7 +5581,7 @@ export class AgentSupervisor {
     // FIFO-ordered in the mailbox (no side-channel that could race the queue); omitted when false.
     const enqueued = this.deps.mailboxes.enqueue(agentId, {
       ...(opts?.messageId ? { id: opts.messageId } : {}),
-      from, kind: "user_message", text,
+      from, kind: "user_message", text, message, engineId: author.engineId,
       ...(images && images.length > 0 ? { images } : {}),
       ...(content && content.length > 0 ? { content } : {}),
       ...(slash ? { slash: true } : {}),

@@ -1,3 +1,4 @@
+import { projectDeleteFixture } from "./project-delete";
 import { RecoveryProbe, resetRecovery, recoveryRpc } from "./recovery";
 import "../../src/components/ArtifactPreviewCard";
 import { canvasFixture } from "./canvas-data";
@@ -53,7 +54,6 @@ import { staticDesignDocument } from "../../src/design/documents";
 import { SecretsSection } from "../../src/components/SecretsSection";
 import { AgentShadowPane } from "../../src/components/AgentShadowPane";
 import { AgentList } from "../../src/components/AgentList";
-import { useStore } from "../../src/state/useStore";
 import { TopBar } from "../../src/components/TopBar";
 import { OverlayCard, OverlayCardHeader } from "../../src/components/OverlayCard";
 import { ConfirmCard } from "../../src/components/ConfirmCard";
@@ -92,6 +92,7 @@ declare global {
     __UI_QA_IMAGE__?: { mediaType: "image/png"; data: string };
     __UI_QA__?: {
       show(name: Scenario): void;
+      projectDelete: typeof projectDeleteFixture;
       fork: { mode(value: string): void; snapshot(): { calls: unknown[]; selected: string | null; draft: string; seq: number }; cycle(): void };
       git: { pending(): number; settle(mode: string): void; externalIndex(): void; externalContent(): void; cycle(): void; writes(): unknown[] };
       issues: { pending(): number[]; settle(id: number, mode: "rows" | "error" | "unsupported" | "empty"): void; refresh(): void; sync(mode: "ok" | "error" | "auth"): void; writes(): unknown[]; outcome(mode: "posted" | "uncertain" | "partial" | "deferred"): void; replaceComment(): void; settleWrite(): void; reviewAccepted(): void; cycle(): void };
@@ -156,7 +157,7 @@ declare global {
 type EdgeCase = "external-focus" | "cancel-focus" | "inline-child" | "portal-child" | "no-close" | "guard-popup";
 type ActionScenario = "confirm-actions" | "team-actions" | "queue-actions";
 type MainScreen = "review" | "welcome" | "projects" | "memory" | "events" | "roles" | "inbox" | "slo" | "runs" | "help" | "agents" | "settings" | "teams" | "queues";
-type Scenario = "qa-recovery" | "qa-liveboard" | "project-canvas" | "inspector-registry" | "operator-settings" | "operator-read" | "operator-control" | "conversation-fork" | "context-links" | "stt" | "git-review" | "issue-board" | "resources" | "output-images" | "teams-stability" | "team-roles-stability" | "roles-stability" | "desktop-preview" | "workflow-transcript" | "computer-use" | "background-task" | "project-import" | "slash-codex" | "slash-claude" | "group-order" | "quick-spawn" | "workspace-tools" | "keyboard" | `screen-${MainScreen}` | "metrics" | "accounts" | "local-links" | "design" | "design-error" | "design-large" | "secrets" | "live-names" | EdgeCase | ActionScenario | "topbar" | "modal" | "voice" | "ptt" | "transcript" | "pane" | "queues" | "teams" | "settings" | "spawn";
+type Scenario = "project-delete" | "qa-recovery" | "qa-liveboard" | "project-canvas" | "inspector-registry" | "operator-settings" | "operator-read" | "operator-control" | "conversation-fork" | "context-links" | "stt" | "git-review" | "issue-board" | "resources" | "output-images" | "teams-stability" | "team-roles-stability" | "roles-stability" | "desktop-preview" | "workflow-transcript" | "computer-use" | "background-task" | "project-import" | "slash-codex" | "slash-claude" | "group-order" | "quick-spawn" | "workspace-tools" | "keyboard" | `screen-${MainScreen}` | "metrics" | "accounts" | "local-links" | "design" | "design-error" | "design-large" | "secrets" | "live-names" | EdgeCase | ActionScenario | "topbar" | "modal" | "voice" | "ptt" | "transcript" | "pane" | "queues" | "teams" | "settings" | "spawn";
 
 type PttSnapshot = { starts: number; stops: number; sends: string[]; backgroundActions: number };
 let sttActive = false;
@@ -268,6 +269,7 @@ function contextRpc(method: string, params: Record<string, unknown> = {}) {
   return row;
 }
 window.__UI_QA_RPC__ = (method, params) => {
+  if (projectDeleteFixture.active) return projectDeleteFixture.rpc(method, params ?? {});
   const recovery = recoveryRpc(method, params ?? {}); if (recovery) return recovery.value;
   if (canvasFixture.active) {
     if (method === "evidence.get") return { taskId: (params as { taskId: string }).taskId, queue: "canvas-q", state: "pending", workflow: null, steps: [], artifacts: [], provenance: [] };
@@ -821,6 +823,7 @@ function ScenarioView({ name }: { name: Scenario }) {
   }, [name]);
   if (name === "qa-recovery" || name === "qa-liveboard") return <RecoveryProbe key={name} liveboard={name === "qa-liveboard"} />;
 
+  if (name === "project-delete") return <MainScreenProbe name="projects" />;
   if (name === "project-canvas") return <CanvasNavigationProbe />;
   if (name === "git-review") return <GitReviewProbe />;
   if (name === "issue-board") return <Stage><TopBar /><main data-issue-board style={{ position: "relative", flex: 1, minWidth: 0, minHeight: 0, overflow: "auto" }}><IssueSources queue="issue-queue" /><div data-issue-task-row role="button" tabIndex={0} onKeyDown={onRowKeyDown(() => {})} style={{ padding: 12 }}>Fictional queue task <IssueChip queue="issue-queue" taskId="issue-task" /></div><OverlayOutlet host="queues" /></main><Footer /></Stage>;
@@ -893,6 +896,8 @@ const computerRequest = async (command: string) => {
 };
 function show(name: Scenario): void {
   resetRecovery(name);
+  projectDeleteFixture.active = name === "project-delete";
+  if (projectDeleteFixture.active) { projectDeleteFixture.reset(); appStore.dispatch({ type: "selectTab", tab: "projects" }); }
   canvasFixture.active = name === "project-canvas";
   if (canvasFixture.active) {
     appStore.dispatch({ type: "reviewRoomClose" });
@@ -1061,6 +1066,7 @@ function show(name: Scenario): void {
 
 window.__UI_QA__ = {
   show,
+  projectDelete: projectDeleteFixture,
   canvas: { remount() { const { layout, revision, large } = canvasFixture; show("project-canvas"); Object.assign(canvasFixture, { layout, revision, large }); }, mode(value: string) { canvasFixture.mode = value; }, large() { canvasFixture.large = true; }, remove() { canvasFixture.removed = true; }, snapshot() { return { calls: canvasFixture.calls, layout: canvasFixture.layout, revision: canvasFixture.revision, selectedAgentId: appStore.getState().selectedAgentId, tab: appStore.getState().activeTab }; }, cycle() { appStore.dispatch({ type: "connected", connected: false }); appStore.dispatch({ type: "connected", connected: true }); } },
   fork: { mode(value) { forkMode = value; }, snapshot() { return { calls: forkCalls, selected: appStore.getState().selectedAgentId, draft: composerLocal.getState().composeText, seq: forkSeq }; }, cycle() { appStore.dispatch({ type: "connected", connected: false }); appStore.dispatch({ type: "connected", connected: true }); } },
   context: {

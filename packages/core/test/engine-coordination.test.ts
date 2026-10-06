@@ -25,7 +25,7 @@ describe("Engine coordination methods", () => {
     expect(st.tasks[0]!.state).toBe("done");
     // SAFE-1 CACHE-PREFIX: fresh spawns get "Current teammates: ...\n\n" prepended to the
     // first user turn (scheduler.ts withTeamPreamble) — solo crew, so roster reads "none yet".
-    expect(st.tasks[0]!.resultText).toBe("fake:Current teammates: none yet.\n\nbuild it");
+    expect(st.tasks[0]!.resultText).toBe("fake:build it");
 
     const teams = (await e.handle("team.list", {})) as Array<{ name: string; running: number; totalRuns: number }>;
     expect(teams[0]).toMatchObject({ name: "crew", running: 0 });
@@ -230,7 +230,7 @@ describe("Engine coordination methods", () => {
     await waitUntil(() => e2.queues.status("work").counts.done === 1);
     const done = e2.queues.status("work").tasks[0]!;
     // SAFE-1 CACHE-PREFIX: same team-preamble prefix as above (see comment there).
-    expect(done.resultText).toBe("fake:Current teammates: none yet.\n\ninterrupted");
+    expect(done.resultText).toBe("fake:interrupted");
     expect(done.attempts).toBe(0);                            // restart consumed no retry budget
   });
 });

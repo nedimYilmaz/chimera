@@ -1465,7 +1465,7 @@ describe("killSelected / killAgent — kill when live, dismiss when finished", (
 // SLASH-IS-THE-SIGNAL: a typed "/x" is delivered VERBATIM. The gate used to be "only if the agent
 // ADVERTISED x" — and that list is project/plugin commands only (verified live: 200+ advertised
 // names, none of compact/clear/cost/model), so every provider builtin failed it and went out as an
-// ordinary message, where the "[from app] " prefix masks the leading slash and the backend reads
+// ordinary message, where the "" prefix masks the leading slash and the backend reads
 // prose. A hardcoded builtin list replaced it briefly and is worse: it rots the moment a CLI gains
 // or renames a command, invisibly. The operator's own slash is the signal.
 describe("sendSlash routing", () => {

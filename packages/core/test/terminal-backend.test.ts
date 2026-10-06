@@ -1,3 +1,4 @@
+import { createMessage } from "../src/message-delivery.js";
 import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -117,6 +118,19 @@ describe("when it cannot start", () => {
 });
 
 describe("driving a live terminal agent", () => {
+  it.each(["claude", "codex", "kimi"])("preserves sender provenance for %s at startup and follow-up", async (provider) => {
+    const r = rig();
+    const metadata = { from: "reviewer", source: "agent" as const, kind: "user_message" as const, engineId: "local" };
+    const delivery = { messages: [createMessage("audit the queue", metadata)] };
+    const handle = r.backend.spawn(spec({ resolvedProvider: provider, initialDelivery: delivery }), r.sink);
+    await settle();
+    expect(r.argsOf("new-session")!.at(-1)).toBe(JSON.stringify({ message: { from: metadata.from, source: metadata.source } }) + "\n\naudit the queue");
+    await handle.send("Follow-up", undefined, undefined, { messages: [createMessage("Follow-up", metadata)] });
+    expect(r.argsOf("set-buffer")!.at(-1)).toBe(JSON.stringify({ message: { from: metadata.from, source: metadata.source } }) + "\n\nFollow-up");
+    expect(r.argsOf("paste-buffer")).toContain("-p");
+    expect(r.argsOf("send-keys")!.at(-1)).toBe("Enter");
+  });
+
   it("DELIVERS a message by typing it and submitting — agent-to-agent mail, for free", async () => {
     // send() is the method the supervisor already calls to hand an agent a mailbox batch. Because
     // this backend implements it, cross-agent messaging works without any special casing.

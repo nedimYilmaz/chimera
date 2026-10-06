@@ -19,6 +19,7 @@ import { z } from "zod";
 // file, so a round trip through it is a cycle that fails while the tool table is being built.
 import { GroupCreateParamsSchema, GroupUpdateParamsSchema, GroupDeleteParamsSchema, AgentSetGroupsParamsSchema, AgentChangeGroupsParamsSchema } from "./agent-groups.js";
 import { EffortLevelSchema } from "./effort.js";
+import { AgentForgetParamsSchema } from "./agent-forget.js";
 
 // F46/QA: mirror of hasControlChars + TopicFilterSchema.contains's refinement in index.ts —
 // re-declared, not imported, for the same import-cycle reason as the shapes below. A needle
@@ -329,7 +330,7 @@ const MCP_TOOL_TABLE_BASE = [
 
   {
     name: "agent_spawn",
-    description: "Spawn immediately; follow with subscribe(agent.settled) or agent_wait. isolation defaults to \"worktree\", EXCEPT a readOnly spawn that leaves isolation unset, which defaults to \"none\". resume needs the SAME cwd as the original session or it silently will not attach; resumeOnly:true resumes idle without pushing `prompt`. Invalid resultSchema output fails the agent. Codex only: onPermissionRequest is ignored (permissionProfile enforces at the sandbox; \"full\" needs acknowledgeCodexFullAccessRisk), and mcpToolAllowlist is a closed world — unlisted servers expose nothing.",
+    description: "Spawns immediately; then subscribe(agent.settled) or agent_wait. isolation defaults to worktree, except a readOnly spawn without isolation (none). resume needs the original session's cwd or it silently won't attach; resumeOnly:true resumes idle without sending prompt. Output that fails resultSchema fails the agent. Codex: onPermissionRequest is ignored (the sandbox enforces permissionProfile; full needs acknowledgeCodexFullAccessRisk) and mcpToolAllowlist is a closed world: unlisted servers expose nothing.",
     inputSchema: {
       prompt: z.string(), cwd: z.string(),
       displayLabel: z.string().trim().min(1).optional(),
@@ -380,10 +381,8 @@ const MCP_TOOL_TABLE_BASE = [
       // description only appears once a caller loads this tool's full inputSchema, so it costs
       // nothing against that cap.
       resultSchema: z.record(z.string(), z.unknown()).describe(
-        "JSON Schema for the terminal result. Bound it — maxItems on arrays, maxLength on " +
-        "strings, enum where values are known. Measured live: a bounded schema cut output "
-        + "tokens ~15% vs prose; an unbounded one on a trivial task got WORSE (120→191 tokens). " +
-        "Unbounded is a regression risk, not a safe default.",
+        "JSON Schema the terminal result must match. Bound it (maxItems, maxLength, enum): " +
+        "measured live, a bounded schema cut output ~15% while an unbounded one made it worse.",
       ).optional(),
       // W2-4: exact AgentSpec shape; empty map means no MCP tools, while omission preserves
       // every config-level enabled_tools/disabled_tools setting.
@@ -412,11 +411,9 @@ const MCP_TOOL_TABLE_BASE = [
       // mcp-tools.test.ts's "keeps eager discovery copy concise"), while a field-level
       // description only costs tokens once a caller loads this tool's full inputSchema.
       loadSettings: z.boolean().optional().describe(
-        "claude-only. true loads your ~/.claude (global skills/CLAUDE.md) + this project's " +
-        "own .claude/ (if cwd is a registered project) + every installed plugin's MCP tools. " +
-        "false forces it off. Omitted defers to the resolved project's own \"load project & " +
-        "global skills\" toggle — on if that project has it enabled, off otherwise. Off is " +
-        "the lean, low-token-cost default everywhere else.",
+        "claude-only. true loads ~/.claude (global skills, CLAUDE.md), the project's .claude/ " +
+        "and installed plugins' MCP tools; false turns it off; omitted follows the project's " +
+        "\"load project & global skills\" toggle. Off is the lean default.",
       ),
     },
     resolve: (a, ctx) => rpc("agent.spawn", {
@@ -494,7 +491,8 @@ const MCP_TOOL_TABLE_BASE = [
       turnLimitPolicy: z.enum(["soft", "fail"]).optional(),
       deliverTo: z.string().optional(),
     },
-    resolve: (a) => rpc("agent.resume", {
+    resolve: (a, ctx) => rpc("agent.resume", {
+      ...(ctx.agentId ? { callerAgentId: ctx.agentId } : {}),
       agentId: a["agentId"],
       prompt: a["prompt"],
       ...(a["maxTurns"] !== undefined ? { maxTurns: a["maxTurns"] } : {}),
@@ -551,9 +549,17 @@ const MCP_TOOL_TABLE_BASE = [
   // Deliberately an explicit flag rather than sniffing a leading "/": plenty of ordinary messages
   // legitimately start with one ("/Users/alice/... is ready"), and turning those into commands
   // would be a worse failure than the one it fixes.
-  { name: "agent_send", description: "Enqueue for the next turn boundary; force:true explicitly steers/interrupts the active turn. slash:true ONLY when `text` IS a provider slash command (\"/compact\"): it then arrives verbatim instead of behind your \"[from …]\" prefix, which is what lets the backend read it as a command. Returns turnStarted + ack (started|mid_turn|pending|held): \"pending\" means delivered but no turn opened yet -- an agent_prompt_stalled event fires (topic agent.promptStalled) if it never does.", inputSchema: { agentId: z.string(), text: z.string(), slash: z.boolean().optional(), force: z.boolean().optional() }, resolve: (a) => rpc("agent.send", { agentId: a["agentId"], text: a["text"], ...(a["slash"] === true ? { slash: true } : {}), ...(a["force"] === true ? { force: true } : {}) }) },
+  { name: "agent_send", description: "Delivered at the next turn boundary; force:true steers/interrupts the active turn. slash:true only when text IS a provider slash command (\"/compact\"), so it arrives verbatim and the backend runs it. Returns turnStarted + ack (started|mid_turn|pending|held); pending = delivered but no turn opened yet (agent.promptStalled fires if none opens).", inputSchema: { agentId: z.string(), text: z.string(), slash: z.boolean().optional(), force: z.boolean().optional() }, resolve: (a, ctx) => rpc("agent.send", { agentId: a["agentId"], text: a["text"], ...(a["slash"] === true ? { slash: true } : {}), ...(a["force"] === true ? { force: true } : {}), ...(ctx.agentId ? { from: ctx.agentId } : {}) }) },
   { name: "agent_permission_respond", description: "Answer a pending permission_request event", inputSchema: { requestId: z.string(), allow: z.boolean() }, resolve: (a) => rpc("agent.permissionRespond", a) },
   { name: "agent_kill", description: "Abort a running agent", inputSchema: { agentId: z.string() }, resolve: (a) => rpc("agent.kill", a) },
+  {
+    name: "agent_forget",
+    description: "Forget 1–100 explicitly named local terminal agents and their run history, mailboxes and terminal readback. Shared memory is preserved. Requires a current conductor. Only the persisted MAIN conductor has fleet scope; all others require an exact project match, including projectless targets. Never kills agents. Returns purged IDs, counts and skips (live/self/unknown/outside_scope); repeats are no-ops. No global purge.",
+    inputSchema: AgentForgetParamsSchema.omit({ callerAgentId: true }).shape,
+    resolve: (a, ctx) => ctx.agentId
+      ? rpc("agent.forget", { agentIds: a.agentIds, callerAgentId: ctx.agentId })
+      : ({ kind: "error", error: { code: "forbidden", message: "Authenticated conductor identity required" } }),
+  },
 
   // F22.2: single-writer worktree lease — handoff/release. `callerAgentId` is forced from
   // ctx.agentId (unforgeable), never taken from `a`, so an agent cannot claim to be someone
@@ -720,7 +726,7 @@ const MCP_TOOL_TABLE_BASE = [
 
   {
     name: "memory_add",
-    description: "Store a fact, decision or todo in shared memory, authored as you; title+folder for durable notes, link with [[id]]. REFUSES a restatement of an existing note and names the one to memory_edit instead (allowDuplicate overrides). If the fact CHANGED, re-add with supersedes:\"<id>\" instead — the old note stays, marked and demoted.",
+    description: "Store a fact, decision or todo in shared memory as you; give durable notes a title and folder, link with [[id]]. Refuses a restatement and names the note to memory_edit instead (allowDuplicate overrides). If the fact changed, add it with supersedes:\"<id>\"; the old note stays, demoted.",
     inputSchema: {
       text: z.string(),
       title: z.string().max(120).nullable().optional(),
@@ -795,7 +801,7 @@ const MCP_TOOL_TABLE_BASE = [
   // could would be a way to read a shell someone else is typing passwords into.
   {
     name: "terminal_read",
-    description: "Read the terminal the operator opened under YOU — what they ran and what it printed. Use it when they refer to something they just ran instead of asking them to paste it. Returns the tail; empty when none is open.",
+    description: "Read the terminal the operator opened under YOU: what they ran and its output, so you don't ask them to paste it. Returns the tail; empty when none is open.",
     inputSchema: {
       /** Omitted reads every terminal open under you — usually one. */
       termId: z.string().optional(),
@@ -820,7 +826,7 @@ const MCP_TOOL_TABLE_BASE = [
   // else is using. There is no widening argument, and there should never be one.
   {
     name: "terminal_write",
-    description: "Type into the terminal the operator opened under YOU; defaults to the tab they are looking at, or pass `terminal` (a name from terminal_read). Use `key` for keystrokes — \"enter\", \"ctrl-c\", \"up\" — never raw control characters, which do not survive as JSON.",
+    description: "Type into the terminal the operator opened under YOU (default: the tab they are viewing, or pass terminal, a name from terminal_read). Use key for keystrokes (\"enter\", \"ctrl-c\", \"up\"), never raw control characters.",
     inputSchema: {
       text: z.string().optional(),
       /** Named keystroke, sent after `text`, so one call can type a command and run it. */
@@ -883,7 +889,7 @@ const MCP_TOOL_TABLE_BASE = [
 
   {
     name: "rename_self",
-    description: "Set YOUR OWN displayLabel, at the end of your first turn, after your actual topic — never the URL or question you started from. One-shot: no-ops if already named.",
+    description: "Set YOUR OWN displayLabel as soon as your first message shows the topic: a short name for it, never the URL or question you started from. One-shot: no-ops if already named.",
     inputSchema: {
       name: z.string().trim().min(1),
     },
@@ -922,7 +928,7 @@ const MCP_TOOL_TABLE_BASE = [
 
   {
     name: "memory_search",
-    description: "Search shared memory; filters (tags AND-match, author, kind, folder prefix) narrow first, mode ranks, no query means newest first. Text comes back EXCERPTED — memory_get by id for the full record. Defaults to your project's notes plus global ones; scope:\"*\" searches every project.",
+    description: "Search shared memory. Filters (tags AND, author, kind, folder prefix) narrow, mode ranks; no query = newest first. Results are excerpts: memory_get the full record. Defaults to your project plus global notes; scope:\"*\" searches every project.",
     inputSchema: {
       query: z.string().optional(),
       tags: z.array(z.string()).optional(),
@@ -1036,7 +1042,7 @@ const MCP_TOOL_TABLE_BASE = [
   // (SubRpc, packages/core/src/subscriptions.ts) trust it as a normal request field.
   {
     name: "subscribe",
-    description: "Wake on a daemon event instead of polling: subscribe, then END YOUR TURN. Topics: agent.settled, agent.spawned, task.state, gate.verdict, queue.drained, repo.landed, memory.added, permission.pending, question.pending, budget.warning, system.woke, agent.promptStalled, job.dead_letter, memory.pressure, memory.evicted. filter narrows by agentId/treeId/taskId/queue/team/state/tags/repo. once:true (default) auto-removes; once:false lasts until expiresAt (max 7d). wake: deliver (default), resume, drop. agent.output wakes you when an agent's output (message or tool result) contains a literal string: filter {agentId, contains:\"ERROR\"}, once:true, case-insensitive.",
+    description: "Wake on a daemon event instead of polling: subscribe, then END YOUR TURN. Common topics: agent.settled, task.state, gate.verdict. filter narrows the topic (agentId, treeId, taskId, queue, team, state, tags, repo). once:true (default) removes it after it fires; once:false lasts until expiresAt (max 7d). wake: deliver (default) | resume | drop. agent.output fires when an agent's message or tool result contains filter.contains (case-insensitive).",
     inputSchema: {
       topic: z.enum(["agent.settled", "agent.spawned", "task.state", "gate.verdict", "queue.drained", "repo.landed", "memory.added", "permission.pending", "question.pending", "budget.warning", "system.woke", "agent.promptStalled", "agent.output", "job.dead_letter", "memory.pressure", "memory.evicted"]),
       filter: z.object({
@@ -1204,7 +1210,7 @@ const MCP_TOOL_TABLE_BASE = [
 
   {
     name: "queue_push",
-    description: "Enqueue a task; bound teams drain by priority then FIFO. dependsOn blocks until its dependencies finish and cascade-fails with them. tags label the task (\"gate:coverage\") and are the ONLY thing a hook or subscription {tags:[...]} filter matches.",
+    description: "Enqueue a task; bound teams drain by priority, then FIFO. dependsOn waits for its dependencies and fails with them. tags (\"gate:coverage\") are the only thing a hook or subscription tags filter matches.",
     inputSchema: {
       queue: z.string(), prompt: z.string(),
       priority: z.number().int().optional(), role: z.string().optional(),
@@ -1335,14 +1341,14 @@ const MCP_TOOL_TABLE_BASE = [
     name: "assign",
     description: "Assign work to a target. Either a specific agent (agentId → delivered to its mailbox) OR a team (team[+role] → routed to a free/idle worker of that role via the team's queue). Provide exactly one of agentId or team.",
     inputSchema: { agentId: z.string().optional(), team: z.string().optional(), role: z.string().optional(), prompt: z.string(), priority: z.number().int().optional() },
-    resolve: (a) => {
+    resolve: (a, ctx) => {
       const hasAgent = !!a["agentId"];
       const hasTeam = !!a["team"];
       if ((hasAgent ? 1 : 0) + (hasTeam ? 1 : 0) !== 1) {
         return { kind: "error", error: { code: "protocol", message: "assign requires exactly one of agentId or team" } };
       }
       const target = hasAgent ? { agentId: a["agentId"] } : { team: a["team"], ...(a["role"] ? { role: a["role"] } : {}) };
-      return rpc("assign", { target, prompt: a["prompt"], ...(a["priority"] !== undefined ? { priority: a["priority"] } : {}) });
+      return rpc("assign", { ...(ctx.agentId ? { callerAgentId: ctx.agentId } : {}), target, prompt: a["prompt"], ...(a["priority"] !== undefined ? { priority: a["priority"] } : {}) });
     },
   },
 
@@ -1350,7 +1356,10 @@ const MCP_TOOL_TABLE_BASE = [
     name: "dispatch",
     description: "Route work per the project-conductor preference: a queue already bound to the project (or teamHint); else a fitting role on the project's own team(s); else the config.globalTeam pool; else direct (the project's own conductor, or a fresh spawn) as a last resort. Returns {via, target, taskId?} — what it actually did.",
     inputSchema: { projectName: z.string().optional(), prompt: z.string(), role: z.string().optional(), priority: z.number().int().optional(), teamHint: z.string().optional() },
-    resolve: (a) => rpc("dispatch", a),
+    resolve: (a, ctx) => {
+      const { callerAgentId: _untrusted, ...args } = a;
+      return rpc("dispatch", { ...args, ...(ctx.agentId ? { callerAgentId: ctx.agentId } : {}) });
+    },
   },
 
   {
@@ -1602,7 +1611,7 @@ const MCP_TOOL_TABLE_BASE = [
   { name: "project_unarchive", description: "Restore an archived project (flips archived back to false). No live-session guard — restoring never yanks a directory out from under anything.", inputSchema: { name: z.string() }, resolve: (a) => rpc("project.unarchive", a) },
   {
     name: "project_delete",
-    description: "Permanently remove a project's registration, freeing its name for a future create/import. Rejected ({code:'conflict'}) if any live agent's cwd is still under the project's path. Registration-only by default — the on-disk directory is left alone unless deleteFiles:true. If left in place and it was an auto-minted (pathless-create) directory, the result includes leftoverPath — a future pathless project.create of the same name adopts that dir if it's still just the git seed, or fails if anything else was added.",
+    description: "Permanently remove a project's registration, freeing its name for a future create/import. Rejected ({code:'conflict'}) if any live agent's cwd is still under the project's path. Registration-only by default — the on-disk directory is left alone unless deleteFiles:true. A failed file removal rejects ({code:'filesystem'}) and retains registration; the directory may be partially removed. Fix the filesystem error and retry, or explicitly use deleteFiles:false to remove only the registration. If left in place and it was an auto-minted (pathless-create) directory, the result includes leftoverPath — a future pathless project.create of the same name adopts that dir if it's still just the git seed, or fails if anything else was added.",
     inputSchema: { name: z.string(), deleteFiles: z.boolean().optional() },
     resolve: (a) => rpc("project.delete", { name: a["name"], ...(a["deleteFiles"] !== undefined ? { deleteFiles: a["deleteFiles"] } : {}) }),
   },
@@ -1661,12 +1670,12 @@ const MCP_TOOL_TABLE_BASE = [
   {
     name: "agent_send_many",
     description: "Send the SAME text to several agents at once. Returns {requested, succeeded, failed[]} — a partial result is normal (one agent may be terminal), and `failed` names each refusal, so this never silently drops a recipient.",
-    inputSchema: { agentIds: z.array(z.string()).min(1).max(100), text: z.string(), from: z.string().optional() },
+    inputSchema: { agentIds: z.array(z.string()).min(1).max(100), text: z.string() },
     resolve: (a, ctx) => rpc("agent.sendMany", {
       agentIds: a["agentIds"], text: a["text"],
       // Attribute the fan-out to the CALLER by default, exactly as agent_send does, so a recipient
       // can tell who addressed it rather than seeing an anonymous broadcast.
-      from: a["from"] ?? ctx.agentId ?? "external",
+      from: ctx.agentId ?? "operator",
     }),
   },
   {
@@ -1676,7 +1685,8 @@ const MCP_TOOL_TABLE_BASE = [
       agentIds: z.array(z.string()).min(1).max(100), prompt: z.string(),
       maxTurns: z.number().int().positive().optional(), turnLimitPolicy: z.enum(["fail", "soft"]).optional(),
     },
-    resolve: (a) => rpc("agent.resumeMany", {
+    resolve: (a, ctx) => rpc("agent.resumeMany", {
+      ...(ctx.agentId ? { callerAgentId: ctx.agentId } : {}),
       agentIds: a["agentIds"], prompt: a["prompt"],
       ...(a["maxTurns"] !== undefined ? { maxTurns: a["maxTurns"] } : {}),
       ...(a["turnLimitPolicy"] !== undefined ? { turnLimitPolicy: a["turnLimitPolicy"] } : {}),
@@ -1745,7 +1755,7 @@ const MCP_TOOL_TABLE_BASE = [
   { name: "mcp_store_remove", description: "Remove an MCP server from the chimera store (tears down its live daemon connection, if any)", inputSchema: { name: z.string() }, resolve: (a) => rpc("mcpstore.remove", a) },
   {
     name: "mcp_store_tools",
-    description: "Discover MCP-store tools/schemas lazily. Use before mcp_store_call/native MCP; only missing capability permits native fallback, never denial/busy/connection errors. For app-directed typing, select intended app/window via fresh list_apps/list_windows/get_window_state; use the exact window target, not titles alone. Laya ranks; observe and verify. Laya confidence never authorizes desktop/frontmost substitution. Deliberate desktop tasks may type globally. Guidance, not an enforced target-identity guarantee.",
+    description: "Discover MCP-store tools and their schemas (before mcp_store_call or a native MCP fallback). For app-directed typing, pick the app/window from a fresh list_apps/list_windows/get_window_state and use the exact window target, not a title alone. Laya ranks; Laya confidence never authorizes substituting the frontmost app or desktop, so observe and verify. Deliberate desktop tasks may type globally. Guidance, not an enforced target-identity guarantee.",
     inputSchema: { query: z.string().optional() },
     resolve: (a) => rpc("mcpstore.tools", { ...(a["query"] !== undefined ? { query: a["query"] } : {}) }),
   },
@@ -1804,7 +1814,7 @@ const MCP_TOOL_TABLE_BASE = [
   // (inside resolve, called well after module init), same trick engine_help already relies on.
   {
     name: "chimera_tools",
-    description: "Find Chimera tools. `tag` returns one subject (agent, group, queue, team, project, memory, ask, skills, events, hook, job, workflow, accounts, checkpoint, artifact, context, issues, terminal, mcp, secrets, host, worktree, config, usage, history, voice, engine); `query` takes several words at once and ranks by how many match, so describe what you want rather than guessing a name; with neither you get the subject list. Rows carry the schema and a one-line summary — pass detail:true for a tool's full instructions.",
+    description: "Find Chimera tools. tag returns one subject (agent, group, queue, team, project, memory, ask, skills, events, hook, job, workflow, accounts, checkpoint, artifact, context, issues, terminal, mcp, secrets, host, worktree, config, usage, history, voice, engine); query takes several words, ranked by how many match, so describe what you want rather than guessing a name; neither lists the subjects. Rows carry the schema and a one-line summary; detail:true returns a tool's full instructions.",
     inputSchema: {
       query: z.string().optional(), tag: z.string().optional(),
       detail: z.boolean().optional(), limit: z.number().int().min(1).max(50).optional(),
@@ -1971,7 +1981,7 @@ export const CONDUCTOR_TOOL_NAMES: ReadonlySet<string> = new Set([
   "job_create",
   "hook_create", "hook_list",
   "dispatch",
-  "agent_find", "agent_tail", "agent_interrupt", "agent_kill", "agent_hold", "agent_release", "agent_reconfigure",
+  "agent_find", "agent_tail", "agent_interrupt", "agent_kill", "agent_forget", "agent_hold", "agent_release", "agent_reconfigure",
   "memory_edit", "memory_get",
   // Added because the drift test below caught the playbook naming them — which is the point of
   // deriving that test from the playbook text instead of a hand-kept list.

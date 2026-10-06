@@ -3,7 +3,7 @@ import { AgentSupervisor } from "@chimera/core/supervisor";
 
 // MANUAL-COMPACT-ANY-PROVIDER: for a provider whose SDK owns compaction, chimera asks by sending
 // that CLI's own compact command. It only works VERBATIM (PARITY WS-B): sent as an ordinary
-// message it arrives as "[from caller] /compact" and the attribution prefix masks the leading
+// message it arrives as "/compact" and the attribution prefix masks the leading
 // slash, so the backend never sees a command.
 //
 // Measured on a live agent when this was wrong: the model read "/compact" as prose and replied

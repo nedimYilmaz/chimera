@@ -17,7 +17,7 @@ describe("AgentSupervisor: WS-B agent-routed slash delivery", () => {
     return sent;
   }
 
-  it("delivers a slash:true message VERBATIM (no '[from tui] ' prefix)", async () => {
+  it("delivers a slash:true message VERBATIM (no '' prefix)", async () => {
     const { sup } = makeSupervisor([[{ awaitSend: true }, { end: { resultText: "-" } }]]);
     const rec = await sup.spawn({ prompt: "x", cwd: "/tmp", account: "main", isolation: "none" });
     const sent = interceptSends(sup, rec.agentId);
@@ -37,7 +37,7 @@ describe("AgentSupervisor: WS-B agent-routed slash delivery", () => {
     await sup.send(rec.agentId, "plain hello", "tui");                              // default (omitted)
     await new Promise((r) => setTimeout(r, 0));
 
-    expect(sent).toEqual(["[from tui] /looks-like-a-command", "[from tui] plain hello"]);
+    expect(sent).toEqual(["/looks-like-a-command", "plain hello"]);
   });
 
   it("still appends the delivered status record for a slash message (cross-client transcript)", async () => {
@@ -70,7 +70,7 @@ describe("AgentSupervisor: WS-B agent-routed slash delivery", () => {
     await new Promise((r) => setTimeout(r, 0));
 
     // Order preserved; only the slash rows skip the prefix.
-    expect(sent).toEqual(["/one", "[from tui] two", "/three"]);
+    expect(sent).toEqual(["/one", "two", "/three"]);
   });
 
   it("preserves the slash flag when a mid-batch send failure re-enqueues the tail", async () => {

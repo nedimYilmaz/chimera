@@ -785,15 +785,16 @@ describe("ClaudeAgentBackend: additional branch/edge coverage", () => {
     expect(first).not.toBe("TIMEOUT");
     const orientation = (first as { message: { content: Array<{ text?: string }> } }).message.content[0]!.text!;
     const wt = join(repo, ".chimera", "worktrees", "ag-1");
-    expect(orientation.startsWith("ORIENTATION")).toBe(true);
-    expect(orientation).toContain(`ALREADY inside your isolated git worktree at ${wt}`);
-    expect(orientation).toContain("on branch chimera/ag-1,");
-    expect(orientation).toContain(`branched from main commit ${sha.slice(0, 12)}`);
-    expect(orientation).toContain(`Main checkout: ${repo}`);
-    expect(orientation).toContain("Do NOT call EnterWorktree/ExitWorktree");
-    expect(orientation).toContain(`git -C ${repo} merge --no-ff chimera/ag-1`);
-    expect(orientation).toContain(`git -C ${repo} worktree remove --force ${wt}`);
-    expect(orientation).toContain(`git -C ${repo} branch -D chimera/ag-1`);
+    expect(orientation.startsWith("WORKSPACE (already set up")).toBe(true);
+    expect(orientation).toContain(`- <worktree>: ${wt}`);
+    expect(orientation).toContain(`- <branch>: chimera/ag-1 (from main ${sha.slice(0, 12)})`);
+    expect(orientation).toContain(`- <main> checkout: ${repo}`);
+    expect(orientation).toContain("don't use EnterWorktree/ExitWorktree");
+    // Each path appears once; the land-on-main commands refer to them by name.
+    expect(orientation).toContain("`git -C <main> merge --no-ff <branch>`");
+    expect(orientation).toContain("`git -C <main> worktree remove --force <worktree>`");
+    expect(orientation).toContain("`git -C <main> branch -D <branch>`");
+    expect(orientation.split(wt).length - 1).toBe(1);
   });
 
   it("WF-7: prepends a SHARED-workspace ORIENTATION block to the first user turn when workdirKey is set, with no unconditional land-on-main", async () => {
@@ -810,14 +811,13 @@ describe("ClaudeAgentBackend: additional branch/edge coverage", () => {
     expect(first).not.toBe("TIMEOUT");
     const orientation = (first as { message: { content: Array<{ text?: string }> } }).message.content[0]!.text!;
     const wt = join(repo, ".chimera", "worktrees", "task-t1");
-    expect(orientation.startsWith("ORIENTATION")).toBe(true);
-    expect(orientation).toContain(`ALREADY inside a SHARED task workspace at ${wt}`);
-    expect(orientation).toContain("on branch chimera/task-t1,");
-    expect(orientation).toContain(`branched from main commit ${sha.slice(0, 12)}`);
-    expect(orientation).toContain("shared across every agent working this task");
-    expect(orientation).toContain("Do NOT call EnterWorktree/ExitWorktree");
-    expect(orientation).not.toContain("LAND-ON-MAIN when functionally complete");
-    expect(orientation).not.toContain(`git -C ${repo} branch -D`);
+    expect(orientation.startsWith("WORKSPACE (shared by every agent on this task")).toBe(true);
+    expect(orientation).toContain(`- <worktree>: ${wt}`);
+    expect(orientation).toContain(`- <branch>: chimera/task-t1 (from main ${sha.slice(0, 12)})`);
+    expect(orientation).toContain("never discard work you didn't create");
+    expect(orientation).toContain("don't use EnterWorktree/ExitWorktree");
+    expect(orientation).toContain("Don't merge to main or remove this worktree/branch unless your instructions say so");
+    expect(orientation).not.toContain("merge --no-ff");
   });
 
   it("does not prepend an ORIENTATION block for non-worktree isolation, even with instructions set", async () => {
@@ -827,7 +827,7 @@ describe("ClaudeAgentBackend: additional branch/edge coverage", () => {
     const first = await nextOrTimeout(calls[0]!.prompt[Symbol.asyncIterator](), 30);
     expect(first).not.toBe("TIMEOUT");
     expect((first as { message: { content: Array<{ text?: string }> } }).message.content).toHaveLength(1);
-    expect((first as { message: { content: Array<{ text?: string }> } }).message.content[0]!.text).not.toContain("ORIENTATION");
+    expect((first as { message: { content: Array<{ text?: string }> } }).message.content[0]!.text).not.toContain("WORKSPACE (");
   });
 
   // SAFE-1 CACHE-PREFIX acceptance test: the Claude system block must be BYTE-IDENTICAL across
