@@ -47,6 +47,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: node scripts/audit-secrets.mjs
       - run: git diff --check
+      - name: Portable typecheck and native gate regressions
+        run: node --test scripts/typecheck.test.mjs
       - name: Portable source tests
         run: pnpm exec vitest run --maxWorkers=4 packages/protocol/test packages/app/test packages/client/test/doctor.test.ts packages/core/test/paths-platform.test.ts
       - name: Full Unix source suite
@@ -59,9 +61,13 @@ jobs:
       - name: Linux native prerequisites
         if: inputs.native_build && runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev
-      - name: Native verification (explicit opt-in; not a signed release)
+      # Separate required steps preserve each native command's exit status in PowerShell too.
+      - name: Native typecheck (explicit opt-in; not a signed release)
         if: inputs.native_build
-        run: |
-          pnpm typecheck
-          pnpm --filter @chimera/app build
-          cargo test --manifest-path packages/app/src-tauri/Cargo.toml --locked
+        run: pnpm typecheck
+      - name: Native app build
+        if: inputs.native_build
+        run: pnpm --filter @chimera/app build
+      - name: Native Rust tests
+        if: inputs.native_build
+        run: cargo test --manifest-path packages/app/src-tauri/Cargo.toml --locked

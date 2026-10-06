@@ -69,10 +69,9 @@ describe("daemon restart recovery (spec §3)", () => {
       await sleep(20);
     }
     expect(final?.state).toBe("done");
-    // SAFE-1 CACHE-PREFIX: a team task's prompt now carries the live roster/purpose
-    // preamble ahead of the task text (scheduler.ts's withTeamPreamble) — the fake
-    // backend echoes spec.prompt verbatim, so the echo includes that preamble.
-    expect(final?.resultText).toMatch(/^fake:.*\n\ninterrupted$/s);
+    // The fake backend echoes spec.prompt, so exact equality guards the authored
+    // task body against team-context prefixes when recovery re-drains the queue.
+    expect(final?.resultText).toBe("fake:interrupted");
     expect(final?.attempts).toBe(0);                         // the restart consumed no retry budget
 
     const tail = (await c2.request("agent.tail", { agentId: `task:${taskId}`, n: 50 })).result as Array<{ data: Record<string, unknown> }>;

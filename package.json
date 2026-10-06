@@ -11,7 +11,7 @@
     "test": "vitest run",
     "test:codex-schema": "node scripts/check-codex-protocol.mjs",
     "test:ui-browser": "node scripts/browser-gate.mjs",
-    "typecheck": "tsc -b packages/*/tsconfig.json",
+    "typecheck": "node scripts/typecheck.mjs",
     "daemon": "node packages/daemon/bin/chimerad.js",
     "build:bins": "bash scripts/build-bins.sh",
     "build:npm": "node scripts/build-npm.mjs",

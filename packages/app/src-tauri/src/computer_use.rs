@@ -416,16 +416,23 @@ os.unlink(path)
 
     #[test]
     fn a_manifest_that_promises_a_missing_or_unsafe_driver_fails_visibly() {
-        let tmp = tempfile::tempdir_in("/tmp").unwrap();
+        // No Unix socket is opened here, so use the OS temp directory rather than requiring /tmp.
+        let tmp = tempfile::tempdir().unwrap();
         let home = tmp.path().join("h");
         packaged(tmp.path(), "bundled", "integrations/cua-driver/cua-driver");
         assert!(config(&home, Some(tmp.path())).unwrap_err().contains("Reinstall Chimera"));
-        for bad in ["../outside", "/abs/driver", "integrations/../../x"] {
+        let absolute_driver = tmp.path().join("outside");
+        let mut bad_paths = vec!["../outside", "/abs/driver", "integrations/../../x"];
+        bad_paths.push(absolute_driver.to_str().unwrap());
+        // Windows root-relative and drive-relative paths are unsafe even when is_absolute is false.
+        #[cfg(windows)]
+        bad_paths.extend([r"C:\abs\driver", r"C:driver", r"\abs\driver", r"\\server\share\driver", r"..\outside", r"integrations\..\..\x"]);
+        for bad in bad_paths {
             packaged(tmp.path(), "bundled", bad);
             assert!(config(&home, Some(tmp.path())).unwrap_err().contains("unsafe"), "{bad}");
         }
         std::fs::write(tmp.path().join("runtime/integrations/manifest.json"), "not json").unwrap();
-        assert!(config(&home, Some(tmp.path())).is_err());
+        assert!(config(&home, Some(tmp.path())).unwrap_err().contains("Invalid bundled integration manifest"));
     }
 
     #[test]

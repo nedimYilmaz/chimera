@@ -46,9 +46,9 @@ describe("chimera team/queue CLI", () => {
       await sleep(50);
     }
     expect(done?.state).toBe("done");
-    // Team-spawned tasks get the live roster prepended ahead of the prompt (scheduler.ts's
-    // teamContextPreamble, joined with "\n\n") — this worker is alone on the team, so "none yet".
-    expect(done?.resultText).toBe("fake:Current teammates: none yet.\n\ncli task");
+    // The fake backend echoes spec.prompt, so exact equality guards the authored
+    // task body against team-context prefixes on the CLI queue path.
+    expect(done?.resultText).toBe("fake:cli task");
 
     const teams = JSON.parse((await cli(["team", "list"])).stdout);
     expect(teams[0]).toMatchObject({ name: "crew", running: 0 });
