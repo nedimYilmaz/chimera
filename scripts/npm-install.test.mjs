@@ -138,10 +138,14 @@ for (const scenario of ['fresh', 'closed', 'running', 'detection-error', 'quit-e
     const payload = Buffer.from('offline signed app fixture'), hash = createHash('sha256').update(payload).digest('hex');
     const calls = [];
     let appRunning = ['running', 'quit-error'].includes(scenario), daemonRunning = existing;
+    let originalBinMode;
     await mkdir(plan.bin, { recursive: true });
     if (existing) {
       await mkdir(plan.app, { recursive: true }); await writeFile(join(plan.app, 'old'), 'original bundle');
       await writeFile(bin, '# Chimera npm installer\noriginal CLI', { mode: 0o755 });
+      // Windows reports host permissions rather than POSIX executable bits.
+      originalBinMode = (await lstat(bin)).mode & 0o777;
+      if (process.platform !== 'win32') assert.equal(originalBinMode, 0o755);
       await mkdir(join(dir, 'Library/LaunchAgents'), { recursive: true }); await writeFile(plan.plist, oldPlist);
     }
     const run = async (cmd, args) => {
@@ -181,7 +185,7 @@ for (const scenario of ['fresh', 'closed', 'running', 'detection-error', 'quit-e
         await assert.rejects(task, /detection denied|quit denied|activation denied/);
         assert.equal(await readFile(join(plan.app, 'old'), 'utf8'), 'original bundle');
         assert.equal(await readFile(bin, 'utf8'), '# Chimera npm installer\noriginal CLI');
-        assert.equal((await lstat(bin)).mode & 0o777, 0o755);
+        assert.equal((await lstat(bin)).mode & 0o777, originalBinMode);
         assert.equal(await readFile(plan.plist, 'utf8'), oldPlist);
         assert.equal(daemonRunning, true);
         assert.deepEqual(await readdir(join(plan.root, 'releases')), []);
