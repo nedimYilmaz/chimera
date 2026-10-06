@@ -39,6 +39,110 @@ function server(errors: Record<string, string> = {}, deferred = new Set<string>(
 }
 
 describe("Codex app-server", () => {
+  it.each(["empty", "commentary", "unfinished"])("native %s turn owns its result state when the handle closes", async kind => {
+    const mock = server(); const events: any[] = [];
+    const handle = new CodexAgentBackend({ appServerProcess: mock.factory, validateModel: async () => {} })
+      .spawn(cxSpec({ persistent: true, providerOptions: { codexTransport: "app-server" } }), e => events.push(e), async () => false);
+    try {
+      await vi.waitFor(() => expect(mock.messages.some(m => m.method === "turn/start")).toBe(true));
+      mock.send({ method: "item/completed", params: { threadId: "thread-a", item: { type: "agentMessage", id: "final", text: "Earlier verified result.", phase: "final_answer" } } });
+      mock.complete();
+      await vi.waitFor(() => expect(events.filter(e => e.kind === "turn_complete")).toHaveLength(1));
+      mock.send({ method: "turn/started", params: { threadId: "thread-a", turn: { id: "native-turn" } } });
+      await vi.waitFor(() => expect(events.some(e => e.kind === "status" && e.data.turnId === "native-turn")).toBe(true));
+      if (kind === "commentary") mock.send({ method: "item/completed", params: { threadId: "thread-a", turnId: "native-turn", item: { type: "agentMessage", id: "progress", text: "Still checking.", phase: "commentary" } } });
+      if (kind !== "unfinished") {
+        mock.send({ method: "turn/completed", params: { threadId: "thread-a", turn: { id: "native-turn", status: "completed" } } });
+        await vi.waitFor(() => expect(events.filter(e => e.kind === "turn_complete")).toHaveLength(2));
+      }
+      await handle.close?.();
+      await vi.waitFor(() => expect(events.at(-1)?.kind).toBe(kind === "unfinished" ? "error" : "result"));
+      if (kind === "unfinished") {
+        expect(events.at(-1).data).toMatchObject({ phase: "codex-turn-incomplete" });
+        expect(events.some(e => e.kind === "result")).toBe(false);
+        expect(events.filter(e => e.kind === "turn_complete")).toHaveLength(1);
+      } else expect(events.at(-1).data.text).toBe("");
+      expect(mock.messages.filter(m => m.method === "turn/start")).toHaveLength(1);
+    } finally { await handle.kill(); }
+  });
+
+  it.each(["completed", "failed", "interrupted"])("a %s compaction-only turn preserves the last legitimate result", async status => {
+    const mock = server(); const events: any[] = [];
+    mock.onMessage = m => { if (m.method === "thread/compact/start") mock.send({ id: m.id, result: {} }); };
+    const handle = new CodexAgentBackend({ appServerProcess: mock.factory, validateModel: async () => {} })
+      .spawn(cxSpec({ persistent: true, providerOptions: { codexTransport: "app-server" } }), e => events.push(e), async () => false);
+    try {
+      await vi.waitFor(() => expect(mock.messages.some(m => m.method === "turn/start")).toBe(true));
+      mock.send({ method: "item/completed", params: { threadId: "thread-a", item: { type: "agentMessage", id: "final", text: "Verified before compaction.", phase: "final_answer" } } });
+      mock.complete();
+      await vi.waitFor(() => expect(events.filter(e => e.kind === "turn_complete")).toHaveLength(1));
+      await handle.compact!();
+      mock.send({ method: "turn/started", params: { threadId: "thread-a", turn: { id: "maintenance-turn" } } });
+      mock.send({ method: "item/started", params: { threadId: "thread-a", turnId: "maintenance-turn", item: { type: "contextCompaction", id: "cmp" } } });
+      mock.send({ method: "item/completed", params: { threadId: "thread-a", turnId: "maintenance-turn", item: { type: "contextCompaction", id: "cmp" } } });
+      mock.send({ method: "turn/completed", params: { threadId: "thread-a", turn: { id: "maintenance-turn", status, ...(status === "failed" ? { error: { message: "compaction unavailable" } } : {}) } } });
+      await vi.waitFor(() => expect(events.filter(e => e.kind === "turn_complete")).toHaveLength(2));
+      await handle.close?.();
+      await vi.waitFor(() => expect(events.at(-1)?.kind).toBe("result"));
+      expect(events.at(-1).data.text).toBe("Verified before compaction.");
+      expect(events.some(e => e.kind === "error")).toBe(false);
+    } finally { await handle.kill(); }
+  });
+
+  it("a local abort emits one interrupted boundary and no successful partial result", async () => {
+    const mock = server(); const events: any[] = [];
+    const handle = new CodexAgentBackend({ appServerProcess: mock.factory, validateModel: async () => {}, interruptGraceMs: 0 })
+      .spawn(cxSpec({ providerOptions: { codexTransport: "app-server" } }), e => events.push(e), async () => false);
+    try {
+      await vi.waitFor(() => expect(mock.messages.some(m => m.method === "turn/start")).toBe(true));
+      mock.send({ method: "item/completed", params: { threadId: "thread-a", item: { type: "agentMessage", id: "progress", text: "Saved the canonical edit." } } });
+      await handle.interrupt();
+      await vi.waitFor(() => expect(events.at(-1)?.kind).toBe("error"));
+      expect(events.filter(e => e.kind === "turn_complete")).toHaveLength(1);
+      expect(events.find(e => e.kind === "turn_complete").data.interrupted).toBe(true);
+      expect(mock.messages.filter(m => m.method === "turn/interrupt")).toHaveLength(1);
+      expect(events.some(e => e.kind === "result")).toBe(false);
+    } finally { await handle.kill(); }
+  });
+
+  it("an interrupted idle native turn cannot reuse a prior successful response on close", async () => {
+    const mock = server(); const events: any[] = [];
+    const handle = new CodexAgentBackend({ appServerProcess: mock.factory, validateModel: async () => {} })
+      .spawn(cxSpec({ persistent: true, providerOptions: { codexTransport: "app-server" } }), e => events.push(e), async () => false);
+    try {
+      await vi.waitFor(() => expect(mock.messages.some(m => m.method === "turn/start")).toBe(true));
+      mock.send({ method: "item/completed", params: { threadId: "thread-a", item: { type: "agentMessage", id: "final", text: "Earlier result." } } });
+      mock.complete();
+      await vi.waitFor(() => expect(events.filter(e => e.kind === "turn_complete")).toHaveLength(1));
+      mock.send({ method: "turn/started", params: { threadId: "thread-a", turn: { id: "voice-turn" } } });
+      mock.send({ method: "turn/completed", params: { threadId: "thread-a", turn: { id: "voice-turn", status: "interrupted" } } });
+      await vi.waitFor(() => expect(events.filter(e => e.kind === "turn_complete")).toHaveLength(2));
+      expect(events.filter(e => e.kind === "turn_complete").at(-1).data.interrupted).toBe(true);
+      await handle.close?.();
+      await vi.waitFor(() => expect(events.at(-1)?.kind).toBe("error"));
+      expect(events.some(e => e.kind === "result")).toBe(false);
+      expect(mock.messages.filter(m => m.method === "turn/start")).toHaveLength(1);
+    } finally { await handle.kill(); }
+  });
+
+  it("preserves an unsolicited interrupted foreground turn and rejects its progress as a result", async () => {
+    const mock = server(); const events: any[] = [];
+    const handle = new CodexAgentBackend({ appServerProcess: mock.factory, validateModel: async () => {} })
+      .spawn(cxSpec({ permissionProfile: "acceptEdits", providerOptions: { codexTransport: "app-server" } }), e => events.push(e), async () => false);
+    try {
+      await vi.waitFor(() => expect(mock.messages.some(m => m.method === "turn/start")).toBe(true));
+      mock.send({ method: "item/completed", params: { threadId: "thread-a", item: { type: "agentMessage", id: "progress", text: "Verify the redirect next.", phase: "commentary" } } });
+      mock.send({ method: "item/completed", params: { threadId: "thread-a", item: { type: "mcpToolCall", id: "denied", server: "chimera", tool: "memory_get", status: "failed", error: { message: "user cancelled MCP tool call" } } } });
+      mock.send({ method: "turn/completed", params: { threadId: "thread-a", turn: { id: "turn-a", status: "interrupted" } } });
+      await vi.waitFor(() => expect(events.at(-1)?.kind).toBe("error"));
+      expect(events.filter(e => e.kind === "turn_complete")).toHaveLength(1);
+      expect(events.find(e => e.kind === "turn_complete").data).toMatchObject({ interrupted: true });
+      expect(events.at(-1).data).toMatchObject({ phase: "codex-turn-incomplete", interrupted: true });
+      expect(events.some(e => e.kind === "result")).toBe(false);
+      expect(mock.messages.some(m => m.method === "turn/interrupt")).toBe(false);
+    } finally { await handle.kill(); }
+  });
+
   it("maps goal lifecycle commands to native RPC without sending slash text as a turn", async () => {
     const mock = server();
     let goal: any = null;

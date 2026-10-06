@@ -588,6 +588,8 @@ export class CodexAgentBackend implements AgentBackend {
     const cleanSteeredInputs = () => { for (const cleanup of steerCleanups) cleanup(); steerCleanups.clear(); };
     let contextLimits: CodexContextLimits = { source: "codex", ...(spec.contextWindow != null ? { requestedWindow: spec.contextWindow } : {}), ...(spec.compactionThreshold ? { compactAt: spec.compactionThreshold } : {}) };
     let lastText = "";
+    let turnOutcome: "completed" | "interrupted" | undefined;
+    let resultBeforeTurn: { text: string; outcome: "completed" | "interrupted" | undefined } | undefined;
     let turns = 0;
     let turnBudgetSignaled = false;   // SOFT-TURN-LIMIT: fires once, mirrors claude.ts
     // Exec reports cumulative SESSION usage (including resumed history), whereas
@@ -624,6 +626,11 @@ export class CodexAgentBackend implements AgentBackend {
         contextLimits = { ...contextLimits, sessionWindow: raw.modelContextWindow };
       }
       if (raw.type === "turn.started") {
+        // Native/voice turns bypass the queued input loop. Each real turn owns
+        // its answer/outcome; maintenance is only identified at completion.
+        resultBeforeTurn = { text: lastText, outcome: turnOutcome };
+        lastText = "";
+        turnOutcome = undefined;
         deltas.clear();
         execTurnStarted = transport === "exec";
         // A force-send can arrive before exec has established its rollout. Wait
@@ -635,8 +642,17 @@ export class CodexAgentBackend implements AgentBackend {
       for (const ev of !normalized ? [] : Array.isArray(normalized) ? normalized : [normalized]) {
         if (ev.kind === "usage") ev.data = { ...ev.data, contextLimits };
         if (ev.kind === "agent_started") ev.data = { ...ev.data, codexTransport: transport, nativeApprovals: transport === "app-server", nativeDialogs: transport === "app-server" && spec.autonomy !== "full", supportsSteer: transport === "app-server", ...(transport === "app-server" ? { nativeVoice: spec.providerOptions["codexRealtime"] === true } : {}) };
-        if (ev.kind === "message_complete") lastText = String(ev.data["text"] ?? lastText);
+        // Explicit commentary is progress, not a final response. Exec versions
+        // without phase metadata still identify their response by item completion.
+        if (ev.kind === "message_complete" && (raw.item as Record<string, unknown> | undefined)?.phase !== "commentary") lastText = String(ev.data["text"] ?? "");
         if (ev.kind === "turn_complete") {
+          if (raw["maintenance"] === true) {
+            if (resultBeforeTurn) {
+              lastText = resultBeforeTurn.text;
+              turnOutcome = resultBeforeTurn.outcome;
+            }
+          } else turnOutcome = raw.interrupted === true ? "interrupted" : "completed";
+          resultBeforeTurn = undefined;
           cleanSteeredInputs();
           executingTurn = false;
           execTurnStarted = false;
@@ -692,6 +708,10 @@ export class CodexAgentBackend implements AgentBackend {
           }
           if (prompt === undefined) break;              // idle turn boundary → finish (one-shot semantics, Phase 1 parity)
           prompt = takeForcedFold(prompt, loop);
+          // A later interrupted or empty turn must never inherit an earlier answer.
+          lastText = "";
+          turnOutcome = undefined;
+          resultBeforeTurn = undefined;
           let markReady!: () => void;
           readyForSteer = new Promise<void>((resolve) => { markReady = resolve; });
           const controller = loop.beginTurn();
@@ -756,6 +776,7 @@ export class CodexAgentBackend implements AgentBackend {
                 return;
               }
               if (loop.consumeInterrupt()) {
+                turnOutcome = "interrupted";
                 sink({ kind: "turn_complete", data: { interrupted: true, ...(interruptForSteer ? { steering: true } : {}) } });
                 continue;                                // agent stays alive; next mailbox message starts a new turn
               }
@@ -772,6 +793,16 @@ export class CodexAgentBackend implements AgentBackend {
           }
         }
         if (!loop.killed && !failed) {
+          // A drained iterator/grace window is a process boundary, not proof that
+          // the requested work completed. The supervisor and jobs trust result.
+          if (turnOutcome !== "completed") {
+            sink({ kind: "error", data: {
+              message: turnOutcome === "interrupted" ? "Codex turn interrupted before a final result"
+                : "Codex event stream ended without a completed turn",
+              phase: "codex-turn-incomplete", ...(turnOutcome === "interrupted" ? { interrupted: true } : {}),
+            } });
+            return;
+          }
           // W2-1 STRUCTURED-RETURNS / SDK-ADOPTION #4: an unparseable result, OR one that parses
           // but fails json-schema-lite's structural check against resultSchema (wrong types,
           // missing required fields — the asymmetry with Claude's self-validating outputFormat

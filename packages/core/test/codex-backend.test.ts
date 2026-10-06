@@ -763,7 +763,7 @@ describe("CodexAgentBackend.spawn — additional branch/edge coverage", () => {
     expect(evs[1]!.data["message"]).toBe("boom mid turn");
   });
 
-  it("recovers from a mid-turn interrupt: emits turn_complete{interrupted:true} then a result, without crashing", async () => {
+  it("reports an interrupted turn as incomplete when no continuation arrives", async () => {
     const { factory } = fakeCodex([[{ type: "thread.started", thread_id: "th-1" }]]);
     const evs: BackendEvent[] = [];
     // interruptGraceMs: 0 — this test predates Task 6's grace window (default 250ms) and pins the
@@ -775,7 +775,7 @@ describe("CodexAgentBackend.spawn — additional branch/edge coverage", () => {
     await settle();
     expect(evs).toEqual([
       { kind: "turn_complete", data: { interrupted: true } },
-      { kind: "result", data: { text: "", costUsd: 0, model: "gpt-5.6-sol", costEstimated: true, billableUsage: zeroUsage, contextUsage: null, contextUsageSource: "rollout" } },
+      { kind: "error", data: { message: "Codex turn interrupted before a final result", phase: "codex-turn-incomplete", interrupted: true } },
     ]);
   });
 
@@ -1113,7 +1113,7 @@ describe("CodexAgentBackend turns and lifecycle", () => {
     expect(evs.at(-1)!.data["text"]).toBe("recovered");
   });
 
-  it("after the grace expires with no send, the agent finishes with the pre-interrupt text", async () => {
+  it("after the grace expires with no send, partial text does not become a successful result", async () => {
     const hanging = Object.assign(
       [{ type: "item.completed", item: { id: "h", type: "agent_message", text: "partial answer" } }] as CodexThreadEvent[],
       { hang: true });
@@ -1124,8 +1124,8 @@ describe("CodexAgentBackend turns and lifecycle", () => {
     await settle();
     await h.interrupt();
     await new Promise((r) => setTimeout(r, 60));         // > interruptGraceMs: the grace expires idle
-    expect(evs.at(-1)!.kind).toBe("result");             // documented divergence: interrupt-then-idle auto-finishes
-    expect(evs.at(-1)!.data["text"]).toBe("partial answer");
+    expect(evs.at(-1)).toMatchObject({ kind: "error", data: { interrupted: true, phase: "codex-turn-incomplete" } });
+    expect(evs.some(e => e.kind === "result")).toBe(false);
     // LATE-MESSAGE-RESUME: a post-finish send() now REJECTS instead of silently queuing into a
     // dead loop — deliverBatch's catch re-enqueues it, so checkPendingOnSettle can pick it up.
     await expect(h.send("too late")).rejects.toThrow("input stream closed");

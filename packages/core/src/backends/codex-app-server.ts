@@ -67,6 +67,7 @@ export class CodexAppServer implements CodexLike {
   private completedTurnIds = new Set<string>();
   private requests = new Map<string | number, { cancel: () => void }>();
   private consuming = false;
+  private turnSignal: AbortSignal | undefined;
   private idleWaiters = new Set<() => void>();
   private ensureThread: (() => Promise<void>) | undefined;
   private voiceState: Parameters<NativeVoiceHandle["start"]>[1] | undefined;
@@ -269,6 +270,7 @@ export class CodexAppServer implements CodexLike {
         owner.snapshots.clear();
         owner.fileChanges.clear();
         const signal = turnOptions?.signal;
+        owner.turnSignal = signal;
         signal?.throwIfAborted();
         let interrupted = false;
         const abort = () => {
@@ -280,7 +282,7 @@ export class CodexAppServer implements CodexLike {
           const result = await owner.rpc.request("turn/start", { threadId: owner.threadId, input: wireInput(input), effort: options.modelReasoningEffort, ...(turnOptions?.outputSchema ? { outputSchema: turnOptions.outputSchema } : {}) });
           owner.turnId = result.turn.id;
           if (interrupted) abort();
-        } catch (error) { signal?.removeEventListener("abort", abort); owner.active = false; owner.consuming = false; throw error; }
+        } catch (error) { signal?.removeEventListener("abort", abort); owner.active = false; owner.consuming = false; owner.turnSignal = undefined; throw error; }
         return { events: (async function* () {
           try {
             while (owner.active || owner.events.length) {
@@ -294,6 +296,7 @@ export class CodexAppServer implements CodexLike {
             owner.wake = undefined;
             owner.turnId = null;
             owner.consuming = false;
+            owner.turnSignal = undefined;
           }
         })() };
       },
@@ -392,7 +395,9 @@ export class CodexAppServer implements CodexLike {
       const maintenance = this.compactOnly && this.sawCompaction;
       if (this.sawCompaction && p.turn.status !== "completed") this.push({ type: "compaction.aborted", error: p.turn.error?.message ?? "Codex compaction interrupted" });
       if (p.turn.status === "failed" && !maintenance) this.push({ type: "turn.failed", error: p.turn.error ?? { message: "Codex turn failed" } });
-      else if (p.turn.status !== "interrupted" || !this.consuming) this.push({ type: "turn.completed", ...(p.turn.status === "interrupted" ? { interrupted: true } : {}), usage: {
+      // Local aborts synthesize their boundary in the backend catch. Unsolicited
+      // interruptions must reach it too, rather than looking like clean EOF.
+      else if (p.turn.status !== "interrupted" || !this.consuming || !this.turnSignal?.aborted) this.push({ type: "turn.completed", ...(p.turn.status === "interrupted" ? { interrupted: true } : {}), usage: {
         input_tokens: this.billableUsage.inputTokens ?? 0, cached_input_tokens: this.billableUsage.cachedInputTokens ?? 0,
         cache_write_input_tokens: this.billableUsage.cacheWriteInputTokens ?? 0,
         output_tokens: this.billableUsage.outputTokens ?? 0, reasoning_output_tokens: this.billableUsage.reasoningOutputTokens ?? 0,
