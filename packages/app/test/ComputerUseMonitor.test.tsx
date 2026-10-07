@@ -30,6 +30,7 @@ function desktop() {
     running: true,
     monitor: { held: true, owner: "agent-a", busy: false, windowId: 11, activities: [] as Activity[] } as McpStoreMonitor,
     previewFails: false,
+    previewError: "Target window is unavailable",
     deferPreviews: false,
     pending: [] as { windowId: unknown; resolve: (v: string) => void }[],
     calls: [] as { command: string; args?: Record<string, unknown> }[],
@@ -39,7 +40,7 @@ function desktop() {
     if (command === "computer_use_status") return { configured: true, running: world.running, autoStart: true, permissionOwner: "Chimera", accessibility: true, screenRecording: true };
     if (command === "computer_use_stop") { world.running = false; return { configured: true, running: false, autoStart: false }; }
     if (command === "computer_use_preview") {
-      if (world.previewFails) throw new Error("Target window is unavailable");
+      if (world.previewFails) throw world.previewError;
       if (world.deferPreviews) return new Promise<string>(resolve => world.pending.push({ windowId: args?.windowId, resolve }));
       return `frame:${String(args?.windowId ?? "desktop")}`;
     }
@@ -151,6 +152,21 @@ describe("ComputerUseMonitor — in-transcript desktop preview", () => {
     await tick(1000);
     expect(img()).toBeUndefined();
     expect(text()).toContain("Target window is unavailable");
+  });
+
+  it("recovers a missing native frame on the next capture without stopping or widening the target", async () => {
+    const d = desktop();
+    d.world.previewError = "No preview image is available yet. Preview will retry automatically.";
+    d.world.previewFails = true;
+    await mount(d, "agent-a").render();
+    expect(img()).toBeUndefined();
+    expect(text()).toContain(d.world.previewError);
+    d.world.previewFails = false;
+    await tick(1000);
+    expect(img()).toBe("frame:11");
+    expect(text()).not.toContain(d.world.previewError);
+    expect(d.count("computer_use_stop")).toBe(0);
+    expect(d.world.calls.filter(c => c.command === "computer_use_preview").every(c => c.args?.windowId === 11)).toBe(true);
   });
 
   it("stops control explicitly: calls the stop service, removes the overlay, and a late poll cannot bring it back", async () => {

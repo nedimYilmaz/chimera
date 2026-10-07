@@ -52,11 +52,13 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev patchelf xdg-utils
       - name: Stage and verify bundled Computer Use runtime
         run: |
-          node --test scripts/prune-desktop-prebuilds.test.mjs
+          node --test scripts/prune-desktop-prebuilds.test.mjs scripts/repack-linux-runtime.test.mjs
           node scripts/build-desktop-runtime.mjs
           node scripts/test-desktop-runtime.mjs
-      - name: Build Linux AppImage
-        run: pnpm --filter @chimera/app tauri build --verbose --config src-tauri/tauri.standalone.conf.json --bundles appimage
+      - name: Build Linux application and native dependencies
+        run: pnpm --filter @chimera/app tauri build --verbose --bundles appimage
+      - name: Add opaque provider runtimes without ELF rewriting
+        run: node scripts/repack-linux-runtime.mjs
       - name: Verify and name native artifact
         run: node scripts/package-desktop-release.mjs
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

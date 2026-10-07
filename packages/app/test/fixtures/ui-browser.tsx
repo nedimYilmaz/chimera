@@ -447,7 +447,7 @@ window.__UI_QA_COMPUTER__ = (command, args) => {
   if (command === "computer_use_status") return { configured: true, running: desktop.running, autoStart: true, permissionOwner: "Chimera", accessibility: true, screenRecording: true };
   if (command === "computer_use_stop") { desktop.running = false; return { configured: true, running: false, autoStart: false }; }
   if (command === "computer_use_preview") {
-    if (desktop.previewFails) throw new Error("Target window is unavailable");
+    if (desktop.previewFails) throw "No preview image is available yet. Preview will retry automatically.";
     const windowId = args?.windowId;
     if (desktop.defer) return new Promise<string>(resolve => desktop.pending.push({ windowId, resolve }));
     return desktopFrame(`Fixture target · window ${String(windowId)} · frame ${++desktop.frames}`);

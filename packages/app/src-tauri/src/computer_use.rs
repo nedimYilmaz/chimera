@@ -475,6 +475,54 @@ sys.stdin.buffer.read()
     }
 }
 
+// The capture utility owns the output filename. A private directory keeps concurrent frames
+// separate, allows atomic output replacement, and is removed even when capture produces no file.
+#[cfg(any(target_os = "macos", test))]
+fn capture_preview_with(program: &Path, temp_root: &Path, window_id: Option<u32>, timeout: Duration) -> Result<String, String> {
+    use base64::Engine;
+    use std::io::Read;
+    let directory = tempfile::Builder::new().prefix("chimera-preview-").tempdir_in(temp_root)
+        .map_err(|_| "Preview temporary storage is unavailable".to_string())?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))
+            .map_err(|_| "Preview temporary storage could not be secured".to_string())?;
+    }
+    let output = directory.path().join("preview.jpg");
+    let mut capture = Command::new(program);
+    // GUI launches can inherit a working directory which is removed later.
+    capture.current_dir(directory.path()).args(["-x", "-o", "-t", "jpg"]);
+    if let Some(id) = window_id { capture.args(["-l", &id.to_string()]); } else { capture.arg("-m"); }
+    let child = capture.arg(&output).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn()
+        .map_err(|_| "The system screen capture service could not start".to_string())?;
+    struct CaptureChild(Child);
+    impl Drop for CaptureChild {
+        fn drop(&mut self) {
+            if !matches!(self.0.try_wait(), Ok(Some(_))) { let _ = self.0.kill(); }
+            let _ = self.0.wait();
+        }
+    }
+    let mut child = CaptureChild(child);
+    let deadline = Instant::now() + timeout;
+    loop {
+        if let Some(status) = child.0.try_wait().map_err(|_| "The preview capture process could not be checked".to_string())? {
+            if !status.success() { return Err("Target window is unavailable. Preview will retry automatically.".into()); }
+            break;
+        }
+        if Instant::now() >= deadline { return Err("Preview timed out. It will retry automatically.".into()); }
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    let metadata = std::fs::symlink_metadata(&output).map_err(|_| "No preview image is available yet. Preview will retry automatically.".to_string())?;
+    const LIMIT: u64 = 8 * 1024 * 1024;
+    if !metadata.is_file() || metadata.len() == 0 || metadata.len() > LIMIT { return Err("Preview size or format is unsupported".into()); }
+    let file = std::fs::File::open(&output).map_err(|_| "The preview image could not be opened".to_string())?;
+    let mut bytes = Vec::new();
+    file.take(LIMIT + 1).read_to_end(&mut bytes).map_err(|_| "The preview image could not be read".to_string())?;
+    if bytes.is_empty() || bytes.len() as u64 > LIMIT { return Err("Preview size or format is unsupported".into()); }
+    Ok(format!("data:image/jpeg;base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes)))
+}
+
 // Independent screen capture: monitor reads must never consume the driver's
 // capture IDs or replace an agent's actionable accessibility snapshot.
 #[tauri::command]
@@ -482,26 +530,78 @@ pub async fn computer_use_preview(window_id: Option<u32>, state: State<'_, Compu
     if window_id == Some(0) || !state.status(&crate::daemon::chimera_home())?.running { return Err("Desktop control is stopped".into()); }
     #[cfg(target_os = "macos")]
     return tauri::async_runtime::spawn_blocking(move || {
-        use base64::Engine;
         if permissions(false).1 != Some(true) { return Err("Screen Recording permission is required".into()); }
-        let file = tempfile::Builder::new().suffix(".jpg").tempfile().map_err(|e| e.to_string())?;
-        let mut capture = Command::new("/usr/sbin/screencapture");
-        capture.args(["-x", "-o", "-t", "jpg"]);
-        if let Some(id) = window_id { capture.args(["-l", &id.to_string()]); } else { capture.arg("-m"); }
-        let mut child = capture.arg(file.path()).stdout(Stdio::null()).stderr(Stdio::null()).spawn().map_err(|e| e.to_string())?;
-        let deadline = Instant::now() + Duration::from_secs(3);
-        loop {
-            if let Some(status) = child.try_wait().map_err(|e| e.to_string())? {
-                if !status.success() { return Err("Target window is unavailable".into()); }
-                break;
-            }
-            if Instant::now() >= deadline { let _ = child.kill(); let _ = child.wait(); return Err("Preview timed out".into()); }
-            std::thread::sleep(Duration::from_millis(25));
-        }
-        let bytes = std::fs::read(file.path()).map_err(|e| e.to_string())?;
-        if bytes.is_empty() || bytes.len() > 8 * 1024 * 1024 { return Err("Preview size is unsupported".into()); }
-        Ok(format!("data:image/jpeg;base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes)))
+        capture_preview_with(Path::new("/usr/sbin/screencapture"), &std::env::temp_dir(), window_id, Duration::from_secs(3))
     }).await.map_err(|e| e.to_string())?;
     #[cfg(not(target_os = "macos"))]
     Err("Live window preview is currently supported on macOS".into())
+}
+
+#[cfg(all(test, unix))]
+mod preview_tests {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt;
+
+    fn helper(root: &Path, body: &str) -> PathBuf {
+        let path = root.join("fake-capture");
+        std::fs::write(&path, format!("#!/bin/sh\nset -eu\n{body}\n")).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700)).unwrap();
+        path
+    }
+    fn no_frames(root: &Path) {
+        assert!(!std::fs::read_dir(root).unwrap().any(|e| e.unwrap().file_name().to_string_lossy().starts_with("chimera-preview-")));
+    }
+
+    #[test]
+    fn preview_uses_private_unoccupied_output_and_exact_target_then_cleans_up() {
+        let root = tempfile::tempdir().unwrap();
+        let program = helper(root.path(), r#"
+[ "$1 $2 $3 $4" = '-x -o -t jpg' ]
+[ "$5 $6" = '-l 42' ]
+out="$7"
+[ ! -e "$out" ]
+[ "$(pwd -P)" = "$(cd "$(dirname "$out")" && pwd -P)" ]
+[ "$(/usr/bin/stat -f %Lp "$PWD")" = 700 ]
+printf '\377\330\377\331' > "$out"
+"#);
+        // stat syntax differs on Linux; no capture or permission prompts are used in this fixture.
+        #[cfg(target_os = "linux")]
+        std::fs::write(&program, std::fs::read_to_string(&program).unwrap().replace("/usr/bin/stat -f %Lp", "/usr/bin/stat -c %a")).unwrap();
+        for _ in 0..2 {
+            assert_eq!(capture_preview_with(&program, root.path(), Some(42), Duration::from_secs(10)).unwrap(), "data:image/jpeg;base64,/9j/2Q==");
+            no_frames(root.path());
+        }
+    }
+
+    #[test]
+    fn missing_frame_is_recoverable_without_raw_filesystem_error_or_desktop_fallback() {
+        let root = tempfile::tempdir().unwrap();
+        let program = helper(root.path(), "[ \"$5 $6\" = '-l 42' ]\nexit 0");
+        let error = capture_preview_with(&program, root.path(), Some(42), Duration::from_secs(10)).unwrap_err();
+        assert_eq!(error, "No preview image is available yet. Preview will retry automatically.");
+        no_frames(root.path());
+        helper(root.path(), "[ \"$5 $6\" = '-l 42' ]\nprintf '\\377\\330\\377\\331' > \"$7\"");
+        assert!(capture_preview_with(&program, root.path(), Some(42), Duration::from_secs(10)).is_ok());
+        no_frames(root.path());
+    }
+
+    #[test]
+    fn preview_failures_distinguish_storage_spawn_target_timeout_and_invalid_output() {
+        let root = tempfile::tempdir().unwrap();
+        let program = helper(root.path(), "exit 1");
+        assert!(capture_preview_with(&program, &root.path().join("absent"), None, Duration::from_secs(10)).unwrap_err().contains("temporary storage"));
+        assert!(capture_preview_with(&root.path().join("absent"), root.path(), None, Duration::from_secs(10)).unwrap_err().contains("could not start"));
+        let target_error = capture_preview_with(&program, root.path(), None, Duration::from_secs(10)).unwrap_err();
+        assert!(target_error.contains("Target window"), "{target_error}");
+        helper(root.path(), "exec /bin/sleep 10");
+        let before = Instant::now();
+        assert!(capture_preview_with(&program, root.path(), None, Duration::from_millis(30)).unwrap_err().contains("timed out"));
+        assert!(before.elapsed() < Duration::from_secs(5));
+        no_frames(root.path());
+        for body in ["[ \"$5\" = -m ]\n: > \"$6\"", "mkdir \"$6\"", "ln -s /etc/hosts \"$6\"", "dd if=/dev/zero bs=1 count=1 seek=8388608 of=\"$6\""] {
+            helper(root.path(), body);
+            assert!(capture_preview_with(&program, root.path(), None, Duration::from_secs(10)).unwrap_err().contains("size or format"));
+            no_frames(root.path());
+        }
+    }
 }

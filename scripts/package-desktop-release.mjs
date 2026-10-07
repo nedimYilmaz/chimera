@@ -35,7 +35,7 @@ if (process.platform === 'darwin') {
     throw new Error('AppImage filename must contain the matching Tauri release version');
   }
   if (process.platform === 'linux') {
-    // Verify the resources AFTER linuxdeploy has processed them, outside their AppDir.
+    // Verify the final repacked resources outside their AppDir.
     // The npm installer copies this same runtime to a permanent, independently located daemon.
     const temp = await mkdtemp(join(tmpdir(), 'chimera-packaged-runtime-'));
     try {

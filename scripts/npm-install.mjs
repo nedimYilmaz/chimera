@@ -69,7 +69,9 @@ export function launchAgent(plan, daemon, node, path) {
 }
 
 export async function download(url, limit) {
-  const response = await fetch(url, { signal: AbortSignal.timeout(180_000) });
+  // A bundled desktop is hundreds of MB; keep a bounded transfer window that also works
+  // below fast-fiber speeds. Small checksum downloads retain the shorter deadline.
+  const response = await fetch(url, { signal: AbortSignal.timeout(limit > 8 * 1024 * 1024 ? 15 * 60_000 : 180_000) });
   if (!response.ok) throw new Error(`Release download failed (${response.status}): ${url}. The matching public signed release must exist before installation.`);
   let size = 0;
   const chunks = [];

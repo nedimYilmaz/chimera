@@ -93,13 +93,23 @@ test('release paths require the runtime build, smoke, signing and standalone res
     const bundle = value.indexOf('--config src-tauri/tauri.standalone.conf.json');
     assert.ok(stage >= 0 && smoke > stage && bundle > smoke, 'runtime staging and smoke must precede standalone bundling');
   };
-  contract(shell); contract(native);
+  const linuxContract = value => {
+    value = value.split('\n  macos:')[0];
+    const stage = value.indexOf('node scripts/build-desktop-runtime.mjs');
+    const smoke = value.indexOf('node scripts/test-desktop-runtime.mjs');
+    const bundle = value.indexOf('tauri build --verbose --bundles appimage');
+    const repack = value.indexOf('node scripts/repack-linux-runtime.mjs');
+    const verify = value.indexOf('node scripts/package-desktop-release.mjs');
+    assert.ok(stage >= 0 && smoke > stage && bundle > smoke && repack > bundle && verify > repack, 'runtime staging and smoke must precede thin bundling and verified repacking');
+    assert.ok(!value.slice(0, verify).includes('--config src-tauri/tauri.standalone.conf.json'), 'Linux runtime must bypass ELF rewriting');
+  };
+  contract(shell); linuxContract(native);
   assert.ok(shell.indexOf('node scripts/sign-desktop-runtime.mjs') > shell.indexOf('node scripts/test-desktop-runtime.mjs'));
-  for (const source of [shell, native]) {
-    for (const item of ['node scripts/build-desktop-runtime.mjs', '--config src-tauri/tauri.standalone.conf.json']) {
+  for (const [source, check, required] of [[shell, contract, ['node scripts/build-desktop-runtime.mjs', '--config src-tauri/tauri.standalone.conf.json']], [native, linuxContract, ['node scripts/build-desktop-runtime.mjs', 'node scripts/repack-linux-runtime.mjs', 'node scripts/package-desktop-release.mjs']]]) {
+    for (const item of required) {
       const mutant = source.replace(item, 'removed');
       assert.notEqual(mutant, source);
-      assert.throws(() => contract(mutant), /staging and smoke/);
+      assert.throws(() => check(mutant), /staging and smoke/);
     }
   }
   const config = JSON.parse(await read('packages/app/src-tauri/tauri.standalone.conf.json'));

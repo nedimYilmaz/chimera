@@ -529,7 +529,7 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
   check("desktop preview shows only the controlling agent actions", forB.join() === "type_text" && forA.sort().join() === "click,screenshot", { forA, forB });
 
   await evaluate(`window.__UI_QA__.desktop.set({ previewFails: true })`);
-  await waitFor(`!${overlayImg} && ${overlay}.textContent.includes('Target window is unavailable')`);
+  await waitFor(`!${overlayImg} && ${overlay}.textContent.includes('No preview image is available yet. Preview will retry automatically.')`);
   await evaluate(`window.__UI_QA__.desktop.set({ previewFails: false })`);
   await waitFor(`${overlayImg}?.complete`);
   await evaluate(`window.__UI_QA__.desktop.lease(null)`);
