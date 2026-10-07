@@ -3133,15 +3133,11 @@ export class Engine {
         }
         case "agent.setPermission": {
           const p = SetPermissionParams.parse(params);
-          const { appliedToRunningProcess } = this.supervisor.setPermission(p.agentId, {
+          const application = this.supervisor.setPermission(p.agentId, {
             permissionRequest: p.permissionRequest,
             permissionProfile: p.permissionProfile,
           });
-          // CODEX-SETPERMISSION-IS-COSMETIC-TO-THE-OPERATOR: tell the CALLER (not just the
-          // agent's mailbox) whether this actually re-sandboxed the running process, so an
-          // operator lowering a running codex agent's profile to contain it isn't told "ok"
-          // and left believing containment happened when it didn't (supervisor.ts comment).
-          return { ok: true, appliedToRunningProcess };
+          return { ok: true, ...application };
         }
         case "agent.setModel": {
           const p = SetModelParams.parse(params);

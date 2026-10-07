@@ -150,6 +150,8 @@ for (const [label, lineEnding] of [['LF', '\n'], ['CRLF', '\r\n']]) {
     assert.match(smokeJob, /needs: package/);
     assert.match(smokeJob, /os: \[ubuntu-24\.04, macos-latest, windows-latest\]/);
     assert.doesNotMatch(smokeJob, /actions\/cache|pnpm|npm install|cache:/);
+    assert.match(packageJob, /node --test scripts\/npm-install\.test\.mjs scripts\/npm-uninstall\.test\.mjs scripts\/npm-build\.test\.mjs/);
+    assert.match(smokeJob, /node --test scripts\/npm-install\.test\.mjs scripts\/npm-uninstall\.test\.mjs/);
     assert.match(smokeJob, /name: chimera-npm-candidate/);
     assert.match(packageJob, /name: chimera-npm-candidate/);
     assert.match(smokeJob, /test "\$\{#artifacts\[@\]\}" -eq 1/);

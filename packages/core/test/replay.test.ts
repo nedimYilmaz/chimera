@@ -208,3 +208,37 @@ describe("F47 seen stamps survive the crash-gap fold", () => {
     expect(agent.reviewedAt).toBeUndefined();
   });
 });
+
+
+it("replays desired permission changes and acknowledgments independently across snapshot gaps", () => {
+  const events = new EventLog(mkdtempSync(join(tmpdir(), "chimera-permission-replay-")));
+  const baseline: ReplaySnapshotSource = { agents: [priorAgent({ agentId: "a1", provider: "codex", spec: AgentSpecSchema.parse({ prompt: "x", cwd: "/tmp", isolation: "none", permissionProfile: "full", acknowledgeCodexFullAccessRisk: true }) })], lastSeq: 0 };
+  const application = { version: 2, requestedProfile: "readOnly", effectiveProfile: "full", profileStatus: "pending", requestedRouting: "tui", routingStatus: "bypassed", transport: "app-server", nativeApprovals: true };
+  events.append({ agentId: "a1", kind: "status", data: { permissionChanged: true, permissionProfile: "readOnly", permissionRequest: "tui", permissionApplication: application } });
+  events.append({ agentId: "a1", kind: "agent_started", data: { sessionId: "saved" } });
+  events.append({ agentId: "a1", kind: "status", data: { permissionApplication: { ...application, version: 1, effectiveProfile: "readOnly", profileStatus: "applied" } } });
+  let replay = replayAgentsAsOf(baseline, events)[0]!;
+  expect(replay.spec.permissionProfile).toBe("readOnly"); expect(replay.spec.on.permissionRequest).toBe("tui");
+  expect(replay.permissionApplication).toEqual(application);
+  events.append({ agentId: "a1", kind: "status", data: { permissionApplication: { ...application, version: 3, effectiveProfile: "readOnly", profileStatus: "applied", routingStatus: "applied" } } });
+  replay = replayAgentsAsOf(baseline, events)[0]!;
+  expect(replay.permissionApplication?.profileStatus).toBe("applied");
+  expect(baseline.agents![0].spec.permissionProfile).toBe("full");
+});
+
+it("replays submitted exec and stopped/new-launch unknown state without reviving prior policy", () => {
+  const events = new EventLog(mkdtempSync(join(tmpdir(), "chimera-permission-replay-")));
+  const old = { version: 1, requestedProfile: "full", effectiveProfile: "full", profileStatus: "applied", requestedRouting: "auto", routingStatus: "bypassed", transport: "exec", nativeApprovals: false } as const;
+  const pending = { version: 2, requestedProfile: "readOnly", profileStatus: "pending", requestedRouting: "tui", routingStatus: "unsupported", transport: "exec", nativeApprovals: false } as const;
+  const baseline: ReplaySnapshotSource = { agents: [priorAgent({ agentId: "a1", provider: "codex", permissionApplication: old })], lastSeq: 0 };
+  events.append({ agentId: "a1", kind: "status", data: { permissionChanged: true, permissionProfile: "readOnly", permissionRequest: "tui", permissionApplication: pending } });
+  events.append({ agentId: "a1", kind: "status", data: { permissionApplication: { ...pending, profileStatus: "unverified", submittedProfile: "readOnly", submittedVersion: 2 } } });
+  expect(replayAgentsAsOf(baseline, events)[0]?.permissionApplication).toMatchObject({ profileStatus: "unverified", submittedVersion: 2 });
+  events.append({ agentId: "a1", kind: "status", data: { permissionApplication: { ...pending, version: 3 } } });
+  events.append({ agentId: "a1", kind: "agent_started", data: { sessionId: "new-process" } });
+  events.append({ agentId: "a1", kind: "status", data: { permissionChanged: true, permissionProfile: "full", permissionRequest: "auto", permissionApplication: old } });
+  const replay = replayAgentsAsOf(baseline, events)[0]!;
+  expect(replay.permissionApplication).toEqual({ ...pending, version: 3 });
+  expect(replay.spec.permissionProfile).toBe("readOnly");
+  expect(replay.spec.on.permissionRequest).toBe("tui");
+});

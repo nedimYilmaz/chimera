@@ -26,7 +26,7 @@ function server(errors: Record<string, string> = {}, deferred = new Set<string>(
       if (deferred.has(message.method)) { onMessage(message); continue; }
       if (message.method === "initialize") send({ id: message.id, result: {} });
       else if (message.method === "account/login/start") send({ id: message.id, result: { type: "apiKey" } });
-      else if (message.method === "thread/start" || message.method === "thread/resume") send({ id: message.id, result: { thread: { id: message.params.ephemeral ? "planner-thread" : "thread-a" } } });
+      else if (message.method === "thread/start" || message.method === "thread/resume") send({ id: message.id, result: { thread: { id: message.params.ephemeral ? "planner-thread" : "thread-a" }, approvalPolicy: message.params.approvalPolicy ?? "on-request", sandbox: { type: message.params.sandbox === "danger-full-access" ? "dangerFullAccess" : message.params.sandbox === "workspace-write" ? "workspaceWrite" : "readOnly" } } });
       else if (message.method === "turn/start") { const turnId = message.params.threadId === "planner-thread" ? "plan-turn" : "turn-a"; send({ method: "turn/started", params: { threadId: message.params.threadId, turn: { id: turnId } } }); send({ id: message.id, result: { turn: { id: turnId } } }); }
       else if (message.method === "turn/interrupt") { send({ id: message.id, result: {} }); send({ method: "turn/completed", params: { threadId: "thread-a", turn: { id: "turn-a", status: "interrupted" } } }); }
       else if (message.method === "turn/steer") send({ id: message.id, result: { turnId: "turn-a" } });
@@ -278,7 +278,6 @@ describe("Codex app-server", () => {
 
   it.each([
     { acknowledged: true, permissionProfile: "full", approvalPolicy: "never", autoApprove: true },
-    { acknowledged: false, permissionProfile: "full", approvalPolicy: "never", autoApprove: false },
     { acknowledged: true, permissionProfile: "acceptEdits", approvalPolicy: "on-request", autoApprove: false },
     { acknowledged: true, permissionProfile: "full", approvalPolicy: "on-request", autoApprove: false },
   ])("MCP approval: ack=$acknowledged profile=$permissionProfile policy=$approvalPolicy", async ({ acknowledged, permissionProfile, approvalPolicy, autoApprove }) => {
@@ -414,7 +413,7 @@ describe("Codex app-server", () => {
       if (m.method === "thread/realtime/stop" || m.method === "thread/realtime/appendText") mock.send({ id: m.id, result: {} });
     };
     const client = new CodexAppServer({ env: {}, config: { "features.realtime_conversation": true } }, async () => false, undefined, mock.factory, false, fullAccess);
-    client.resumeThread("saved-session", { model: "gpt-6-astra" });
+    client.resumeThread("saved-session", { model: "gpt-6-astra", sandboxMode: fullAccess ? "danger-full-access" : "read-only", approvalPolicy: fullAccess ? "never" : "on-request" });
     const state = vi.fn();
     try {
       const context = { identity: { agentId: "agent-a", name: "Atlas", role: "conductor" }, meeting: { roomId: "room-a", name: "Review", agenda: "Review tests", participants: [{ agentId: "agent-a", name: "Atlas", role: "conductor" }, { agentId: "agent-b", name: "Nova", role: "engineer" }] } };
@@ -523,7 +522,7 @@ describe("Codex app-server", () => {
     const mock = server();
     const dialog = vi.fn(async () => ({ behavior: "completed" as const, result: { approved: true } }));
     const backend = new CodexAgentBackend({ appServerProcess: mock.factory, validateModel: async () => {} });
-    const handle = backend.spawn({ ...cxSpec({ permissionProfile: "full", autonomy: "full" }), providerOptions: { codexTransport: "app-server" } }, () => {}, async () => true, dialog);
+    const handle = backend.spawn({ ...cxSpec({ permissionProfile: "full", acknowledgeCodexFullAccessRisk: true, autonomy: "full" }), providerOptions: { codexTransport: "app-server" } }, () => {}, async () => true, dialog);
     try {
       await vi.waitFor(() => expect(mock.messages.some(m => m.method === "turn/start")).toBe(true));
       mock.send({ id: 801, method: "item/tool/requestUserInput", params: { threadId: "thread-a", turnId: "turn-a", questions: [{ id: "q", question: "Choose?" }] } });
@@ -886,4 +885,155 @@ it("separates live Codex session windows from dynamic catalog capacity and compa
       }));
     }
   } finally { await handle.kill(); }
+});
+
+
+describe("acknowledged permission transitions", () => {
+  const state = (events: any[]) => events.filter(e => e.data.permissionApplication).at(-1)?.data.permissionApplication;
+  it.each([["full", "acceptEdits"], ["acceptEdits", "full"], ["full", "readOnly"], ["readOnly", "acceptEdits"]] as const)("%s to %s preserves the current turn then applies once", async (before, after) => {
+    const mock = server(); const events: any[] = []; const permission = vi.fn(async () => false);
+    const handle = new CodexAgentBackend({ appServerProcess: mock.factory, validateModel: async () => {} }).spawn(cxSpec({ permissionProfile: before, acknowledgeCodexFullAccessRisk: true, persistent: true, providerOptions: { codexTransport: "app-server" } }), e => events.push(e), permission);
+    try {
+      await vi.waitFor(() => expect(state(events)?.profileStatus).toBe("applied"));
+      expect(state(events).effectiveProfile).toBe(before);
+      const pending = handle.updatePermission!({ version: 1, permissionProfile: after, permissionRequest: "auto" });
+      expect(pending).toMatchObject({ profileStatus: "pending", effectiveProfile: before });
+      expect(handle.updatePermission!({ version: 1, permissionProfile: after, permissionRequest: "auto" })).toEqual(pending);
+      mock.send({ id: 500, method: "item/commandExecution/requestApproval", params: { threadId: "thread-a", turnId: "turn-a", command: "echo old posture" } });
+      await vi.waitFor(() => expect(mock.messages.some(m => m.id === 500 && m.result)).toBe(true));
+      expect(permission).toHaveBeenCalledTimes(before === "full" ? 0 : 1);
+      await handle.send("one queued followup");
+      expect(mock.messages.filter(m => m.method === "turn/start")).toHaveLength(1);
+      mock.complete();
+      await vi.waitFor(() => expect(mock.messages.filter(m => m.method === "turn/start")).toHaveLength(2));
+      await vi.waitFor(() => expect(state(events)).toMatchObject({ requestedProfile: after, effectiveProfile: after, profileStatus: "applied", version: 1 }));
+      const request = mock.messages.filter(m => m.method === "turn/start")[1];
+      expect(request.params.sandboxPolicy.type).toBe(after === "full" ? "dangerFullAccess" : after === "readOnly" ? "readOnly" : "workspaceWrite");
+      expect(request.params.approvalPolicy).toBe(after === "full" ? "never" : "on-request");
+      expect(request.params.input).toEqual([{ type: "text", text: "one queued followup", text_elements: [] }]);
+      mock.send({ id: 501, method: "item/commandExecution/requestApproval", params: { threadId: "thread-a", turnId: "turn-a", command: "echo new posture" } });
+      await vi.waitFor(() => expect(mock.messages.some(m => m.id === 501 && m.result)).toBe(true));
+      expect(permission).toHaveBeenCalledTimes((before === "full" ? 0 : 1) + (after === "full" ? 0 : 1));
+      expect(mock.messages.filter(m => m.method === "turn/interrupt")).toHaveLength(0);
+      mock.complete();
+    } finally { await handle.kill(); }
+  });
+
+  it("a late start acknowledgment cannot clear a newer request or authorize tools before acceptance", async () => {
+    const deferred = new Set<string>(); const mock = server({}, deferred); const events: any[] = [];
+    const permission = vi.fn(async () => false);
+    const handle = new CodexAgentBackend({ appServerProcess: mock.factory, validateModel: async () => {} }).spawn(cxSpec({ permissionProfile: "readOnly", acknowledgeCodexFullAccessRisk: true, persistent: true, providerOptions: { codexTransport: "app-server" } }), e => events.push(e), permission);
+    try {
+      await vi.waitFor(() => expect(state(events)?.profileStatus).toBe("applied"));
+      deferred.add("turn/start");
+      handle.updatePermission!({ version: 1, permissionProfile: "full", permissionRequest: "auto" });
+      await handle.send("queued once"); mock.complete();
+      await vi.waitFor(() => expect(mock.messages.filter(m => m.method === "turn/start")).toHaveLength(2));
+      const request = mock.messages.filter(m => m.method === "turn/start")[1];
+      expect(handle.updatePermission!({ version: 2, permissionProfile: "readOnly", permissionRequest: "tui" })).toMatchObject({ profileStatus: "pending", effectiveProfile: "readOnly" });
+      mock.send({ method: "turn/started", params: { threadId: "thread-a", turn: { id: "late-turn" } } });
+      mock.send({ id: 502, method: "item/commandExecution/requestApproval", params: { threadId: "thread-a", turnId: "late-turn", command: "echo race" } });
+      await new Promise(resolve => setTimeout(resolve, 10));
+      expect(mock.messages.some(m => m.id === 502 && m.result)).toBe(false);
+      mock.send({ id: request.id, result: { turn: { id: "late-turn" } } });
+      await vi.waitFor(() => expect(mock.messages.some(m => m.id === 502 && m.result)).toBe(true));
+      expect(state(events)).toMatchObject({ version: 2, requestedProfile: "readOnly", effectiveProfile: "full", profileStatus: "pending", routingStatus: "bypassed" });
+      expect(permission).not.toHaveBeenCalled();
+    } finally { await handle.kill(); }
+  });
+
+  it("rejecting the next turn retains the old acknowledged profile and reports failure", async () => {
+    const errors: Record<string,string> = {}; const mock = server(errors); const events: any[] = [];
+    const handle = new CodexAgentBackend({ appServerProcess: mock.factory, validateModel: async () => {} }).spawn(cxSpec({ permissionProfile: "full", acknowledgeCodexFullAccessRisk: true, persistent: true, providerOptions: { codexTransport: "app-server" } }), e => events.push(e), async () => false);
+    try {
+      await vi.waitFor(() => expect(state(events)?.profileStatus).toBe("applied"));
+      handle.updatePermission!({ version: 1, permissionProfile: "readOnly", permissionRequest: "tui" });
+      errors["turn/start"] = "sandbox request rejected";
+      await handle.send("once"); mock.complete();
+      await vi.waitFor(() => expect(events.at(-1)?.kind).toBe("error"));
+      expect(state(events)).toMatchObject({ version: 1, effectiveProfile: "full", requestedProfile: "readOnly", profileStatus: "failed", error: "Codex permission application could not be confirmed" });
+      expect(mock.messages.filter(m => m.method === "turn/start")).toHaveLength(2);
+    } finally { await handle.kill(); }
+  });
+
+  it("reverting to effective is a no-op and routing availability is independent", async () => {
+    const mock = server(); const events: any[] = [];
+    const handle = new CodexAgentBackend({ appServerProcess: mock.factory, validateModel: async () => {} }).spawn(cxSpec({ permissionProfile: "full", acknowledgeCodexFullAccessRisk: true, persistent: true, providerOptions: { codexTransport: "app-server" } }), e => events.push(e), async () => false);
+    try {
+      await vi.waitFor(() => expect(state(events)?.profileStatus).toBe("applied"));
+      handle.updatePermission!({ version: 1, permissionProfile: "readOnly", permissionRequest: "auto" });
+      expect(handle.updatePermission!({ version: 2, permissionProfile: "full", permissionRequest: "auto" })).toMatchObject({ profileStatus: "applied", effectiveProfile: "full" });
+      expect(handle.updatePermission!({ version: 3, permissionProfile: "full", permissionRequest: "tui" })).toMatchObject({ profileStatus: "applied", routingStatus: "bypassed", requestedRouting: "tui" });
+      expect(mock.messages.filter(m => m.method === "turn/start")).toHaveLength(1);
+    } finally { await handle.kill(); }
+  });
+
+  it("resume validates actual bootstrap policy before clearing stale application warnings", async () => {
+    const mock = server({}, new Set(["thread/resume"])); const events: any[] = [];
+    mock.onMessage = m => { if (m.method === "thread/resume") mock.send({ id: m.id, result: { thread: { id: "thread-a" }, sandbox: { type: "readOnly", networkAccess: false }, approvalPolicy: "on-request" } }); };
+    const handle = new CodexAgentBackend({ appServerProcess: mock.factory, validateModel: async () => {} }).spawn(cxSpec({ resume: "saved", permissionProfile: "readOnly", persistent: true, providerOptions: { codexTransport: "app-server" } }), e => events.push(e), async () => false);
+    try {
+      await vi.waitFor(() => expect(state(events)?.profileStatus).toBe("applied"));
+      expect(events.find(e => e.data.permissionApplication?.profileStatus === "applied")?.data.permissionApplication.effectiveProfile).toBe("readOnly");
+    } finally { await handle.kill(); }
+  });
+});
+
+
+it("native full access is refused without the explicit grant before starting an unsandboxed thread", async () => {
+  const mock = server(); const client = new CodexAppServer({ env: {} }, async () => true, undefined, mock.factory, true, false);
+  try {
+    await expect(client.startThread({ sandboxMode: "danger-full-access", approvalPolicy: "never" }).runStreamed("ungranted")).rejects.toThrow("explicit risk grant");
+    expect(mock.messages.some(m => m.method === "thread/start" || m.method === "turn/start")).toBe(false);
+  } finally { client.close(); }
+});
+
+
+it("revoking full access reaches command, file, permissions and marked MCP gates after acceptance", async () => {
+  const mock = server(); const events: any[] = []; const permission = vi.fn(async () => false); const dialog = vi.fn(async () => ({ behavior: "cancelled" as const }));
+  const handle = new CodexAgentBackend({ appServerProcess: mock.factory, validateModel: async () => {} }).spawn(cxSpec({ permissionProfile: "full", acknowledgeCodexFullAccessRisk: true, persistent: true, providerOptions: { codexTransport: "app-server" } }), e => events.push(e), permission, dialog);
+  try {
+    await vi.waitFor(() => expect(events.some(e => e.data.permissionApplication?.profileStatus === "applied")).toBe(true));
+    handle.updatePermission!({ version: 1, permissionProfile: "readOnly", permissionRequest: "tui" });
+    await handle.send("restriction next turn"); mock.complete();
+    await vi.waitFor(() => expect(mock.messages.filter(m => m.method === "turn/start")).toHaveLength(2));
+    mock.send({ method: "item/started", params: { threadId: "thread-a", turnId: "turn-a", item: { type: "fileChange", id: "file", changes: [{ path: "/tmp/repo/owned.txt", kind: "update", diff: "one line" }] } } });
+    for (const [id, method, fields] of [[600, "item/commandExecution/requestApproval", { command: "echo guarded" }], [601, "item/fileChange/requestApproval", { itemId: "file" }], [602, "item/permissions/requestApproval", { permissions: { network: { enabled: true } } }], [603, "mcpServer/elicitation/request", { mode: "form", _meta: { codex_approval_kind: "mcp_tool_call" }, requestedSchema: { type: "object", properties: {} } }]] as const) mock.send({ id, method, params: { threadId: "thread-a", turnId: "turn-a", ...fields } });
+    await vi.waitFor(() => expect(mock.messages.filter(m => m.id >= 600 && m.id <= 603 && m.result)).toHaveLength(4));
+    expect(permission).toHaveBeenCalledTimes(3); expect(dialog).toHaveBeenCalledOnce();
+    expect(mock.messages.find(m => m.id === 600 && m.result).result.decision).toBe("decline");
+    expect(mock.messages.find(m => m.id === 601 && m.result).result.decision).toBe("decline");
+    expect(mock.messages.find(m => m.id === 602 && m.result).result.permissions).toEqual({});
+    expect(mock.messages.find(m => m.id === 603 && m.result).result.action).toBe("cancel");
+  } finally { await handle.kill(); }
+});
+
+
+it("a rejected native initialization leaves the profile unknown and failure visible", async () => {
+  const mock = server({ initialize: "initialization rejected" }); const events: any[] = [];
+  const handle = new CodexAgentBackend({ appServerProcess: mock.factory, validateModel: async () => {} }).spawn(cxSpec({ providerOptions: { codexTransport: "app-server" } }), e => events.push(e), async () => false);
+  try {
+    await vi.waitFor(() => expect(events.at(-1)?.kind).toBe("error"));
+    const application = events.filter(e => e.data.permissionApplication).at(-1).data.permissionApplication;
+    expect(application.profileStatus).toBe("failed"); expect(application.effectiveProfile).toBeUndefined();
+    expect(mock.messages.some(m => m.method === "turn/start")).toBe(false);
+  } finally { await handle.kill(); }
+});
+
+
+it("retains acknowledged workspace restrictions and keeps readOnly network access disabled", async () => {
+  const policy = { type: "workspaceWrite", writableRoots: ["/tmp/repo"], networkAccess: false, excludeTmpdirEnvVar: true, excludeSlashTmp: true };
+  const mock = server({}, new Set(["thread/start"]));
+  mock.onMessage = m => { if (m.method === "thread/start") mock.send({ id: m.id, result: { thread: { id: "thread-a" }, sandbox: policy, approvalPolicy: "on-request" } }); };
+  const client = new CodexAppServer({ env: {} }, async () => false, undefined, mock.factory);
+  const options = { sandboxMode: "workspace-write", workingDirectory: "/tmp/repo", approvalPolicy: "on-request", networkAccessEnabled: true };
+  try {
+    const thread = client.startThread(options);
+    await thread.runStreamed("one");
+    expect(mock.messages.find(m => m.method === "turn/start").params.sandboxPolicy).toEqual(policy);
+    mock.complete();
+    Object.assign(options, { sandboxMode: "read-only" });
+    await thread.runStreamed("two");
+    expect(mock.messages.filter(m => m.method === "turn/start")[1].params.sandboxPolicy).toEqual({ type: "readOnly", networkAccess: false });
+  } finally { client.close(); }
 });

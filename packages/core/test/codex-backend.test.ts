@@ -13,6 +13,8 @@ import { GuardrailError } from "@chimera/core/supervisor";
 import { computeCostUsd } from "@chimera/protocol";
 import { fakeCodex, cxSpec, settle } from "./codex-backend-helpers.js";
 
+// Permission application is an additive status stream, verified in its own
+// behavioral suite. These assertions exercise the normalized provider stream.
 // CORE-SUITE-BASELINE: this file's worktree-isolation tests shell out to real `git` —
 // under this machine's concurrent-agent load a subprocess spawn can exceed vitest's
 // 5000ms default; widened per existing precedent (supervisor-crash-loop.test.ts).
@@ -34,7 +36,7 @@ describe("CodexAgentBackend normalization", () => {
   it("stamps agent_started's data.model from spec.model when the spawn pinned one", async () => {
     const { factory } = fakeCodex([[{ type: "thread.started", thread_id: "th-1" }]]);
     const evs: BackendEvent[] = [];
-    new CodexAgentBackend({ codexFactory: factory }).spawn(cxSpec({ model: "gpt-5.5" }), (e) => evs.push(e), async () => true);
+    new CodexAgentBackend({ codexFactory: factory }).spawn(cxSpec({ model: "gpt-5.5" }), (e) => { if (!e.data.permissionApplication) evs.push(e); }, async () => true);
     await settle();
     expect(evs[0]!.data).toEqual({ threadId: "th-1", sessionId: "th-1", model: "gpt-5.5", codexTransport: "exec", nativeApprovals: false, nativeDialogs: false, supportsSteer: false });
   });
@@ -43,7 +45,7 @@ describe("CodexAgentBackend normalization", () => {
   it("stamps agent_started's data.effort from spec.effort when the spawn set one", async () => {
     const { factory } = fakeCodex([[{ type: "thread.started", thread_id: "th-1" }]]);
     const evs: BackendEvent[] = [];
-    new CodexAgentBackend({ codexFactory: factory }).spawn(cxSpec({ model: "gpt-5.5", effort: "xhigh" }), (e) => evs.push(e), async () => true);
+    new CodexAgentBackend({ codexFactory: factory }).spawn(cxSpec({ model: "gpt-5.5", effort: "xhigh" }), (e) => { if (!e.data.permissionApplication) evs.push(e); }, async () => true);
     await settle();
     expect(evs[0]!.data).toEqual({ threadId: "th-1", sessionId: "th-1", model: "gpt-5.5", effort: "xhigh", codexTransport: "exec", nativeApprovals: false, nativeDialogs: false, supportsSteer: false });
   });
@@ -51,7 +53,7 @@ describe("CodexAgentBackend normalization", () => {
   it("normalizes a full turn and emits result with token usage and a real computed cost", async () => {
     const { factory } = fakeCodex([TURN_OK]);
     const evs: BackendEvent[] = [];
-    new CodexAgentBackend({ codexFactory: factory }).spawn(cxSpec(), (e) => evs.push(e), async () => true);
+    new CodexAgentBackend({ codexFactory: factory }).spawn(cxSpec(), (e) => { if (!e.data.permissionApplication) evs.push(e); }, async () => true);
     await settle();
     expect(evs.map((e) => e.kind)).toEqual([
       "agent_started", "status", "message_delta", "message_delta", "tool_call", "tool_result",
@@ -103,7 +105,7 @@ describe("CodexAgentBackend normalization", () => {
       { type: "turn.completed", usage: { input_tokens: 1, cached_input_tokens: 0, output_tokens: 1, reasoning_output_tokens: 0 } },
     ]]);
     const evs: BackendEvent[] = [];
-    new CodexAgentBackend({ codexFactory: factory }).spawn(cxSpec(), (e) => evs.push(e), async () => true);
+    new CodexAgentBackend({ codexFactory: factory }).spawn(cxSpec(), (e) => { if (!e.data.permissionApplication) evs.push(e); }, async () => true);
     await settle();
     const deltas = evs.filter((e) => e.kind === "message_delta").map((e) => e.data["text"]);
     expect(deltas).toEqual(["wor", "king"]);            // suffixes only; the identical third snapshot is swallowed
@@ -120,7 +122,7 @@ describe("CodexAgentBackend normalization", () => {
       { type: "turn.completed", usage: { input_tokens: 1, cached_input_tokens: 0, output_tokens: 1, reasoning_output_tokens: 0 } },
     ]]);
     const evs: BackendEvent[] = [];
-    new CodexAgentBackend({ codexFactory: factory }).spawn(cxSpec(), (e) => evs.push(e), async () => true);
+    new CodexAgentBackend({ codexFactory: factory }).spawn(cxSpec(), (e) => { if (!e.data.permissionApplication) evs.push(e); }, async () => true);
     await settle();
     expect(evs.map((e) => [e.kind, e.data["toolName"] ?? null])).toEqual([
       ["tool_call", "mcp:chimera/agent_spawn"], ["tool_result", "mcp:chimera/agent_spawn"],
@@ -140,7 +142,7 @@ describe("CodexAgentBackend normalization", () => {
       { type: "turn.completed", usage: { input_tokens: 1, cached_input_tokens: 0, output_tokens: 1, reasoning_output_tokens: 0 } },
     ]]);
     const evs: BackendEvent[] = [];
-    new CodexAgentBackend({ codexFactory: factory }).spawn(cxSpec(), (e) => evs.push(e), async () => true);
+    new CodexAgentBackend({ codexFactory: factory }).spawn(cxSpec(), (e) => { if (!e.data.permissionApplication) evs.push(e); }, async () => true);
     await settle();
     expect(evs[0]!).toMatchObject({ kind: "status", data: { itemType: "future_thing" } });   // unknown item → status
     expect(evs[1]!).toMatchObject({ kind: "status", data: { codexEvent: "future.event" } }); // unknown event → status
@@ -151,7 +153,7 @@ describe("CodexAgentBackend normalization", () => {
     const decide = vi.fn(async () => true);
     const evs: BackendEvent[] = [];
     new CodexAgentBackend({ codexFactory: factory }).spawn(
-      cxSpec({ on: { permissionRequest: "poke:caller" } }), (e) => evs.push(e), decide);
+      cxSpec({ on: { permissionRequest: "poke:caller" } }), (e) => { if (!e.data.permissionApplication) evs.push(e); }, decide);
     await settle();
     expect(decide).not.toHaveBeenCalled();              // wiring it into any event path is a regression
     expect(evs.at(-1)!.kind).toBe("result");            // completes without hanging on a permission that never fires
@@ -163,7 +165,7 @@ describe("CodexAgentBackend normalization", () => {
       { type: "turn.failed", error: { message: "UsageLimitExceeded: usage limit reached" } },
     ]]);
     const evs: BackendEvent[] = [];
-    new CodexAgentBackend({ codexFactory: factory }).spawn(cxSpec(), (e) => evs.push(e), async () => true);
+    new CodexAgentBackend({ codexFactory: factory }).spawn(cxSpec(), (e) => { if (!e.data.permissionApplication) evs.push(e); }, async () => true);
     await settle();
     expect(evs.map((e) => e.kind)).toEqual(["agent_started", "error"]);
     expect(evs[1]!.data["message"]).toContain("usage limit");
@@ -183,7 +185,7 @@ describe("CodexAgentBackend normalization", () => {
     const evs: BackendEvent[] = [];
     new CodexAgentBackend({ codexFactory: factory }).spawn(cxSpec(), e => evs.push(e), async () => true);
     await settle();
-    expect(evs).toEqual([{ kind: "error", data: {
+    expect(evs.filter(e => !e.data.permissionApplication)).toEqual([{ kind: "error", data: {
       message: "Codex event stream contained an incomplete or invalid JSON frame",
       phase: "codex-exec-jsonl", frameBytes: Buffer.byteLength(frame),
     } }]);
@@ -201,7 +203,7 @@ describe("CodexAgentBackend normalization", () => {
       resumeThread() { return this.startThread(); },
     });
     const evs: BackendEvent[] = [];
-    new CodexAgentBackend({ codexFactory: factory }).spawn(cxSpec(), (e) => evs.push(e), async () => true);
+    new CodexAgentBackend({ codexFactory: factory }).spawn(cxSpec(), (e) => { if (!e.data.permissionApplication) evs.push(e); }, async () => true);
     await settle();
     expect(evs).toEqual([{ kind: "error", data: { message: "HTTP 429 Too Many Requests" } }]);
   });
@@ -220,7 +222,7 @@ describe("CodexAgentBackend normalization", () => {
       resumeThread() { return this.startThread(); },
     });
     const evs: BackendEvent[] = [];
-    new CodexAgentBackend({ codexFactory: factory }).spawn(cxSpec(), (e) => evs.push(e), async () => true);
+    new CodexAgentBackend({ codexFactory: factory }).spawn(cxSpec(), (e) => { if (!e.data.permissionApplication) evs.push(e); }, async () => true);
     await settle();
     expect(evs).toEqual([{ kind: "error", data: { message: "plain string rejection" } }]);
   });
@@ -244,7 +246,7 @@ describe("CodexAgentBackend normalization", () => {
       resumeThread() { return this.startThread(); },
     });
     const evs: BackendEvent[] = [];
-    new CodexAgentBackend({ codexFactory: factory }).spawn(cxSpec(), (e) => evs.push(e), async () => true);
+    new CodexAgentBackend({ codexFactory: factory }).spawn(cxSpec(), (e) => { if (!e.data.permissionApplication) evs.push(e); }, async () => true);
     await settle();
     expect(evs).toHaveLength(1);
     const err = evs[0]!;
@@ -269,7 +271,7 @@ describe("CodexAgentBackend normalization", () => {
       resumeThread() { return this.startThread(); },
     });
     const evs: BackendEvent[] = [];
-    new CodexAgentBackend({ codexFactory: factory }).spawn(cxSpec(), (e) => evs.push(e), async () => true);
+    new CodexAgentBackend({ codexFactory: factory }).spawn(cxSpec(), (e) => { if (!e.data.permissionApplication) evs.push(e); }, async () => true);
     await settle();
     expect(evs).toHaveLength(1);
     expect(evs[0]!.data["exitCode"]).toBeUndefined();
@@ -285,7 +287,7 @@ describe("CodexAgentBackend normalization", () => {
       { type: "turn.completed", usage: { input_tokens: 10, cached_input_tokens: 0, output_tokens: 5, reasoning_output_tokens: 0 } },
     ]]);
     const evs: BackendEvent[] = [];
-    new CodexAgentBackend({ codexFactory: factory }).spawn(cxSpec({ resultSchema: schema }), (e) => evs.push(e), async () => true);
+    new CodexAgentBackend({ codexFactory: factory }).spawn(cxSpec({ resultSchema: schema }), (e) => { if (!e.data.permissionApplication) evs.push(e); }, async () => true);
     await settle();
     expect(threads[0]!.runs[0]!.turnOptions?.["outputSchema"]).toEqual(schema);
     expect(evs.at(-1)).toMatchObject({ kind: "result", data: { text: '{"verdict":"ok"}', structuredOutput: { verdict: "ok" } } });
@@ -306,7 +308,7 @@ describe("CodexAgentBackend normalization", () => {
       { type: "turn.completed", usage: { input_tokens: 10, cached_input_tokens: 0, output_tokens: 5, reasoning_output_tokens: 0 } },
     ]]);
     const evs: BackendEvent[] = [];
-    new CodexAgentBackend({ codexFactory: factory }).spawn(cxSpec({ resultSchema: schema }), (e) => evs.push(e), async () => true);
+    new CodexAgentBackend({ codexFactory: factory }).spawn(cxSpec({ resultSchema: schema }), (e) => { if (!e.data.permissionApplication) evs.push(e); }, async () => true);
     await settle();
     expect(evs.at(-1)!.kind).toBe("error");
     expect(evs.some((e) => e.kind === "result")).toBe(false);
@@ -324,7 +326,7 @@ describe("CodexAgentBackend normalization", () => {
       { type: "turn.completed", usage: { input_tokens: 10, cached_input_tokens: 0, output_tokens: 5, reasoning_output_tokens: 0 } },
     ]]);
     const evs: BackendEvent[] = [];
-    new CodexAgentBackend({ codexFactory: factory }).spawn(cxSpec({ resultSchema: schema }), (e) => evs.push(e), async () => true);
+    new CodexAgentBackend({ codexFactory: factory }).spawn(cxSpec({ resultSchema: schema }), (e) => { if (!e.data.permissionApplication) evs.push(e); }, async () => true);
     await settle();
     expect(evs.at(-1)!.kind).toBe("error");
     expect((evs.at(-1)!.data["message"] as string)).toContain("missing required property");
@@ -710,7 +712,7 @@ describe("CodexAgentBackend.spawn — additional branch/edge coverage", () => {
     const { factory, threads } = fakeCodex([turn, turn]);
     const evs: BackendEvent[] = [];
     const handle = new CodexAgentBackend({ codexFactory: factory }).spawn(
-      cxSpec({ maxTurns: 1 }), (e) => evs.push(e), async () => true);
+      cxSpec({ maxTurns: 1 }), (e) => { if (!e.data.permissionApplication) evs.push(e); }, async () => true);
     await handle.send("queued-but-never-run");
     await settle();
     expect(threads[0]!.runs.length).toBe(1);              // second turnScript never consumed — capped at maxTurns
@@ -723,7 +725,7 @@ describe("CodexAgentBackend.spawn — additional branch/edge coverage", () => {
     const { factory, threads } = fakeCodex([turn, turn, turn]);
     const evs: BackendEvent[] = [];
     const handle = new CodexAgentBackend({ codexFactory: factory }).spawn(
-      cxSpec({ maxTurns: 1, turnLimitPolicy: "soft" }), (e) => evs.push(e), async () => true);
+      cxSpec({ maxTurns: 1, turnLimitPolicy: "soft" }), (e) => { if (!e.data.permissionApplication) evs.push(e); }, async () => true);
     await handle.send("second");
     await handle.send("third");
     await settle();
@@ -743,7 +745,7 @@ describe("CodexAgentBackend.spawn — additional branch/edge coverage", () => {
     ];
     const { factory, threads } = fakeCodex([turn0, turn1]);
     const evs: BackendEvent[] = [];
-    const handle = new CodexAgentBackend({ codexFactory: factory }).spawn(cxSpec(), (e) => evs.push(e), async () => true);
+    const handle = new CodexAgentBackend({ codexFactory: factory }).spawn(cxSpec(), (e) => { if (!e.data.permissionApplication) evs.push(e); }, async () => true);
     await handle.send("followup");
     await settle();
     expect(threads[0]!.runs.map((r) => r.input)).toEqual(["task", "followup"]);
@@ -758,7 +760,7 @@ describe("CodexAgentBackend.spawn — additional branch/edge coverage", () => {
       { type: "turn.completed", usage: zeroUsage },
     ]]);
     const evs: BackendEvent[] = [];
-    new CodexAgentBackend({ codexFactory: factory }).spawn(cxSpec(), (e) => evs.push(e), async () => true);
+    new CodexAgentBackend({ codexFactory: factory }).spawn(cxSpec(), (e) => { if (!e.data.permissionApplication) evs.push(e); }, async () => true);
     await settle();
     expect(evs.map((e) => e.kind)).toEqual(["agent_started", "error"]);
     expect(evs[1]!.data["message"]).toBe("boom mid turn");
@@ -771,7 +773,7 @@ describe("CodexAgentBackend.spawn — additional branch/edge coverage", () => {
     // "no follow-up arrives" finish path without coupling to the default's timing; see the "turns and
     // lifecycle" describe block below for the grace window's own dedicated coverage.
     const handle = new CodexAgentBackend({ codexFactory: factory, interruptGraceMs: 0 })
-      .spawn(cxSpec(), (e) => evs.push(e), async () => true);
+      .spawn(cxSpec(), (e) => { if (!e.data.permissionApplication) evs.push(e); }, async () => true);
     await handle.interrupt();
     await settle();
     expect(evs).toEqual([
@@ -783,7 +785,7 @@ describe("CodexAgentBackend.spawn — additional branch/edge coverage", () => {
   it("kill() before any event is processed ends the run with no events emitted at all", async () => {
     const { factory } = fakeCodex([[{ type: "thread.started", thread_id: "th-1" }]]);
     const evs: BackendEvent[] = [];
-    const handle = new CodexAgentBackend({ codexFactory: factory }).spawn(cxSpec(), (e) => evs.push(e), async () => true);
+    const handle = new CodexAgentBackend({ codexFactory: factory }).spawn(cxSpec(), (e) => { if (!e.data.permissionApplication) evs.push(e); }, async () => true);
     await handle.kill();
     await settle();
     expect(evs).toEqual([]);
@@ -931,7 +933,7 @@ describe("CodexAgentBackend turns and lifecycle", () => {
     const evs: BackendEvent[] = [];
     const handle = new CodexAgentBackend({ codexFactory: factory }).spawn(
       cxSpec({ conductor: true }),
-      (e) => evs.push(e),
+      (e) => { if (!e.data.permissionApplication) evs.push(e); },
       async () => true,
     );
 
@@ -965,7 +967,7 @@ describe("CodexAgentBackend turns and lifecycle", () => {
     const { factory, resumedIds, threads } = fakeCodex([turnWith("first")]);
     const evs: BackendEvent[] = [];
     const handle = new CodexAgentBackend({ codexFactory: factory }).spawn(
-      cxSpec({ conductor: true, resume: "sess-1", resumeOnly: true }), (e) => evs.push(e), async () => true,
+      cxSpec({ conductor: true, resume: "sess-1", resumeOnly: true }), (e) => { if (!e.data.permissionApplication) evs.push(e); }, async () => true,
     );
     await settle();
     expect(resumedIds).toEqual(["sess-1"]);
@@ -1101,7 +1103,7 @@ describe("CodexAgentBackend turns and lifecycle", () => {
     const evs: BackendEvent[] = [];
     // grace far above settle(): the follow-up send always lands inside the window — no timing coupling
     const h = new CodexAgentBackend({ codexFactory: factory, interruptGraceMs: 1000 })
-      .spawn(cxSpec(), (e) => evs.push(e), async () => true);
+      .spawn(cxSpec(), (e) => { if (!e.data.permissionApplication) evs.push(e); }, async () => true);
     await settle();
     await h.interrupt();
     await settle();
@@ -1121,7 +1123,7 @@ describe("CodexAgentBackend turns and lifecycle", () => {
     const { factory, threads } = fakeCodex([hanging, turnWith("never")]);
     const evs: BackendEvent[] = [];
     const h = new CodexAgentBackend({ codexFactory: factory, interruptGraceMs: 20 })
-      .spawn(cxSpec(), (e) => evs.push(e), async () => true);
+      .spawn(cxSpec(), (e) => { if (!e.data.permissionApplication) evs.push(e); }, async () => true);
     await settle();
     await h.interrupt();
     await new Promise((r) => setTimeout(r, 60));         // > interruptGraceMs: the grace expires idle
@@ -1139,7 +1141,7 @@ describe("CodexAgentBackend turns and lifecycle", () => {
     const { factory, threads } = fakeCodex([hanging, turnWith("never")]);
     const evs: BackendEvent[] = [];
     const h = new CodexAgentBackend({ codexFactory: factory, interruptGraceMs: 60_000 })
-      .spawn(cxSpec(), (e) => evs.push(e), async () => true);
+      .spawn(cxSpec(), (e) => { if (!e.data.permissionApplication) evs.push(e); }, async () => true);
     await settle();
     await h.interrupt();
     await settle();                                       // loop is now sleeping in the 60s grace
@@ -1157,7 +1159,7 @@ describe("CodexAgentBackend turns and lifecycle", () => {
     const hanging = Object.assign([] as CodexThreadEvent[], { hang: true });
     const { factory } = fakeCodex([hanging]);
     const evs: BackendEvent[] = [];
-    const h = new CodexAgentBackend({ codexFactory: factory }).spawn(cxSpec(), (e) => evs.push(e), async () => true);
+    const h = new CodexAgentBackend({ codexFactory: factory }).spawn(cxSpec(), (e) => { if (!e.data.permissionApplication) evs.push(e); }, async () => true);
     await settle();
     await h.kill();
     await h.send("too late");
@@ -1172,7 +1174,7 @@ describe("CodexAgentBackend turns and lifecycle", () => {
         { hang: true });
       const { factory } = fakeCodex([hanging]);
       const evs: BackendEvent[] = [];
-      new CodexAgentBackend({ codexFactory: factory }).spawn(cxSpec({ idleTimeoutMs: 20 }), (e) => evs.push(e), async () => true);
+      new CodexAgentBackend({ codexFactory: factory }).spawn(cxSpec({ idleTimeoutMs: 20 }), (e) => { if (!e.data.permissionApplication) evs.push(e); }, async () => true);
       await new Promise((r) => setTimeout(r, 60));
       expect(evs.map((e) => e.kind)).toContain("turn_timeout");
       const timeoutEv = evs.find((e) => e.kind === "turn_timeout")!;
@@ -1206,7 +1208,7 @@ describe("CodexAgentBackend turns and lifecycle", () => {
         };
       };
       const evs: BackendEvent[] = [];
-      new CodexAgentBackend({ codexFactory: factory }).spawn(cxSpec({ maxTurnDurationMs: 20 }), (e) => evs.push(e), async () => true);
+      new CodexAgentBackend({ codexFactory: factory }).spawn(cxSpec({ maxTurnDurationMs: 20 }), (e) => { if (!e.data.permissionApplication) evs.push(e); }, async () => true);
       await new Promise((r) => setTimeout(r, 80));
       expect(evs.map((e) => e.kind)).toContain("turn_timeout");
       const timeoutEv = evs.find((e) => e.kind === "turn_timeout")!;
@@ -1221,7 +1223,7 @@ describe("CodexAgentBackend turns and lifecycle", () => {
       const { factory } = fakeCodex([hanging, turnWith("recovered")]);
       const evs: BackendEvent[] = [];
       const h = new CodexAgentBackend({ codexFactory: factory, interruptGraceMs: 1000 })
-        .spawn(cxSpec(), (e) => evs.push(e), async () => true);
+        .spawn(cxSpec(), (e) => { if (!e.data.permissionApplication) evs.push(e); }, async () => true);
       await settle();
       await h.interrupt();
       await settle();

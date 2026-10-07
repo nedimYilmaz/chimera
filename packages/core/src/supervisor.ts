@@ -1,3 +1,4 @@
+import { chimeraAccess, coordinationPermission, chimeraToolRestrictions } from "@chimera/protocol/chimera-capabilities";
 import { createMessage, deliverAgentInput, UnsupportedContentError } from "./message-delivery.js";
 import { randomUUID } from "node:crypto";
 import { parseCodexCommand } from "./backends/codex-commands.js";
@@ -5,7 +6,7 @@ import { existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import { execFile } from "node:child_process";
-import { AgentSetGroupsParamsSchema, AgentSpecSchema, ATTENTION_EVENT_KINDS, parseAgentAddress, effectiveContextLimitFor, clampCompactionThresholdForProvider, type Principal, type AccountQuotaWindow, type AgentSpec, type CompactResult, type EffortLevel, type ModelMetadataLookup, type CodexContextLimits, type QuestionAnswer, type QuestionOption, type QuestionDefault, type RemoteControlStatus, type DynamicCapConfig, type ExplainCheck, type WorktreeSetupHook, type AgentSendResult, type PromptStall, type FailureDisposition, type UsageScope } from "@chimera/protocol";
+import { AgentSetGroupsParamsSchema, AgentSpecSchema, ATTENTION_EVENT_KINDS, parseAgentAddress, effectiveContextLimitFor, clampCompactionThresholdForProvider, type Principal, type AccountQuotaWindow, type AgentSpec, type CompactResult, type EffortLevel, type ModelMetadataLookup, type CodexContextLimits, type QuestionAnswer, type QuestionOption, type QuestionDefault, type RemoteControlStatus, type DynamicCapConfig, type ExplainCheck, type WorktreeSetupHook, type AgentSendResult, type PromptStall, type FailureDisposition, type UsageScope, type PermissionApplication } from "@chimera/protocol";
 import type { DynamicCapTracker } from "./dynamic-cap.js";
 import type { EngineToolName } from "@chimera/protocol/engine-help";
 import { ConfigError, type AccountRegistry } from "./accounts.js";
@@ -227,6 +228,7 @@ export type AgentRecord = {
   agentId: string; spec: AgentSpec; accountName: string; provider: string;
   // User-facing identity, separate from the execution account and shadow label. Duplicated
   // from spec at spawn so record snapshots expose it directly without overloading `name`.
+  permissionApplication?: PermissionApplication;
   displayLabel?: string;
   // REBIND / rename_self one-shot guard: true once displayLabel is no longer free to move —
   // stamped true at spawn when the caller explicitly set spec.displayLabel (an operator's own
@@ -1785,6 +1787,19 @@ export class AgentSupervisor {
     // launched into a half-set-up worktree.
     await this.runWorktreeSetupHook(record, resolved);
     this.transferSources.set(record, resolved);
+    if (record.provider === "codex") {
+      resolved.permissionVersion = (record.permissionApplication?.version ?? -1) + 1;
+      // A permission change must not change transports at an ordinary resume.
+      // Explicit transport reconfiguration still wins over this session binding.
+      if (record.permissionApplication && resolved.providerOptions.codexTransport === undefined)
+        resolved.providerOptions = { ...resolved.providerOptions, codexTransport: record.permissionApplication.transport };
+      record.permissionApplication = {
+        version: resolved.permissionVersion, requestedProfile: record.spec.permissionProfile, requestedRouting: record.spec.on.permissionRequest,
+        profileStatus: "pending", routingStatus: "unsupported", nativeApprovals: false,
+        transport: resolved.providerOptions.codexTransport === "exec" || resolved.providerOptions.codexTransport === "app-server" ? resolved.providerOptions.codexTransport : resolved.permissionProfile === "full" ? "exec" : "app-server",
+      };
+      this.deps.events.append({ agentId: record.agentId, kind: "status", data: { permissionApplication: record.permissionApplication, appliedToRunningProcess: false } });
+    }
     const handle = backend.spawn(
       resolved,
       (e) => this.onEvent(record, e),
@@ -1939,6 +1954,11 @@ export class AgentSupervisor {
     if (this.killingRecords.has(record) || record.state === "killed") return;
     if (this.agents.get(record.agentId) !== record) return;
     if (this.providerTransfers.get(record.agentId)?.source === record) return;
+    if (e.data.permissionApplication) {
+      const application = e.data.permissionApplication as PermissionApplication;
+      if (application.version < (record.permissionApplication?.version ?? -1)) return;
+      record.permissionApplication = application;
+    }
     this.tapVoiceTts(record, e);
     // F09-PROMPT-STALL:BEGIN — fold every event through the ack watch. Second statement on
     // purpose: a turn-opening event is the ONLY proof a delivery landed, and the checks below
@@ -4028,6 +4048,15 @@ export class AgentSupervisor {
         });
       }
     }
+    if (record.parentId && chimeraAccess({ ...record.spec, depth: record.depth }) === "coordination" && req.toolName.startsWith(CHIMERA_MCP_PREFIX)) {
+      if (!coordinationPermission(req.toolName, req.input)) return false;
+      const name = req.toolName.slice("mcp__chimera__".length);
+      const grant = chimeraToolRestrictions(record.spec);
+      const target = name === "chimera_call" && req.input && typeof req.input === "object" ? (req.input as Record<string, unknown>)["tool"] : name;
+      if (typeof target !== "string" || grant.toolDenylist?.includes(name) || grant.toolDenylist?.includes(target)) return false;
+      if (grant.toolAllowlist !== undefined && (!grant.toolAllowlist.includes(name) || !grant.toolAllowlist.includes(target))) return false;
+      return true;
+    }
     const policy = record.spec.on.permissionRequest;
     const fallback = () => {
       const bashCommand = req.toolName === "Bash" ? (req.input as { command?: unknown } | undefined)?.command : undefined;
@@ -4204,12 +4233,15 @@ export class AgentSupervisor {
   setPermission(
     agentId: string,
     patch: { permissionRequest?: AgentSpec["on"]["permissionRequest"]; permissionProfile?: AgentSpec["permissionProfile"] },
-  ): { appliedToRunningProcess: boolean } {
+  ): { appliedToRunningProcess: boolean; permissionApplication?: PermissionApplication } {
     const record = this.status(agentId);   // throws UnknownAgentError for ghosts
     if (patch.permissionRequest !== undefined && !PERMISSION_REQUEST_VALUES.has(patch.permissionRequest))
       throw new InvalidPermissionError(`invalid permissionRequest "${patch.permissionRequest}"`);
     if (patch.permissionProfile !== undefined && !PERMISSION_PROFILE_VALUES.has(patch.permissionProfile))
       throw new InvalidPermissionError(`invalid permissionProfile "${patch.permissionProfile}"`);
+
+    if (record.provider === "codex" && patch.permissionProfile === "full" && !record.spec.acknowledgeCodexFullAccessRisk)
+      throw new InvalidPermissionError("Full Codex access requires the existing explicit full-access risk grant");
 
     // LIVE-PERMISSION-CHANGE-NOT-TOLD-TO-AGENT: capture the PRE-mutation values so the
     // mailbox notice below can tell what actually changed vs. what merely got re-set to
@@ -4226,21 +4258,21 @@ export class AgentSupervisor {
     if (patch.permissionProfile !== undefined)
       record.spec.permissionProfile = patch.permissionProfile;
 
-    // CODEX-SETPERMISSION-IS-COSMETIC-TO-THE-OPERATOR: codex has no live canUseTool hook
-    // (decidePermission is never invoked for it — codex.ts) and its OS sandbox is fixed at
-    // process launch from SANDBOX_BY_PROFILE, so NEITHER permissionProfile NOR permissionRequest
-    // takes effect on an already-running codex process — only on some future respawn. Surface
-    // this to the OPERATOR (not just the agent's mailbox notice below), because the dangerous
-    // direction is silent: an operator LOWERING a running codex agent's profile to contain it
-    // must not be told "ok" and believe it's contained when the live sandbox is unchanged.
-    // KIMI-BACKEND S3 / S0(d1) CONFIRMED (docs/superpowers/specs/2026-07-28-kimi-backend-s0-findings.md):
-    // kimi's yoloMode (permissionProfile's live wire) is a plain property setter the SDK only
-    // diffs at the START of the NEXT turn (SessionImpl.configChanged()/getClientWithConfigCheck())
-    // — there is no live RPC that pushes a posture change into an already-running Kimi CLI child
-    // process, same operator-facing shape as codex's cosmetic gap (this record mutation and the
-    // decidePermission wiring (kimi.ts) both read the fresh spec, but the CURRENTLY RUNNING CLI
-    // process/turn does not re-check it mid-flight).
-    const appliedToRunningProcess = record.provider !== "codex" && record.provider !== "kimi";
+    const changedDesired = prevPermissionRequest !== record.spec.on.permissionRequest || prevPermissionProfile !== record.spec.permissionProfile;
+    const handle = this.handles.get(agentId);
+    const previousApplication = record.permissionApplication;
+    const cannotAttest = record.provider === "codex" && (!handle?.updatePermission || record.state !== "running");
+    const version = (previousApplication?.version ?? 0) + (changedDesired || cannotAttest && (previousApplication?.profileStatus !== "pending" || previousApplication?.effectiveProfile !== undefined || previousApplication?.submittedVersion !== undefined) ? 1 : 0);
+    let permissionApplication = cannotAttest ? undefined : handle?.updatePermission?.({ version, permissionProfile: record.spec.permissionProfile, permissionRequest: record.spec.on.permissionRequest });
+    if (cannotAttest) permissionApplication = {
+      version, requestedProfile: record.spec.permissionProfile, requestedRouting: record.spec.on.permissionRequest,
+      profileStatus: "pending", routingStatus: "unsupported", nativeApprovals: false,
+      transport: previousApplication?.transport ?? (record.spec.providerOptions.codexTransport === "exec" || record.spec.providerOptions.codexTransport === "app-server" ? record.spec.providerOptions.codexTransport : record.spec.permissionProfile === "full" ? "exec" : "app-server"),
+    };
+    if (permissionApplication) record.permissionApplication = permissionApplication;
+    const appliedToRunningProcess = permissionApplication
+      ? permissionApplication.profileStatus === "applied" && (permissionApplication.routingStatus === "applied" || permissionApplication.routingStatus === "bypassed" && permissionApplication.requestedRouting === "auto")
+      : record.provider !== "codex" && record.provider !== "kimi";
 
     // observability: so a TUI/CLI watching this agent's stream can reflect the
     // live change (spec §6-style scrub for consistency with every other status event).
@@ -4249,6 +4281,7 @@ export class AgentSupervisor {
       data: this.scrub({
         permissionChanged: true,
         appliedToRunningProcess,
+        ...(permissionApplication ? { permissionApplication } : {}),
         ...(patch.permissionRequest !== undefined ? { permissionRequest: patch.permissionRequest } : {}),
         ...(patch.permissionProfile !== undefined ? { permissionProfile: patch.permissionProfile } : {}),
       }),
@@ -4274,14 +4307,8 @@ export class AgentSupervisor {
         lines.push(`- permission profile is now "${patch.permissionProfile}": ${PERMISSION_PROFILE_DESCRIPTION[patch.permissionProfile!]}`);
       if (changedRequest)
         lines.push(`- permission request routing is now "${patch.permissionRequest}": ${PERMISSION_REQUEST_DESCRIPTION[patch.permissionRequest!]}`);
-      // CODEX-SANDBOX-FIXED-AT-SPAWN: codex has no live canUseTool equivalent (codex.ts
-      // comment on the `decidePermission` no-op) — its OS-level sandbox is fixed at process
-      // launch from the profile codex was SPAWNED with. A live permissionProfile change here
-      // updates the record and this notice's TEXT, but does not re-sandbox the running codex
-      // process. Say so plainly rather than implying the agent can now actually reach the
-      // filesystem/network the new profile would imply.
       if (changedProfile && record.provider === "codex")
-        lines.push("  (codex note: your OS-level sandbox was fixed at spawn and is NOT changed by this — this profile value now only affects any future codex respawn, not this running process)");
+        lines.push("  (codex note: the current turn keeps its acknowledged native posture; the requested profile is used at the next turn without switching transport. Check permission application status for acknowledgment; exec cannot report its effective native policy.)");
       // KIMI-BACKEND S3 / S0(d1) CONFIRMED: unlike codex, this DOES self-heal — the SDK diffs
       // yoloMode automatically and kills+respawns the underlying CLI process at the START of the
       // next turn, no chimera-side respawn needed. But it is NOT retroactive: the turn (if any)
@@ -4291,7 +4318,7 @@ export class AgentSupervisor {
       this.deps.mailboxes.enqueue(agentId, { from: "system", kind: "user_message", text: lines.join("\n") });
       this.deliverPending(agentId);
     }
-    return { appliedToRunningProcess };
+    return { appliedToRunningProcess, ...(permissionApplication ? { permissionApplication } : {}) };
   }
 
   // RESPAWN-KEEPS-IDENTITY: every kill+respawn-under-the-same-agentId path (setModel, setEffort,

@@ -92,3 +92,39 @@ describe("AgentView permission scope — live permissionChanged event fold", () 
     expect(st.agents["a1"]!.permissionRequest).toBe("auto");
   });
 });
+
+
+describe("acknowledged permission application replay", () => {
+  const application = { version: 2, requestedProfile: "readOnly", effectiveProfile: "full", profileStatus: "pending", requestedRouting: "tui", routingStatus: "bypassed", transport: "app-server", nativeApprovals: true } as const;
+  it("keeps desired/effective distinct and rejects old acknowledgments and snapshots", () => {
+    let st = reduce(initialState, { type: "event", event: ev("a1", "status", { permissionChanged: true, permissionProfile: "readOnly", permissionRequest: "tui", permissionApplication: application, appliedToRunningProcess: false }) });
+    st = reduce(st, { type: "event", event: ev("a1", "status", { permissionChanged: true, permissionProfile: "full", permissionRequest: "auto", permissionApplication: { ...application, version: 1, requestedProfile: "full", requestedRouting: "auto", effectiveProfile: "full", profileStatus: "applied" }, appliedToRunningProcess: true }) });
+    st = reduce(st, { type: "agentRecords", records: [rec({ agentId: "a1", spec: { permissionProfile: "full", on: { permissionRequest: "auto" } }, permissionApplication: { ...application, version: 1, requestedProfile: "full", requestedRouting: "auto", effectiveProfile: "full", profileStatus: "applied" } })] });
+    expect(st.agents.a1.permissionApplication).toEqual(application);
+    expect(st.agents.a1.permissionProfile).toBe("readOnly");
+    expect(st.agents.a1.permissionRequest).toBe("tui");
+    expect(st.agents.a1.permissionAppliedToRunningProcess).toBe(false);
+    st = reduce(st, { type: "event", event: ev("a1", "status", { permissionApplication: { ...application, effectiveProfile: "readOnly", profileStatus: "applied", routingStatus: "applied" }, appliedToRunningProcess: true }) });
+    expect(st.agents.a1.permissionAppliedToRunningProcess).toBe(true);
+    expect(st.agents.a1.permissionApplication?.effectiveProfile).toBe("readOnly");
+  });
+  it("agent_started alone cannot erase failure; a validated new-launch acknowledgment can", () => {
+    let st = reduce(initialState, { type: "event", event: ev("a1", "status", { permissionApplication: { ...application, profileStatus: "failed", error: "rejected" }, appliedToRunningProcess: false }) });
+    st = reduce(st, { type: "event", event: ev("a1", "agent_started", { permissionProfile: "readOnly" }) });
+    expect(st.agents.a1.permissionApplication?.profileStatus).toBe("failed");
+    st = reduce(st, { type: "event", event: ev("a1", "status", { permissionApplication: { ...application, version: 3, effectiveProfile: "readOnly", profileStatus: "applied", routingStatus: "applied" }, appliedToRunningProcess: true }) });
+    expect(st.agents.a1.permissionAppliedToRunningProcess).toBe(true);
+  });
+});
+
+it("stopped and new-launch generations clear prior effective and submitted state", () => {
+  const old = { version: 1, requestedProfile: "full", effectiveProfile: "full", profileStatus: "applied", requestedRouting: "auto", routingStatus: "bypassed", transport: "exec", nativeApprovals: false } as const;
+  const pending = { version: 2, requestedProfile: "readOnly", profileStatus: "pending", requestedRouting: "tui", routingStatus: "unsupported", transport: "exec", nativeApprovals: false } as const;
+  let st = reduce(initialState, { type: "agentRecords", records: [rec({ agentId: "a1", state: "done", spec: { permissionProfile: "full", on: { permissionRequest: "auto" } }, permissionApplication: old })] });
+  st = reduce(st, { type: "event", event: ev("a1", "status", { permissionChanged: true, permissionProfile: "readOnly", permissionRequest: "tui", permissionApplication: pending, appliedToRunningProcess: false }) });
+  expect(st.agents.a1.permissionApplication).toEqual(pending);
+  st = reduce(st, { type: "event", event: ev("a1", "status", { permissionApplication: { ...pending, profileStatus: "unverified", submittedProfile: "readOnly", submittedVersion: 2 } }) });
+  st = reduce(st, { type: "event", event: ev("a1", "status", { permissionApplication: { ...pending, version: 3 } }) });
+  expect(st.agents.a1.permissionApplication).toEqual({ ...pending, version: 3 });
+  expect(st.agents.a1.permissionAppliedToRunningProcess).toBe(false);
+});

@@ -10,9 +10,55 @@
 import { z } from "zod";
 import { McpStoreCallResultSchema } from "./index.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { MCP_TOOL_TABLE, grantedChimeraToolNames, type ChimeraMcpCtx } from "./mcp-tools.js";
+import { MCP_TOOL_TABLE, directChimeraToolNames, type ChimeraMcpCtx } from "./mcp-tools.js";
+import { CHIMERA_READ_TOOLS } from "./chimera-capabilities.js";
 
 export type ChimeraMcpDispatch = (method: string, params: unknown) => Promise<unknown>;
+
+type CoordinationCaller = { agentId: string; parentId: string | null; depth: number; principal: string; treeId: string; projectId?: string | null; membership?: { team: string }; communicationTeam?: string };
+
+async function coordinationCaller(dispatch: ChimeraMcpDispatch, ctx: ChimeraMcpCtx): Promise<CoordinationCaller | null> {
+  if (!ctx.agentId || !ctx.treeId || ctx.depth < 2) return null;
+  try {
+    const caller = await dispatch("agent.status", { agentId: ctx.agentId }) as CoordinationCaller;
+    if (caller?.agentId !== ctx.agentId || !caller.parentId || caller.depth !== ctx.depth - 1 || caller.treeId !== ctx.treeId || !caller.principal) return null;
+    if (ctx.team && caller.membership?.team !== ctx.team) return null;
+    // Plain agent_spawn deliberately does not assign its parent's role to the
+    // child. An established parent edge can grant ordinary team messaging
+    // without changing the child's membership or granting team-wide read access.
+    if (caller.membership?.team) return { ...caller, communicationTeam: caller.membership.team };
+    const parent = await dispatch("agent.status", { agentId: caller.parentId }) as CoordinationCaller;
+    if (parent?.agentId === caller.parentId && parent.principal === caller.principal && parent.treeId === caller.treeId
+      && typeof caller.projectId === "string" && caller.projectId.length > 0 && parent.projectId === caller.projectId) return { ...caller, communicationTeam: parent.membership?.team };
+    return caller;
+  } catch { return null; }
+}
+
+async function coordinationOperationAllowed(dispatch: ChimeraMcpDispatch, caller: CoordinationCaller, method: string, params: unknown): Promise<boolean> {
+  const p = params as { agentId?: string; agentIds?: string[]; slash?: boolean; force?: boolean; scope?: unknown; scopeMode?: string };
+  if (method === "memory.search") return p.agentId === caller.agentId
+    && (p.scope === undefined || p.scope === caller.projectId) && p.scopeMode !== "all"
+    && (caller.projectId != null || p.scopeMode === "global");
+  if (method === "chronicle.search") {
+    const scope = p.scope as { treeIds?: string[]; agentIds?: string[] } | undefined;
+    return scope?.treeIds?.length === 1 && scope.treeIds[0] === caller.treeId && !scope.agentIds;
+  }
+  if (!["agent.send", "agent.sendMany", "agent.status", "agent.result", "agent.wait", "agent.tail"].includes(method)) return true;
+  // Provider slash commands are controls, not ordinary mailbox communication.
+  if (p.slash || p.force) return false;
+  const ids = method === "agent.sendMany" ? p.agentIds : [p.agentId];
+  if (!ids?.length || ids.some(id => typeof id !== "string" || id.includes("/"))) return false;
+  for (const id of ids) {
+    const peer = await dispatch("agent.status", { agentId: id }) as CoordinationCaller;
+    if (peer?.agentId !== id || peer.principal !== caller.principal) return false;
+    const sameTree = peer.treeId === caller.treeId;
+    const team = method === "agent.send" || method === "agent.sendMany" ? caller.communicationTeam : caller.membership?.team;
+    const sameTeam = team && peer.membership?.team === team
+      && caller.projectId != null && peer.projectId === caller.projectId;
+    if (!sameTree && !sameTeam) return false;
+  }
+  return true;
+}
 
 const json = (v: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(v) }] });
 const jsonErr = (e: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(e) }], isError: true });
@@ -115,6 +161,9 @@ async function registerDirectStoreTools(server: McpServer, dispatch: ChimeraMcpD
 // stdio server (packages/mcp/src/server.ts) and core's in-process bridge (generic-mcp.ts).
 export async function createChimeraMcpServer(dispatch: ChimeraMcpDispatch, ctx: ChimeraMcpCtx): Promise<McpServer> {
   const server = new McpServer({ name: "chimera", version: "0.1.0" });
+  // Depth/env identify a candidate grant, not authority. Resolve the child edge
+  // against the daemon before even publishing its baseline tools.
+  if (ctx.access === "coordination" && !await coordinationCaller(dispatch, ctx)) return server;
   // TOOL-TAGS: what an agent is given is now a set of SUBJECTS, not a hand-kept list of names.
   // "core" is what everyone gets; a conductor adds "conductor" (the orchestration verbs its own
   // playbook instructs it to use — see CONDUCTOR_TOOL_NAMES for why a prompt that names tools an
@@ -128,17 +177,29 @@ export async function createChimeraMcpServer(dispatch: ChimeraMcpDispatch, ctx: 
   // for a "full" autonomy agent (no human to ask) -- not registered-but-refusing, so the
   // model's own tool list never advertises a capability it doesn't have. engine_help's catalog
   // is filtered the same way.
-  const granted = new Set(grantedChimeraToolNames({ autonomy: ctx.autonomy, conductor: ctx.conductor, toolTags: ctx.toolTags }));
+  const granted = new Set(directChimeraToolNames(ctx));
   for (const tool of MCP_TOOL_TABLE) {
     if (!granted.has(tool.name)) continue;
     server.registerTool(
       tool.name,
-      { description: tool.description, ...(tool.inputSchema ? { inputSchema: tool.inputSchema } : {}) },
+      { description: ctx.access === "coordination" && tool.name === "memory_search" ? "Search shared-memory excerpts in your project and global scope." : ctx.access === "coordination" && tool.name === "chronicle_search" ? "Search recorded snippets from your own agent tree." : tool.description, ...(tool.inputSchema ? { inputSchema: tool.inputSchema } : {}),
+        // Wrappers and mailbox operations are not pure reads, even when bounded.
+        ...(CHIMERA_READ_TOOLS.has(tool.name) ? { annotations: { readOnlyHint: true, destructiveHint: false } } : {}),
+      },
       async (a: Record<string, unknown>) => {
+        if (ctx.access === "coordination" && (a["force"] === true || a["slash"] === true || (a["args"] && typeof a["args"] === "object" && ((a["args"] as Record<string, unknown>)["force"] === true || (a["args"] as Record<string, unknown>)["slash"] === true)))) return jsonErr({ code: "forbidden", message: "bounded coordination does not grant force or provider controls" });
         const r = tool.resolve(a, ctx);
         if (r.kind === "local") return json(r.value);
         if (r.kind === "error") return jsonErr(r.error);
         try {
+          if (ctx.access === "coordination") {
+            const caller = await coordinationCaller(dispatch, ctx);
+            if (r.method === "memory.search" && caller?.projectId == null && (r.params as { scopeMode?: string }).scopeMode === undefined) r.params = { ...r.params as object, scopeMode: "global" };
+            if (r.method === "agent.tail" && !(r.params as { agentId?: string }).agentId) r.params = { ...r.params as object, agentId: ctx.agentId };
+            if (!caller || !await coordinationOperationAllowed(dispatch, caller, r.method, r.params)) {
+              return jsonErr({ code: "forbidden", message: "operation is outside this child's tree/project/principal coordination grant" });
+            }
+          }
           const result = await dispatch(r.method, r.params);
           // F34.FIX: postDispatch reshapes what the AGENT sees, never what the RPC itself
           // returned — dispatch() above already resolved/settled against the protocol-declared
@@ -151,6 +212,6 @@ export async function createChimeraMcpServer(dispatch: ChimeraMcpDispatch, ctx: 
       },
     );
   }
-  await registerDirectStoreTools(server, dispatch, ctx);
+  if (ctx.access !== "coordination") await registerDirectStoreTools(server, dispatch, ctx);
   return server;
 }

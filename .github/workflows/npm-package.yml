@@ -53,7 +53,7 @@ jobs:
           key: pnpm-store-v1-${{ runner.os }}-${{ runner.arch }}-node-${{ steps.node.outputs.node-version }}-pnpm-11.11.0-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'patches/**') }}
       - run: pnpm install --frozen-lockfile
       - run: node scripts/audit-secrets.mjs
-      - run: node --test scripts/npm-install.test.mjs scripts/npm-build.test.mjs
+      - run: node --test scripts/npm-install.test.mjs scripts/npm-uninstall.test.mjs scripts/npm-build.test.mjs
       - name: Build JavaScript distribution
         env:
           RELEASE_NAME: ${{ inputs.package_name }}
@@ -95,7 +95,7 @@ jobs:
       - name: Test the same tarball outside the checkout
         shell: bash
         run: |
-          node --test scripts/npm-install.test.mjs
+          node --test scripts/npm-install.test.mjs scripts/npm-uninstall.test.mjs
           artifacts=(artifact/*.tgz)
           test "${#artifacts[@]}" -eq 1
           CHIMERA_NPM_ARTIFACT="${artifacts[0]}" node --test scripts/npm-artifact.test.mjs

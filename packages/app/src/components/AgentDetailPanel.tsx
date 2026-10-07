@@ -122,7 +122,9 @@ export function AgentDetailPanel({
           {[
             view.model,
             view.effort,
-            agent.permissionAppliedToRunningProcess === false && view.permissionProfile
+            agent.permissionApplication && view.permissionProfile
+              ? `${view.permissionProfile} (effective: ${agent.permissionApplication.effectiveProfile ?? "unknown"}; ${agent.permissionApplication.profileStatus}; routing: ${agent.permissionApplication.routingStatus})`
+              : agent.permissionAppliedToRunningProcess === false && view.permissionProfile
               ? `${view.permissionProfile} (recorded, NOT applied to running process)`
               : view.permissionProfile,
             view.isolation ? `isolation ${view.isolation}` : null,

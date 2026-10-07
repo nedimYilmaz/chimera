@@ -1,3 +1,4 @@
+import { chimeraAccess, chimeraToolRestrictions } from "@chimera/protocol/chimera-capabilities";
 // MCP-HOST-GENERIC: gives GenericAgentBackend (providers with no agentic SDK of their own,
 // e.g. kimi/nvidia/openai-compat) the same MCP access claude.ts/codex.ts get for free from
 // their runtimes — chimera's own coordination tools (queue_push, memory_add, ask_human, ...)
@@ -30,7 +31,7 @@ export type McpServerSpec = { command: string; args?: string[]; env: Record<stri
 export type InProcessChimeraTarget = {
   inProcess: true;
   engine: ChimeraEngineAccessor;
-  ctx: { agentId?: string; depth: number; maxDepthCap?: number; treeId?: string; team?: string; autonomy?: "ask" | "full" };
+  ctx: { access?: "coordination" | "orchestration"; toolAllowlist?: readonly string[]; toolDenylist?: readonly string[]; agentId?: string; depth: number; maxDepthCap?: number; treeId?: string; team?: string; autonomy?: "ask" | "full" };
 };
 
 // v1 scope (matches codex.ts's mcp_servers restriction, see buildCodexOptions): stdio only.
@@ -54,11 +55,13 @@ export function buildMcpServerSpecs(
   engine: ChimeraEngineAccessor,
 ): Record<string, McpServerSpec | InProcessChimeraTarget> {
   const specs: Record<string, McpServerSpec | InProcessChimeraTarget> = {};
-  if (spec.orchestration.allow) {
+  if (chimeraAccess(spec) !== "none") {
     specs["chimera"] = {
       inProcess: true,
       engine,
       ctx: {
+        ...(chimeraAccess(spec) === "coordination" ? { access: "coordination" as const } : {}),
+        ...chimeraToolRestrictions(spec),
         agentId: spec.agentId,
         // the depth of the CHILD this grant lets the agent spawn, not this agent's own depth —
         // mirrors the (now retired) subprocess's CHIMERA_DEPTH env, which server.ts read back
@@ -73,6 +76,7 @@ export function buildMcpServerSpecs(
     };
   }
   for (const [name, s] of Object.entries(spec.mcpServers)) {
+    if (name === "chimera" && specs["chimera"]) continue;
     const srv = s as { command?: string; args?: string[]; env?: Record<string, string> };
     if (!srv.command) continue;
     specs[name] = { command: srv.command, args: srv.args, env: fullEnv(srv.env) };

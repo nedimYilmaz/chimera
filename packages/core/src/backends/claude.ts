@@ -1,3 +1,4 @@
+import { chimeraAccess, chimeraToolRestrictions } from "@chimera/protocol/chimera-capabilities";
 import type { AgentDelivery } from "@chimera/protocol";
 import { deliveryContent, withMessageInput } from "../message-delivery.js";
 import { randomUUID } from "node:crypto";
@@ -388,10 +389,13 @@ export class ClaudeAgentBackend implements AgentBackend {
     let cliExitCode: number | null = null;
 
     const mcpServersUnsorted: Record<string, unknown> = { ...spec.mcpServers };
-    if (spec.orchestration.allow) {
+    if (chimeraAccess(spec) !== "none") {
       mcpServersUnsorted["chimera"] = {
         type: "stdio", command: process.execPath, args: [MCP_BIN],
         env: {
+          CHIMERA_MCP_ACCESS: chimeraAccess(spec),
+          ...(chimeraToolRestrictions(spec).toolAllowlist !== undefined ? { CHIMERA_MCP_TOOL_ALLOWLIST: JSON.stringify(chimeraToolRestrictions(spec).toolAllowlist) } : {}),
+          ...(chimeraToolRestrictions(spec).toolDenylist !== undefined ? { CHIMERA_MCP_TOOL_DENYLIST: JSON.stringify(chimeraToolRestrictions(spec).toolDenylist) } : {}),
           CHIMERA_AGENT_ID: spec.agentId,                         // spec §17.4: ask_human uses this to address agent.ask
           CHIMERA_DEPTH: String(spec.depth),
           CHIMERA_MAX_DEPTH: String(spec.orchestration.maxDepth),   // parent's cap; Task 16 forwards it as maxDepthCap
@@ -426,7 +430,7 @@ export class ClaudeAgentBackend implements AgentBackend {
     // and does not cover). Only meaningful when the chimera MCP grant is actually mounted —
     // an orchestration-disallowed spawn gets no chimera tools at all, so emitting a zero/absent
     // estimate for it would be noise, not signal.
-    if (spec.orchestration.allow) {
+    if (chimeraAccess(spec) !== "none") {
       const estimate = estimateChimeraMcpToolSurface({ autonomy: spec.autonomy, conductor: spec.conductor === true });
       sink({
         kind: "status",

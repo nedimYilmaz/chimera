@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 export const CODEX_PROTOCOL_ROOT_TYPES = [
   "InitializeParams",
   "v2/UserInput",
+  "v2/TurnStartParams",
   "v2/AskForApproval",
   "v2/ToolRequestUserInputResponse",
   "v2/ThreadGoalGetResponse",

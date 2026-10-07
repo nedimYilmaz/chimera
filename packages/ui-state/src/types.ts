@@ -1,4 +1,4 @@
-import type { Principal, CodexContextLimits, AccountQuota, AccountQuotaReason, ToolOutputImage, ToolOutputImageWarning, AgentGroup, ContentBlock, EffortLevel, FailureCause as ProtocolFailureCause, McpListenerStatus, MemoryGetResult, MemoryRecord, MemorySearchMode, NormalizedEvent, ReviewSession, TaskEvidence, TaskState, WakeScheduling, WorkflowSpec, WorkflowStep } from "@chimera/protocol";
+import type { PermissionApplication, Principal, CodexContextLimits, AccountQuota, AccountQuotaReason, ToolOutputImage, ToolOutputImageWarning, AgentGroup, ContentBlock, EffortLevel, FailureCause as ProtocolFailureCause, McpListenerStatus, MemoryGetResult, MemoryRecord, MemorySearchMode, NormalizedEvent, ReviewSession, TaskEvidence, TaskState, WakeScheduling, WorkflowSpec, WorkflowStep } from "@chimera/protocol";
 
 export type WorkflowGraphEdgeKind = "implicit" | "route" | "fanOutJoin" | "planResume" | "subWorkflowJoin";
 export type WorkflowGraphNode = { id: string; step: WorkflowStep };
@@ -376,10 +376,8 @@ export type AgentView = {
   // `permissionProfile` is readOnly|acceptEdits|full; `permissionRequest` is auto|poke:caller|tui.
   permissionProfile?: string;
   permissionRequest?: string;
-  // CODEX-SETPERMISSION-IS-COSMETIC-TO-THE-OPERATOR: whether the MOST RECENT live setPermission
-  // actually re-sandboxed the running process (false for every codex agent — its OS sandbox is
-  // fixed at spawn, see supervisor.ts setPermission). Undefined until a permissionChanged event
-  // has landed (no live change made yet this session) — undefined must NOT be read as "applied".
+  permissionApplication?: PermissionApplication;
+  /** Legacy provider response; newer daemons also report independently acknowledged posture. */
   permissionAppliedToRunningProcess?: boolean;
   // DENIED-TOOL-CALL-INVISIBLE: whether this agent hit a host-tool-policy deny (Bash toolPolicy
   // or foreign-MCP policy) at any point — projected from AgentRecordLite.toolPolicyDenied via
@@ -920,6 +918,7 @@ export type ConfirmAction =
 // renders exactly as before.
 export type AgentRecordLite = {
   agentId: string; state: string; accountName: string; provider: string;
+  permissionApplication?: PermissionApplication;
   displayLabel?: string;
   // CONDUCTOR-FULL-ACCESS: agent.list returns the FULL AgentRecord (spec included), so the
   // agent's live permission scope already rides this snapshot — no new RPC field needed.

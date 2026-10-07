@@ -39,13 +39,13 @@ export async function checkPackedInstaller(artifact) {
     const manifest = JSON.parse(await readFile(join(base, 'package.json'), 'utf8'));
     // Plain npm installation must not start a desktop installation, including with --global.
     assert.equal(manifest.scripts, undefined);
-    for (const file of ['npm-install.mjs', 'npm-install-portable.mjs', 'npm-install-platforms.mjs']) {
+    for (const file of ['npm-install.mjs', 'npm-install-portable.mjs', 'npm-install-platforms.mjs', 'npm-uninstall.mjs']) {
       await lstat(join(base, 'scripts', file));
     }
     assert.match(await readFile(join(base, 'scripts/npm-install.mjs'), 'utf8'), /NSWorkspace/);
     // A dry-run that attempts a release download must fail, even on a networked runner.
     const guard = join(dir, 'offline.mjs');
-    await writeFile(guard, `import http from 'node:http';\nimport https from 'node:https';\nconst blocked = () => { throw new Error('Packed installer must remain offline'); };\nglobalThis.fetch = blocked;\nhttp.get = http.request = https.get = https.request = blocked;\n`);
+    await writeFile(guard, `import http from 'node:http';\nimport https from 'node:https';\nconst blocked = () => { throw new Error('Packed installer must remain offline'); };\nglobalThis.fetch = blocked;\nhttp.get = http.request = https.get = https.request = blocked;\nimport child from 'node:child_process'; import net from 'node:net'; import fs from 'node:fs'; import { syncBuiltinESMExports } from 'node:module';\nchild.execFile = child.execFileSync = child.spawn = child.spawnSync = blocked; net.connect = net.createConnection = blocked; process.kill = blocked;\nfor (const name of ['writeFile','appendFile','mkdir','rm','rmdir','rename','unlink','symlink','chmod','copyFile']) { fs.promises[name] = blocked; fs[name] = blocked; if (fs[name+'Sync']) fs[name+'Sync'] = blocked; } syncBuiltinESMExports();\n`);
     const cli = join(base, manifest.bin.chimera);
     const run = args => execFileSync(process.execPath, ['--import', pathToFileURL(guard).href, cli, ...args],
       { cwd: dir, env, encoding: 'utf8', timeout: 30_000, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -56,6 +56,12 @@ export async function checkPackedInstaller(artifact) {
     assert.equal(plan.home, env.HOME);
     for (const path of [plan.app, plan.root, plan.bin, plan.state, plan.plist ?? plan.serviceFile, plan.shortcut].filter(Boolean)) {
       await assert.rejects(lstat(path), { code: 'ENOENT' });
+    }
+    assert.match(run(['--help']), /uninstall/);
+    for (const args of [['uninstall', '--dry-run'], ['uninstall', '--purge-data', '--dry-run']]) {
+      const uninstall = JSON.parse(run(args));
+      assert.equal(uninstall.dryRun, true); assert.equal(uninstall.state, env.HOME + (process.platform === 'win32' ? '\\' : '/') + '.chimera');
+      assert.match(uninstall.npxCache, /preserved/);
     }
     return { name: manifest.name, version: manifest.version, platform: plan.platform };
   } finally { await rm(dir, { recursive: true, force: true }); }

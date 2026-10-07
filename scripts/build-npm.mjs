@@ -97,16 +97,16 @@ for (const [command, [pkg, entry]] of Object.entries(bins)) {
   const help = command === 'chimera' ? `
 const arg = process.argv[2];
 if (arg === '--version' || arg === '-v') { console.log(${JSON.stringify(version)}); process.exit(0); }
-if (arg === 'install') {
-  try { await (await import('../../../scripts/npm-install.mjs')).install(); }
+if (arg === 'install' || arg === 'uninstall') {
+  try { await (await import('../../../scripts/npm-' + arg + '.mjs'))[arg](); }
   catch (error) { console.error(error.message); process.exitCode = 1; }
 } else
 if (!arg || arg === '--help' || arg === '-h') {
-  console.log('Usage: chimera <install|doctor|start|stop|restart|status|spawn> [flags]\\nchimera install [--dry-run] [--no-open]: install CLI + desktop for macOS, Linux or Windows\\nAlso installed: chimerad, chimera-mcp');
+  console.log('Usage: chimera <install|uninstall|doctor|start|stop|restart|status|spawn> [flags]\\nchimera install [--dry-run] [--no-open]: install CLI + desktop for macOS, Linux or Windows\\nchimera uninstall [--purge-data] [--dry-run]: remove owned installation; preserve data by default\\nAlso installed: chimerad, chimera-mcp');
   process.exit(0);
 }
 ` : '';
-  await writeFile(join(out, path), `#!/usr/bin/env node\n${help}\n${command === 'chimera' ? "if (arg !== 'install') " : ''}await import('../src/${entry}.js');\n`);
+  await writeFile(join(out, path), `#!/usr/bin/env node\n${help}\n${command === 'chimera' ? "if (arg !== 'install' && arg !== 'uninstall') " : ''}await import('../src/${entry}.js');\n`);
   await chmod(join(out, path), 0o755);
 }
 
@@ -127,7 +127,7 @@ await writeFile(join(out, 'package.json'), JSON.stringify({
   repository: { type: 'git', url: 'git+https://github.com/nedimYilmaz/chimera.git' },
   homepage: 'https://github.com/nedimYilmaz/chimera#readme',
   publishConfig: { access: 'public' },
-  files: ['packages', 'scripts/npm-install*.mjs', 'README.md', 'LICENSE', 'npm-shrinkwrap.json'],
+  files: ['packages', 'scripts/npm-install*.mjs', 'scripts/npm-uninstall.mjs', 'README.md', 'LICENSE', 'npm-shrinkwrap.json'],
   chimeraRelease: { windowsPublisherThumbprint },
   bin, imports, dependencies, overrides,
 }, null, 2) + '\n');
@@ -137,7 +137,7 @@ const readme = await readFile(join(root, 'README.md'), 'utf8');
 await writeFile(join(out, 'README.md'), readme
   .replace(/(\]\(|src=")site\/assets\//g, '$1https://nedimyilmaz.github.io/chimera/assets/'));
 await mkdir(join(out, 'scripts'), { recursive: true });
-for (const file of ['npm-install.mjs', 'npm-install-portable.mjs', 'npm-install-platforms.mjs']) {
+for (const file of ['npm-install.mjs', 'npm-install-portable.mjs', 'npm-install-platforms.mjs', 'npm-uninstall.mjs']) {
   await copyFile(join(root, 'scripts', file), join(out, 'scripts', file));
 }
 console.log(`Built ${name}@${version} in ${out}`);

@@ -1,7 +1,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { ChimeraConfigSchema } from "@chimera/protocol";
 import { AccountRegistry } from "@chimera/core/accounts";
 import { CredentialResolver } from "@chimera/core/credentials";
@@ -157,15 +157,14 @@ describe("AgentSupervisor.setPermission", () => {
   });
 
   // CODEX-SETPERMISSION-IS-COSMETIC-TO-THE-OPERATOR: the operator-facing return value must say
-  // plainly when a live profile change did NOT reach the running process — codex has no live
-  // permission hook and its sandbox is fixed at spawn (supervisor.ts setPermission comment).
-  it("returns appliedToRunningProcess:false for a codex agent — the live sandbox is not re-applied", async () => {
+  // plainly when a fake Codex handle has no policy acknowledgment/update seam.
+  it("returns pending for a codex handle without policy acknowledgment", async () => {
     const { sup } = makeMultiProviderSupervisor([], [[{ end: { resultText: "done" } }]]);
     const rec = await sup.spawn({
       prompt: "x", cwd: "/tmp", account: "cx-main", isolation: "none", permissionProfile: "readOnly",
     });
     const result = sup.setPermission(rec.agentId, { permissionProfile: "acceptEdits" });
-    expect(result).toEqual({ appliedToRunningProcess: false });
+    expect(result).toMatchObject({ appliedToRunningProcess: false });
   });
 
   it("returns appliedToRunningProcess:true for a claude agent — the live spec change genuinely applies", async () => {
@@ -200,4 +199,76 @@ describe("AgentSupervisor.setPermission", () => {
     expect(msgs[0]?.text).toContain("start of your NEXT turn");
     expect(msgs[0]?.text).not.toContain("codex note");
   });
+});
+
+
+it("uses acknowledged effective state for Codex no-ops and rejects stale acknowledgments", async () => {
+  const { sup, dir } = makeMultiProviderSupervisor([], [[{ end: { resultText: "done" } }]]);
+  const rec = await sup.spawn({ prompt: "x", cwd: "/tmp", account: "cx-main", isolation: "none", permissionProfile: "readOnly" });
+  const application = { version: 0, requestedProfile: "readOnly", effectiveProfile: "readOnly", profileStatus: "applied", requestedRouting: "auto", routingStatus: "applied", transport: "app-server", nativeApprovals: true };
+  (sup as any).onEvent(rec, { kind: "status", data: { permissionApplication: application, appliedToRunningProcess: true } });
+  rec.state = "running";
+  (sup as any).handles.get(rec.agentId).updatePermission = (request: any) => ({ ...rec.permissionApplication, version: request.version, requestedProfile: request.permissionProfile, requestedRouting: request.permissionRequest, profileStatus: request.permissionProfile === rec.permissionApplication?.effectiveProfile ? "applied" : "pending" });
+  expect(sup.setPermission(rec.agentId, { permissionProfile: "readOnly" }).appliedToRunningProcess).toBe(true);
+  expect(sup.setPermission(rec.agentId, { permissionProfile: "acceptEdits" }).permissionApplication).toMatchObject({ version: 1, profileStatus: "pending", effectiveProfile: "readOnly" });
+  expect(sup.setPermission(rec.agentId, { permissionProfile: "acceptEdits" }).appliedToRunningProcess).toBe(false);
+  expect(readAllMailboxMessages(dir, rec.agentId).filter(m => m.kind === "user_message")).toHaveLength(1);
+  (sup as any).onEvent(rec, { kind: "status", data: { permissionApplication: application, appliedToRunningProcess: true } });
+  expect(rec.permissionApplication?.profileStatus).toBe("pending");
+  (sup as any).onEvent(rec, { kind: "status", data: { permissionApplication: { ...application, version: 1, requestedProfile: "acceptEdits", effectiveProfile: "acceptEdits" }, appliedToRunningProcess: true } });
+  expect(sup.setPermission(rec.agentId, { permissionProfile: "acceptEdits" }).appliedToRunningProcess).toBe(true);
+  expect(readAllMailboxMessages(dir, rec.agentId).filter(m => m.kind === "user_message")).toHaveLength(1);
+});
+
+it("a Codex full-profile request cannot create its own explicit risk grant", async () => {
+  const { sup } = makeMultiProviderSupervisor([], [[{ end: { resultText: "done" } }]]);
+  const rec = await sup.spawn({ prompt: "x", cwd: "/tmp", account: "cx-main", isolation: "none", permissionProfile: "readOnly" });
+  expect(() => sup.setPermission(rec.agentId, { permissionProfile: "full" })).toThrow("existing explicit full-access risk grant");
+  expect(rec.spec.permissionProfile).toBe("readOnly");
+});
+
+
+it.each(["exec", "app-server"] as const)("ordinary resume retains the established %s transport across profile changes", async transport => {
+  const { sup, codex } = makeMultiProviderSupervisor([], [[{ end: { resultText: "done" } }], [{ end: { resultText: "resumed" } }]]);
+  const rec = await sup.spawn({ prompt: "x", cwd: "/tmp", account: "cx-main", isolation: "none", permissionProfile: "readOnly" });
+  await sup.waitFor(rec.agentId, 1000);
+  rec.permissionApplication = { version: 3, requestedProfile: "readOnly", effectiveProfile: "full", profileStatus: "pending", requestedRouting: "auto", routingStatus: transport === "exec" ? "unsupported" : "bypassed", transport, nativeApprovals: transport === "app-server" };
+  let resolved: any; const original = codex.spawn.bind(codex);
+  codex.spawn = (...args) => { resolved = args[0]; return original(...args); };
+  await (sup as any).launch(rec, rec.accountName);
+  expect(resolved.providerOptions.codexTransport).toBe(transport);
+  expect(resolved.permissionVersion).toBe(4);
+  expect(rec.spec.providerOptions.codexTransport).toBeUndefined();
+  expect((sup as any).transferSources.get(rec).providerOptions.codexTransport).toBe(transport);
+  expect(rec.permissionApplication).toMatchObject({ version: 4, profileStatus: "pending", nativeApprovals: false });
+  expect(rec.permissionApplication?.effectiveProfile).toBeUndefined();
+});
+
+it.each(["done", "paused"] as const)("%s permission changes invalidate old process acknowledgment and persist the next launch", async state => {
+  const { sup, codex, dir } = makeMultiProviderSupervisor([], [[{ end: { resultText: "done" } }], [{ end: { resultText: "resumed" } }]]);
+  const rec = await sup.spawn({ prompt: "x", cwd: "/tmp", account: "cx-main", isolation: "none", permissionProfile: "full", acknowledgeCodexFullAccessRisk: true });
+  await sup.waitFor(rec.agentId, 1000);
+  rec.state = state;
+  rec.permissionApplication = { version: 2, requestedProfile: "full", effectiveProfile: "full", profileStatus: "applied", requestedRouting: "auto", routingStatus: "bypassed", transport: "app-server", nativeApprovals: true };
+  const oldHandleUpdate = vi.fn(() => rec.permissionApplication);
+  if (state === "done") (sup as any).handles.delete(rec.agentId);
+  else (sup as any).handles.set(rec.agentId, { updatePermission: oldHandleUpdate });
+  const pending = sup.setPermission(rec.agentId, { permissionProfile: "readOnly", permissionRequest: "tui" });
+  expect(pending).toMatchObject({ appliedToRunningProcess: false, permissionApplication: { version: 3, requestedProfile: "readOnly", requestedRouting: "tui", profileStatus: "pending", nativeApprovals: false } });
+  expect(oldHandleUpdate).not.toHaveBeenCalled();
+  expect(pending.permissionApplication?.effectiveProfile).toBeUndefined();
+  expect(pending.permissionApplication?.submittedVersion).toBeUndefined();
+  expect(sup.setPermission(rec.agentId, { permissionProfile: "readOnly", permissionRequest: "tui" })).toEqual(pending);
+  const statuses = (sup as any).deps.events.tail(rec.agentId, 100).filter((e: any) => e.data.permissionApplication);
+  expect(statuses.at(-1)?.data.permissionApplication).toEqual(pending.permissionApplication);
+  let resolved: any; const original = codex.spawn.bind(codex);
+  codex.spawn = (...args) => { resolved = args[0]; return original(...args); };
+  await (sup as any).launch(rec, rec.accountName);
+  expect(resolved.permissionVersion).toBe(4);
+  expect(rec.permissionApplication).toMatchObject({ version: 4, profileStatus: "pending", nativeApprovals: false });
+  expect(rec.permissionApplication?.effectiveProfile).toBeUndefined();
+  (sup as any).onEvent(rec, { kind: "status", data: { permissionApplication: { ...rec.permissionApplication, version: 2, effectiveProfile: "full", profileStatus: "applied" } } });
+  expect(rec.permissionApplication?.effectiveProfile).toBeUndefined();
+  (sup as any).onEvent(rec, { kind: "status", data: { permissionApplication: { ...rec.permissionApplication, effectiveProfile: "readOnly", profileStatus: "applied", routingStatus: "applied", nativeApprovals: true } } });
+  expect(rec.permissionApplication?.effectiveProfile).toBe("readOnly");
 });

@@ -63,6 +63,9 @@ const team = process.env.CHIMERA_TEAM || undefined;
 const agentId = process.env.CHIMERA_AGENT_ID || undefined;
 // AGENT-AUTONOMY: set by claude.ts/codex.ts's chimera-mcp grant when the spawning agent's own
 // spec has autonomy:"full" — see createChimeraMcpServer for what this suppresses.
+const access = process.env.CHIMERA_MCP_ACCESS === "coordination" ? "coordination" as const : undefined;
+const toolAllowlist = process.env.CHIMERA_MCP_TOOL_ALLOWLIST ? JSON.parse(process.env.CHIMERA_MCP_TOOL_ALLOWLIST) as string[] : undefined;
+const toolDenylist = process.env.CHIMERA_MCP_TOOL_DENYLIST ? JSON.parse(process.env.CHIMERA_MCP_TOOL_DENYLIST) as string[] : undefined;
 const autonomy = process.env.CHIMERA_AUTONOMY === "full" ? "full" as const : undefined;
 
 const isDisconnected = (e: unknown): boolean =>
@@ -94,7 +97,7 @@ const dispatch = createDispatch({
 const conductor = process.env.CHIMERA_CONDUCTOR === "1";
 if (!lifecycle.closing) {
   try {
-    const server = await createChimeraMcpServer(dispatch, { agentId, depth, maxDepthCap, treeId, team, autonomy, conductor });
+    const server = await createChimeraMcpServer(dispatch, { agentId, depth, maxDepthCap, treeId, team, autonomy, conductor, access, toolAllowlist, toolDenylist });
     if (!lifecycle.closing) await server.connect(transport);
   } catch (error) {
     if (!lifecycle.closing) {

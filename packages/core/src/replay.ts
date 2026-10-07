@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { ATTENTION_EVENT_KINDS, ForkLineageSchema, type NormalizedEvent } from "@chimera/protocol";
+import { ATTENTION_EVENT_KINDS, ForkLineageSchema, type NormalizedEvent, type PermissionApplication } from "@chimera/protocol";
 import type { AgentRecord } from "./supervisor.js";
 
 // R2 (self-healing supervision): this file is the shared, reusable fold-from-log primitive —
@@ -84,6 +84,15 @@ function applyEventToRecord(record: AgentRecord, e: NormalizedEvent): void {
       record.state = "running";
       break;
     case "status": {
+      const application = e.data["permissionApplication"] as PermissionApplication | undefined;
+      const current = application ? application.version >= (record.permissionApplication?.version ?? -1) : !record.permissionApplication;
+      if (application && current) record.permissionApplication = application;
+      if (e.data["permissionChanged"] === true && current) {
+        const profile = e.data["permissionProfile"];
+        const routing = e.data["permissionRequest"];
+        if (profile === "readOnly" || profile === "acceptEdits" || profile === "full") record.spec = { ...record.spec, permissionProfile: profile };
+        if (routing === "auto" || routing === "poke:caller" || routing === "tui") record.spec = { ...record.spec, on: { ...record.spec.on, permissionRequest: routing } };
+      }
       if (record.provider === "codex" && typeof e.data["nativeVoiceEnabled"] === "boolean") {
         const enabled = e.data["nativeVoiceEnabled"];
         record.spec = { ...record.spec, ...(enabled ? { persistent: true } : {}), providerOptions: { ...record.spec.providerOptions, ...(enabled ? { codexTransport: "app-server" } : {}), codexRealtime: enabled } };

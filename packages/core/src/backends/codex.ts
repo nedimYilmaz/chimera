@@ -1,3 +1,5 @@
+import type { PermissionApplication } from "@chimera/protocol";
+import { CHIMERA_READ_TOOLS, CHIMERA_COMMUNICATION_TOOLS, chimeraAccess, chimeraToolRestrictions } from "@chimera/protocol/chimera-capabilities";
 import type { AgentDelivery } from "@chimera/protocol";
 import { deliveryContent, withMessageInput } from "../message-delivery.js";
 import { Codex } from "@openai/codex-sdk";
@@ -388,21 +390,29 @@ export function buildCodexOptions(spec: ResolvedAgentSpec): CodexFactoryOptions 
   const apiKey = spec.env["OPENAI_API_KEY"] ?? spec.env["CODEX_API_KEY"];
 
   const servers: Record<string, unknown> = { ...spec.mcpServers };
-  if (spec.orchestration.allow) {
+  if (chimeraAccess(spec) !== "none") {
     // Grant parity with the claude backend (Phase 1 Task 17): plain-node launcher + depth,
     // the PARENT's max-depth cap (no depth-cap escape via codex), the tree id (Phase 2 stamps
     // CHIMERA_TREE_ID into the launch env; forwarded when present so recursive codex spawns
     // stay under the tree budget ceiling), and a RESOLVED home (never empty string).
     servers["chimera"] = {
       command: process.execPath, args: [MCP_BIN],
+      ...(chimeraToolRestrictions(spec).toolAllowlist !== undefined ? { enabled_tools: chimeraToolRestrictions(spec).toolAllowlist } : {}),
+      ...(chimeraToolRestrictions(spec).toolDenylist !== undefined ? { disabled_tools: chimeraToolRestrictions(spec).toolDenylist } : {}),
       // Codex's 60s default is shorter than Chimera's 300s question/wait window.
       tool_timeout_sec: 3_600,
+      // Only this injected server receives these approvals. A bounded wrapper
+      // cannot dispatch admin/foreign calls; the orchestration wrapper can.
+      tools: Object.fromEntries([...CHIMERA_READ_TOOLS, ...(chimeraAccess(spec) === "coordination" ? [...CHIMERA_COMMUNICATION_TOOLS, "chimera_call"] : [])].map(name => [name, { approval_mode: "approve" }])),
       env: {
         // WORKER-TEAM-CONTEXT fix: this block had drifted from claude.ts's — it never forwarded
         // CHIMERA_AGENT_ID (so ask_human/memory-author/queue pushedBy/etc misattribute for every
         // codex team worker) nor CHIMERA_TEAM (so my_team always saw {team:null}). Both are plain
         // spec fields/spec.env already computed upstream; this was a copy gap, not a design choice.
-        CHIMERA_AGENT_ID: spec.agentId,                           // spec §17.4: ask_human uses this to address agent.ask
+        CHIMERA_MCP_ACCESS: chimeraAccess(spec),
+          ...(chimeraToolRestrictions(spec).toolAllowlist !== undefined ? { CHIMERA_MCP_TOOL_ALLOWLIST: JSON.stringify(chimeraToolRestrictions(spec).toolAllowlist) } : {}),
+          ...(chimeraToolRestrictions(spec).toolDenylist !== undefined ? { CHIMERA_MCP_TOOL_DENYLIST: JSON.stringify(chimeraToolRestrictions(spec).toolDenylist) } : {}),
+          CHIMERA_AGENT_ID: spec.agentId,                           // spec §17.4: ask_human uses this to address agent.ask
         CHIMERA_DEPTH: String(spec.depth),
         CHIMERA_MAX_DEPTH: String(spec.orchestration.maxDepth),   // parent's cap; the MCP forwards it as maxDepthCap
         CHIMERA_TREE_ID: spec.env["CHIMERA_TREE_ID"] ?? "",       // "" until Phase 2 lands its launch-env stamp
@@ -433,6 +443,7 @@ export function buildCodexOptions(spec: ResolvedAgentSpec): CodexFactoryOptions 
       enabled?: boolean;
       startup_timeout_sec?: number;
       tool_timeout_sec?: number;
+      tools?: Record<string, unknown>;
     };
     if (!srv || srv.type === "sse" || (!srv.command && !srv.url)) {
       throw new Error(`Codex MCP server "${name}" requires a stdio command or Streamable HTTP url; legacy SSE is unsupported`);
@@ -467,6 +478,7 @@ export function buildCodexOptions(spec: ResolvedAgentSpec): CodexFactoryOptions 
       ...(srv.enabled !== undefined ? { enabled: srv.enabled } : {}),
       ...(srv.startup_timeout_sec !== undefined ? { startup_timeout_sec: srv.startup_timeout_sec } : {}),
       ...(srv.tool_timeout_sec !== undefined ? { tool_timeout_sec: srv.tool_timeout_sec } : {}),
+      ...(name === "chimera" && chimeraAccess(spec) !== "none" && srv.tools !== undefined ? { tools: Object.fromEntries(Object.entries(srv.tools).filter(([tool]) => (enabledTools === undefined || enabledTools.includes(tool)) && !srv.disabled_tools?.includes(tool))) } : {}),
       // SAFE-3: preserve even an empty enabled_tools list — [] intentionally allows no tools.
       ...(enabledTools !== undefined ? { enabled_tools: enabledTools } : {}),
       ...(srv.disabled_tools !== undefined ? { disabled_tools: srv.disabled_tools } : {}),
@@ -557,13 +569,57 @@ export class CodexAgentBackend implements AgentBackend {
     const { workdir: cwd } = ensureWorkdir(spec);
     const factoryOptions = buildCodexOptions(spec);
     const threadOptions = buildThreadOptions(spec, cwd);
+    let desired = { version: spec.permissionVersion ?? 0, permissionProfile: spec.permissionProfile, permissionRequest: spec.on.permissionRequest };
+    threadOptions.chimeraPermissionVersion = desired.version;
+    let desiredThreadOptions = { ...threadOptions };
+    let effectiveOptions: Record<string, unknown> | undefined;
+    let submittedOptions: Record<string, unknown> | undefined;
+    let inFlightOptions: Record<string, unknown> | undefined;
+    let applyError: { version: number; message: string } | undefined;
+    const applicationError = (error: unknown): string => {
+      const raw = error instanceof Error ? error.message : String(error);
+      if (raw.startsWith("Failed to parse item: ")) return "Codex event stream contained an incomplete or invalid JSON frame";
+      if (CODEX_EXIT_ERROR.test(raw)) return "Codex CLI exited before confirming its permission policy";
+      return "Codex permission application could not be confirmed";
+    };
+    const profileOf = (options: Record<string, unknown> | undefined): ResolvedAgentSpec["permissionProfile"] | undefined =>
+      options?.sandboxMode === "danger-full-access" ? "full" : options?.sandboxMode === "workspace-write" ? "acceptEdits" : options?.sandboxMode === "read-only" ? "readOnly" : undefined;
+    const application = (): PermissionApplication => {
+      const effectiveProfile = profileOf(effectiveOptions);
+      const bypass = effectiveOptions?.sandboxMode === "danger-full-access" && effectiveOptions.approvalPolicy === "never" && spec.acknowledgeCodexFullAccessRisk;
+      const profileMatches = effectiveProfile === desired.permissionProfile && effectiveOptions?.sandboxMode === desiredThreadOptions.sandboxMode && effectiveOptions?.approvalPolicy === desiredThreadOptions.approvalPolicy;
+      const changingFlight = inFlightOptions && (inFlightOptions.sandboxMode !== desiredThreadOptions.sandboxMode || inFlightOptions.approvalPolicy !== desiredThreadOptions.approvalPolicy);
+      return { version: desired.version, requestedProfile: desired.permissionProfile, ...(effectiveProfile ? { effectiveProfile } : {}),
+        ...(submittedOptions ? { submittedVersion: Number(submittedOptions.chimeraPermissionVersion), submittedProfile: profileOf(submittedOptions) } : {}),
+        profileStatus: applyError?.version === desired.version ? "failed" : transport === "exec" ? submittedOptions?.chimeraPermissionVersion === desired.version ? "unverified" : "pending" : profileMatches && !changingFlight ? "applied" : "pending",
+        requestedRouting: desired.permissionRequest, routingStatus: transport === "exec" ? "unsupported" : bypass ? "bypassed" : "applied", transport, nativeApprovals: transport === "app-server",
+        ...(applyError?.version === desired.version ? { error: applyError.message } : {}) };
+    };
+    const emitApplication = () => {
+      const permissionApplication = application();
+      sink({ kind: "status", data: { permissionApplication, appliedToRunningProcess: permissionApplication.profileStatus === "applied" && (permissionApplication.routingStatus === "applied" || permissionApplication.routingStatus === "bypassed" && permissionApplication.requestedRouting === "auto") } });
+    };
     if (transport === "app-server") threadOptions["developerInstructions"] = spec.instructions;
     // Injected SDK fakes retain deterministic validation; real sessions consult
     // the same configured binary used for execution, including future models.
     if (this.deps.codexFactory && !this.deps.validateModel) assertCodexToolDeferral(factoryOptions, threadOptions);
     const codex = transport === "app-server"
-      ? new CodexAppServer(factoryOptions, _decidePermission, _decideDialog, this.deps.appServerProcess, spec.autonomy === "full", spec.permissionProfile === "full" && spec.acknowledgeCodexFullAccessRisk && threadOptions.approvalPolicy === "never" && threadOptions.sandboxMode === "danger-full-access")
+      ? new CodexAppServer(factoryOptions, _decidePermission, _decideDialog, this.deps.appServerProcess, spec.autonomy === "full", spec.acknowledgeCodexFullAccessRisk)
       : (this.deps.codexFactory ?? defaultFactory)(factoryOptions);
+    if (codex instanceof CodexAppServer) {
+      codex.onPermissionApplied = options => {
+        effectiveOptions = { ...options };
+        if (inFlightOptions?.chimeraPermissionVersion === options.chimeraPermissionVersion) inFlightOptions = undefined;
+        if (applyError && Number(options.chimeraPermissionVersion) >= applyError.version) applyError = undefined;
+        emitApplication();
+      };
+      codex.onPermissionFailed = error => {
+        if (inFlightOptions && effectiveOptions?.chimeraPermissionVersion !== inFlightOptions.chimeraPermissionVersion)
+          applyError = { version: Number(inFlightOptions.chimeraPermissionVersion), message: applicationError(error) };
+        inFlightOptions = undefined;
+        emitApplication();
+      };
+    }
     const thread = spec.resume
       ? codex.resumeThread(spec.resume, threadOptions)
       : codex.startThread(threadOptions);
@@ -784,6 +840,15 @@ export class CodexAgentBackend implements AgentBackend {
                   for (const warning of await imageReader.prime()) emitRaw(warning);
                 }
               }
+              // The SDK spawns a fresh CLI per invocation and reads this options
+              // object then. Do not alter an invocation already being consumed.
+              Object.assign(threadOptions, desiredThreadOptions);
+              inFlightOptions = { ...threadOptions };
+              if (transport === "exec") {
+                submittedOptions = undefined;
+                effectiveOptions = undefined;
+                emitApplication();
+              }
               const { events } = await thread.runStreamed(prepared.input, {
                 signal: controller.signal,
                 // W2-1 STRUCTURED-RETURNS: verified against pinned SDK 0.145.0's dist/index.d.ts —
@@ -815,6 +880,10 @@ export class CodexAgentBackend implements AgentBackend {
                 // another provider frame would weaken the existing error exit.
                 if (transport === "exec" && id && raw.type !== "thread.started") await readImages(id, raw.type === "turn.completed" || terminalFailure, terminalFailure);
                 emitRaw(raw);
+                if (transport === "exec" && raw.type === "thread.started") {
+                  submittedOptions = inFlightOptions ? { ...inFlightOptions } : undefined;
+                  emitApplication();
+                }
                 if (transport === "exec" && id && raw.type === "thread.started") await readTelemetry(id, true);
                 if (failed) return;
               }
@@ -825,6 +894,12 @@ export class CodexAgentBackend implements AgentBackend {
               // Some iterators finish cleanly on cancellation instead of throwing.
               if (interruptForSteer) controller.signal.throwIfAborted();
             } catch (turnErr) {
+              if (loop.killed) return;
+              if (!controller.signal.aborted && inFlightOptions && effectiveOptions?.chimeraPermissionVersion !== inFlightOptions.chimeraPermissionVersion) {
+                applyError = { version: Number(inFlightOptions.chimeraPermissionVersion), message: applicationError(turnErr) };
+                inFlightOptions = undefined;
+                emitApplication();
+              }
               if (loop.killed) return;
               // Cancellation can flush a completed image after the last stdout
               // event. Preserve that real result before opening the next turn.
@@ -907,6 +982,10 @@ export class CodexAgentBackend implements AgentBackend {
         }
       } catch (err) {
         if (!loop.killed) {
+          if (!effectiveOptions && !applyError) {
+            applyError = { version: desired.version, message: applicationError(err) };
+            emitApplication();
+          }
           // A non-Error rejection (a thrown string / plain object) has no `.message`, so the
           // blind cast used to emit `message: undefined` -- which supervisor.onError then
           // reports as the content-free "unknown error". Same hole QA closed in generic.ts:395;
@@ -951,6 +1030,16 @@ export class CodexAgentBackend implements AgentBackend {
     return withMessageInput({
       get processPid() { return codex instanceof CodexAppServer ? codex.processPid : null; },
       ...(codex instanceof CodexAppServer ? { command: (text: string) => codex.command(text) } : {}),
+      updatePermission: request => {
+        if (request.permissionProfile === "full" && !spec.acknowledgeCodexFullAccessRisk) throw new Error("Full Codex access requires an explicit risk grant");
+        desired = { ...request };
+        const next = buildThreadOptions({ ...spec, permissionProfile: request.permissionProfile, providerOptions: { ...spec.providerOptions, codexTransport: transport } }, cwd);
+        // Preserve the transport and session; only the next invocation's profile
+        // options change. Native app-server acknowledges the exact start request.
+        desiredThreadOptions = { ...threadOptions, sandboxMode: next.sandboxMode, approvalPolicy: next.approvalPolicy, chimeraPermissionVersion: request.version };
+        if (applyError && applyError.version !== desired.version) applyError = undefined;
+        return application();
+      },
       isTurnActive: () => executingTurn || codex instanceof CodexAppServer && codex.isTurnActive(),
       ...(codex instanceof CodexAppServer ? { compact: () => codex.compact(), compactOwner: "sdk" as const, remoteControl: (enable: boolean) => codex.remoteControl(enable) } : {}),
       ...(codex instanceof CodexAppServer && codex.realtimeEnabled ? { nativeVoice: codex.nativeVoice } : {}),

@@ -1,4 +1,4 @@
-import type { AgentInput, AgentDelivery, AgentSpec, ChimeraMcpCtx, CompactResult, ContentBlock, EventKind, ModelMetadataLookup } from "@chimera/protocol";
+import type { PermissionApplication, AgentInput, AgentDelivery, AgentSpec, ChimeraMcpCtx, CompactResult, ContentBlock, EventKind, ModelMetadataLookup } from "@chimera/protocol";
 import type { McpListenerGrant } from "./mcp-listener.js";
 
 export type { ContentBlock };
@@ -36,6 +36,7 @@ export type CompactionThresholdSource = "spawn" | "account" | "provider" | "defa
 
 export type ResolvedAgentSpec = AgentSpec & {
   initialDelivery?: AgentDelivery;
+  permissionVersion?: number;
   agentId: string;
   accountName: string;                    // concrete account, after auto-routing
   // F23 D3: widened from "claude" | "codex" — see protocol's AccountConfigSchema.provider
@@ -99,6 +100,7 @@ export interface AgentHandle {
   readonly processPid?: number | null;
   command?(text: string): Promise<string>;
   isTurnActive?(): boolean;
+  updatePermission?(request: { version: number; permissionProfile: AgentSpec["permissionProfile"]; permissionRequest: AgentSpec["on"]["permissionRequest"] }): PermissionApplication;
   validateSlash?(text: string): Promise<void>;
   readonly nativeVoice?: NativeVoiceHandle;
   // content: additive (D9) — ordered blocks that, when present, take over building

@@ -747,14 +747,20 @@ function DesignProbe() {
   return <Stage><button data-design-switch onClick={() => setAgent((s) => s === "design-a" ? "design-b" : "design-a")}>Switch agent</button><DesignWorkspace scope={{ agentId: agent }} label={agent}><div data-design-conversation style={{ flex: 1, padding: 24 }}>Conversation for {agent}</div></DesignWorkspace></Stage>;
 }
 function MetricsProbe() {
+  const [permissionPhase, setPermissionPhase] = useState<"pending" | "submitted" | "applied">("pending");
+  const permissionApplied = permissionPhase === "applied";
   const [large, setLarge] = useState(false);
   const [longModel, setLongModel] = useState(false);
   return <Stage><div data-metrics-probe style={{ minWidth: 0, minHeight: 0, flex: 1, display: "flex", flexDirection: "column", containerType: "inline-size", containerName: "agent-transcript" }}>
     <TranscriptHeader name="codex-prompt-engineer-with-a-very-long-agent-name" fullId="8eb20180-058c-469f-9ba4-bc36447d550c" state="running" tone="success" overBudget={false}
+      permissionProfile="readOnly" permissionRequest="tui" permissionAppliedToRunningProcess={permissionApplied}
+      permissionApplication={permissionPhase === "submitted" ? { version: 1, requestedProfile: "readOnly", submittedProfile: "readOnly", submittedVersion: 1, profileStatus: "unverified", requestedRouting: "tui", routingStatus: "unsupported", transport: "exec", nativeApprovals: false } : { version: 1, requestedProfile: "readOnly", effectiveProfile: permissionApplied ? "readOnly" : "full", profileStatus: permissionApplied ? "applied" : "pending", requestedRouting: "tui", routingStatus: permissionApplied ? "applied" : "bypassed", transport: "app-server", nativeApprovals: true }}
       resourceAgentId={agentId} model={longModel ? "gpt-6-astra-with-a-very-long-model-identifier-and-additional-settings" : "gpt-6-astra"} effort="high" account="codex-account-with-a-very-long-name" costUsd={12.34} usageTotal={113696}
       usage={{ input: 113101, output: 20007, cacheRead: large ? 2293760 : 2000, cacheCreation: 0 }}
       contextLimits={{ source: "codex", defaultWindow: 272000, maxWindow: large ? 1050000 : 872000, sessionWindow: 258400, compactAt: 120000 }} fullContext={109416} limit={258400} ring={[1200, 1800]} compacting={large} hint={{ above: 38, below: 0 }}
       detailOpen={false} onToggleDetail={() => {}} onAction={() => {}} onToggleVoiceHistory={() => {}} />
+    <button data-permission-submit onClick={() => setPermissionPhase("submitted")}>Submit exec profile</button>
+    <button data-permission-ack onClick={() => setPermissionPhase("applied")}>Acknowledge next turn</button>
     <button data-metrics-update onClick={() => setLarge(!large)}>Update usage</button>
     <button data-metrics-long-model onClick={() => setLongModel(!longModel)}>Long model</button>
     <div data-metrics-body style={{ flex: 1, minHeight: 0, overflow: "auto" }}>

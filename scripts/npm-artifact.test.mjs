@@ -15,7 +15,7 @@ test('downloaded npm artifact has no desktop lifecycle hook and an offline dry-r
   console.log(`PASS downloaded artifact ${result.name}@${result.version} (${result.platform})`);
 });
 
-for (const defect of ['lifecycle', 'version', 'network']) {
+for (const defect of ['lifecycle', 'version', 'network', 'uninstall-missing', 'uninstall-write', 'uninstall-autostart']) {
   test(`packed installer checks reject a ${defect} regression`, async () => {
     const dir = await mkdtemp(join(tmpdir(), 'chimera-packed-negative-'));
     try {
@@ -31,10 +31,20 @@ for (const defect of ['lifecycle', 'version', 'network']) {
         const source = await readFile(cli, 'utf8');
         await writeFile(cli, source.replace(/^(#![^\n]*\n)/, "$1if (process.argv.includes('--dry-run')) await fetch('https://test.invalid/release');\n"));
       }
+      if (defect === 'uninstall-missing') await rm(join(base, 'scripts/npm-uninstall.mjs'));
+      if (defect === 'uninstall-write' || defect === 'uninstall-autostart') {
+        const path = join(base, 'scripts/npm-uninstall.mjs');
+        const source = await readFile(path, 'utf8');
+        const sideEffect = defect === 'uninstall-write'
+          ? "await fs.writeFile('/packed-uninstall-must-not-write', 'bad');"
+          : "await promisify(execFile)(process.execPath, ['--version']);";
+        await writeFile(path, source.replace('export async function uninstall(args', `${sideEffect}\nexport async function uninstall(args`));
+      }
       const broken = join(dir, 'broken.tgz');
       createPackedArtifact(broken, dir);
       await assert.rejects(checkPackedInstaller(broken), error => {
-        if (defect === 'network') assert.match(error.stderr.toString(), /must remain offline/);
+        if (['network', 'uninstall-write', 'uninstall-autostart'].includes(defect)) assert.match(error.stderr.toString(), /must remain offline/);
+        else if (defect === 'uninstall-missing') assert.equal(error.code, 'ENOENT');
         else assert.equal(error.code, 'ERR_ASSERTION');
         return true;
       });

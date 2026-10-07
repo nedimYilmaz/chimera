@@ -1,3 +1,4 @@
+import { coordinationTool } from "./chimera-capabilities.js";
 import * as gitops from "./gitops.js";
 import { IssueSourceListRequestSchema, IssueSourceUpsertRequestSchema, IssueSourceRemoveRequestSchema, IssueLinkListRequestSchema, IssuePostCommentRequestSchema } from "./issues.js";
 // INPROC-CHIMERA-BRIDGE: the ONE tool-name -> RPC-method/params mapping for every chimera MCP
@@ -103,6 +104,9 @@ const HookRuleShape = z.object({
 // CHIMERA_TEAM) for a spawned chimera-mcp subprocess, now passed explicitly so an in-process
 // caller (no separate process, no env of its own) can supply the same values.
 export type ChimeraMcpCtx = {
+  access?: "coordination" | "orchestration";
+  toolAllowlist?: readonly string[];
+  toolDenylist?: readonly string[];
   agentId?: string;
   depth: number;
   maxDepthCap?: number;
@@ -622,7 +626,7 @@ const MCP_TOOL_TABLE_BASE = [
 
   {
     name: "agent_set_permission",
-    description: "Change a running agent's permission mode (permissionProfile and/or onPermissionRequest) live. Returns appliedToRunningProcess: for codex agents this is ALWAYS false — codex has no live permission hook and its OS sandbox is fixed at spawn, so this call only updates the record/agent notice, it does NOT re-sandbox the running process (only a respawn does). Do not treat a codex profile lowering as containment.",
+    description: "Request a running agent's permission profile and approval routing. Returns appliedToRunningProcess and, when supported, separate requested/effective profile and routing status. Codex keeps the current turn's native posture; app-server applies profiles on an acknowledged next turn. Exec starts a fresh CLI with next-turn options but cannot report exact effective policy or route native approvals to Chimera. Pending restrictions are not containment; autonomy is independent.",
     inputSchema: {
       agentId: z.string(),
       permissionProfile: z.enum(["readOnly", "acceptEdits", "full"]).optional(),
@@ -967,7 +971,7 @@ const MCP_TOOL_TABLE_BASE = [
         // "I know what I'm asking for", so [] must stay silent and byte-identical there. An
         // explicit scopeMode (F34-SCOPE-FILTER) is the same kind of deliberate choice — "global
         // only" / "project only" — so it gets the same silent treatment.
-        ...(a["scope"] === undefined && a["scopeMode"] === undefined ? {
+        ...(ctx.access !== "coordination" && a["scope"] === undefined && a["scopeMode"] === undefined ? {
           postDispatch: async (result: unknown, dispatch: McpDispatch) => {
             const hits = result as unknown[];
             if (hits.length > 0) return hits;
@@ -1134,10 +1138,12 @@ const MCP_TOOL_TABLE_BASE = [
           // AGENT-AUTONOMY: an absent ask_human/ask_agent/ask_team must not still be NAMED
           // here, or a full-autonomy agent reads this catalog and tries to call a tool it
           // does not have.
-          tools: MCP_TOOL_TABLE.map((t) => t.name).filter((n) => !fullAutonomy || !ASK_TOOL_NAMES.has(n)),
-          depthRule: "Every spawn increments depth by 1. A spawn is rejected once depth exceeds the granting parent's maxDepth cap (CHIMERA_MAX_DEPTH). orchestrationAllow=false (default) means a child gets no chimera MCP of its own.",
+          tools: visibleChimeraTools(ctx).map((t) => t.name),
+          depthRule: "Every spawn increments depth by 1. A spawn is rejected once depth exceeds the granting parent's maxDepth cap (CHIMERA_MAX_DEPTH). orchestrationAllow=false (default) gives a child bounded read/status/discovery and parent/team messaging, without delegation or admin tools.",
           permissionRule: "Gated tool calls route per the spawn's on.permissionRequest policy: 'auto' decides instantly from permissionProfile; 'poke:caller'/'tui' (legacy name for asking the attached operator) emit a permission_request event and wait for agent_permission_respond, falling back to the profile decision on timeout.",
-          askRule: fullAutonomy
+          askRule: ctx.access === "coordination"
+            ? "Use agent_send or agent_send_many for ordinary parent/tree/project-team mailbox messages. Force, slash controls, question dialogs, delegation and administration are outside this bounded grant."
+            : fullAutonomy
             ? "This agent runs with autonomy:\"full\" — no human/orchestrator is available. ask_human/ask_agent/ask_team do not exist here; decide yourself and record durable decisions in memory."
             : "Call ask_human to ask your human/orchestrator a question and block until they answer; call ask_agent to ask a SPECIFIC peer agent (to:{agentId}); call ask_team to ask a whole team or role, collecting ALL members' answers. Each emits an agent_question event, is answered via answer_question, and returns the structured answer(s). On timeout the question's default applies.",
         },
@@ -1819,7 +1825,9 @@ const MCP_TOOL_TABLE_BASE = [
       query: z.string().optional(), tag: z.string().optional(),
       detail: z.boolean().optional(), limit: z.number().int().min(1).max(50).optional(),
     },
-    resolve: (a) => {
+    resolve: (a, ctx) => {
+      const direct = new Set(directChimeraToolNames(ctx));
+      const catalog = visibleChimeraTools(ctx);
       const query = typeof a["query"] === "string" ? a["query"].toLowerCase() : undefined;
       const tag = typeof a["tag"] === "string" ? a["tag"].trim().toLowerCase() : undefined;
       const detail = a["detail"] === true;
@@ -1835,10 +1843,10 @@ const MCP_TOOL_TABLE_BASE = [
       // surface — and once it lands it is re-read on every later turn of that agent. The cheapest
       // correct answer to an unfocused question is the vocabulary for asking a focused one.
       if (!tag && !query) {
-        return { kind: "local", value: { tags: mcpToolTags(), hint: "call again with tag (a subject above) or query (words in a name or description)" } };
+        return { kind: "local", value: { tags: mcpToolTags(catalog), hint: "call again with tag (a subject above) or query (words in a name or description)" } };
       }
-      const tools = MCP_TOOL_TABLE
-        .filter((t) => (tag ? t.tags.includes(tag) : t.tier === "extended"))
+      const tools = catalog
+        .filter((t) => (tag ? t.tags.includes(tag) : ctx.access === "coordination" || t.tier === "extended"))
         // AGENT-AUTONOMY: ask_* are CORE, so an autonomy:"full" agent never sees them (skipped at
         // registration) and cannot reach them here either (chimera_call only accepts extended
         // tools). If they are ever moved to the extended tier that guarantee stops being
@@ -1871,20 +1879,20 @@ const MCP_TOOL_TABLE_BASE = [
           tags: t.tags,
           // Load-bearing when a tag search returns core tools: chimera_call refuses them, and an
           // agent that does not know which half a tool is in will pick the wrong caller.
-          direct: t.tier === "core",
+          direct: direct.has(t.name),
           inputSchema: t.inputSchema ? z.toJSONSchema(z.object(t.inputSchema)) : { type: "object", properties: {} },
         }));
       // The vocabulary itself, so a caller that guessed a tag wrong can see the real ones instead
       // of concluding the subject has no tools.
       const matched = terms.length > 0
-        ? MCP_TOOL_TABLE.filter((t) => (tag ? t.tags.includes(tag) : t.tier === "extended")).filter((t) => scoreTool(t, terms) > 0).length
+        ? catalog.filter((t) => (tag ? t.tags.includes(tag) : ctx.access === "coordination" || t.tier === "extended")).filter((t) => scoreTool(t, terms) > 0).length
         : tools.length;
       return {
         kind: "local",
         value: {
           tools,
           ...(matched > tools.length ? { truncated: matched - tools.length, hint: "raise limit or narrow the query" } : {}),
-          ...(tag && tools.length === 0 ? { tags: mcpToolTags() } : {}),
+          ...(tag && tools.length === 0 ? { tags: mcpToolTags(catalog) } : {}),
         },
       };
     },
@@ -1895,6 +1903,9 @@ const MCP_TOOL_TABLE_BASE = [
     inputSchema: { tool: z.string(), args: z.record(z.string(), z.unknown()).optional() },
     resolve: (a, ctx) => {
       const name = a["tool"];
+      if (typeof name !== "string" || (ctx.access === "coordination" && !coordinationTool(name)) || (ctx.access === "coordination" && ctx.toolAllowlist !== undefined && !ctx.toolAllowlist.includes(name)) || ctx.toolDenylist?.includes(name)) {
+        return { kind: "error", error: { code: "forbidden", message: "tool is outside this Chimera grant" } };
+      }
       const entry = MCP_TOOL_TABLE.find((t) => t.name === name && t.tier === "extended");
       if (!entry) {
         return { kind: "error", error: { code: "protocol", message: `unknown extended chimera tool "${name}" — call chimera_tools to discover valid names` } };
@@ -2132,6 +2143,21 @@ export function grantedChimeraToolNames(grant: ToolSurfaceGrant): readonly strin
     names.push(tool.name);
   }
   return names;
+}
+
+// Catalog and registration must agree, including core tools hidden by autonomy
+// and extended tools promoted by tags. Full orchestration retains its existing
+// wrapper grant; the child wrapper additionally requires each target in its grant.
+export function directChimeraToolNames(ctx: ChimeraMcpCtx): readonly string[] {
+  return grantedChimeraToolNames(ctx).filter(name => (ctx.access !== "coordination" || coordinationTool(name))
+    && (ctx.toolAllowlist === undefined || ctx.toolAllowlist.includes(name)) && !ctx.toolDenylist?.includes(name));
+}
+
+export function visibleChimeraTools(ctx: ChimeraMcpCtx): readonly McpToolEntry[] {
+  const direct = new Set(directChimeraToolNames(ctx));
+  return MCP_TOOL_TABLE.filter(tool => !ctx.toolDenylist?.includes(tool.name) && (direct.has(tool.name)
+    || (tool.tier === "extended" && direct.has("chimera_call") && (ctx.access !== "coordination"
+      || (coordinationTool(tool.name) && (ctx.toolAllowlist === undefined || ctx.toolAllowlist.includes(tool.name)))))));
 }
 
 // TOOL-SURFACE-MEASURE: what a spawn's chimera MCP grant costs, measured rather than guessed

@@ -6409,3 +6409,18 @@ export * from "./stt.js";
 export * from "./operator-web.js";
 
 export * from "./agent-messages.js";
+
+/** Requested settings and independently acknowledged native permission posture. */
+export type PermissionApplication = {
+  version: number;
+  requestedProfile: AgentSpec["permissionProfile"];
+  effectiveProfile?: AgentSpec["permissionProfile"];
+  submittedProfile?: AgentSpec["permissionProfile"];
+  submittedVersion?: number;
+  profileStatus: "pending" | "applied" | "failed" | "unverified";
+  requestedRouting: AgentSpec["on"]["permissionRequest"];
+  routingStatus: "applied" | "bypassed" | "unsupported";
+  transport: "app-server" | "exec";
+  nativeApprovals: boolean;
+  error?: string;
+};

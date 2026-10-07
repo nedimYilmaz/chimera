@@ -312,3 +312,25 @@ it("keeps a measured prompt counter when only the denominator is unknown", () =>
   expect(r.root.findByProps({ "data-context-detail": true }).findAllByType("span").map(s => s.children.join(""))).toEqual(["200k", "unknown"]);
   act(() => r.unmount());
 });
+
+
+it.each(["pending", "failed", "unverified", "applied"] as const)("renders truthful %s application copy", profileStatus => {
+  const renderer = renderHeader({ permissionProfile: "readOnly", permissionRequest: "tui", permissionAppliedToRunningProcess: false,
+    permissionApplication: { version: 1, requestedProfile: "readOnly", effectiveProfile: "full", profileStatus, requestedRouting: "tui", routingStatus: profileStatus === "applied" ? "applied" : "bypassed", transport: "app-server", nativeApprovals: true, ...(profileStatus === "failed" ? { error: "policy rejected" } : {}) } });
+  const chip = renderer.root.findAllByType("span").find(node => typeof node.props.title === "string" && node.props.title.startsWith("Requested:"))!;
+  expect(chip.props.title).toContain("effective: full");
+  expect(chip.props.title).not.toContain("respawn required");
+  expect(chip.children.join("")).toContain(profileStatus === "pending" ? "next turn pending" : profileStatus === "failed" ? "apply failed" : profileStatus === "unverified" ? "profile unverified" : "readOnly·tui");
+  if (profileStatus === "applied") expect(chip.children.join("")).not.toContain("⚠");
+});
+
+it("exec submitted copy keeps effective policy unknown and routing unavailable", () => {
+  const r = renderHeader({ permissionProfile: "readOnly", permissionRequest: "tui", permissionApplication: { version: 2, requestedProfile: "readOnly", submittedProfile: "readOnly", submittedVersion: 2, profileStatus: "unverified", requestedRouting: "tui", routingStatus: "unsupported", transport: "exec", nativeApprovals: false } });
+  const chip = r.root.findAllByType("span").find(n => typeof n.props.title === "string" && n.props.title.startsWith("Requested:"))!;
+  expect(chip.props.title).toContain("effective: unknown");
+  expect(chip.props.title).toContain("Exec submitted readOnly (generation 2)");
+  expect(chip.props.title).toContain("no native approval hooks");
+  expect(chip.children.join("")).toContain("profile unverified");
+  expect(chip.children.join("")).not.toContain("next turn pending");
+  act(() => r.unmount());
+});

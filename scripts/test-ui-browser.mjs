@@ -1422,6 +1422,13 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
   for (const width of [390, 630, 1180]) {
     await viewport(width, 800);
     await show("metrics");
+    check(`permission pending ${width}px keeps acknowledged full posture visible`, await evaluate(`document.querySelector('[data-transcript-header]').textContent.includes('next turn pending') && [...document.querySelectorAll('[data-transcript-header] span')].some(e => e.title.includes('effective: full'))`));
+    await click('[data-permission-submit]');
+    await settleRender();
+    check(`permission submitted ${width}px remains unverified with unknown policy`, await evaluate(`document.querySelector('[data-transcript-header]').textContent.includes('profile unverified') && !document.querySelector('[data-transcript-header]').textContent.includes('next turn pending') && [...document.querySelectorAll('[data-transcript-header] span')].some(e => e.title.includes('effective: unknown') && e.title.includes('Exec submitted readOnly (generation 1)') && e.title.includes('no native approval hooks'))`));
+    await click('[data-permission-ack]');
+    await settleRender();
+    check(`permission acknowledged ${width}px clears pending warning`, await evaluate(`!document.querySelector('[data-transcript-header]').textContent.includes('next turn pending') && [...document.querySelectorAll('[data-transcript-header] span')].some(e => e.title.includes('effective: readOnly') && e.title.includes('Native profile acknowledged'))`));
     const actionsBefore = await evaluate(`JSON.stringify([...document.querySelectorAll('[data-transcript-action]')].map(e => { const r=e.getBoundingClientRect(); return [r.x,r.y,r.width,r.height]; }))`);
     await click('[data-metrics-update]');
     await settleRender();

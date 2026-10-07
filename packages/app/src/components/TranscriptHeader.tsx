@@ -1,3 +1,4 @@
+import type { PermissionApplication } from "@chimera/protocol";
 import { useState } from "react";
 import { useAgentResources, type ResourceRequest } from "../state/agentResources";
 import { AgentResourceDetails } from "./AgentResources";
@@ -34,6 +35,7 @@ export function TranscriptHeader({
   permissionProfile,
   permissionRequest,
   permissionAppliedToRunningProcess,
+  permissionApplication,
   toolPolicyDenied,
   lastToolPolicyDenial,
   leaseChips,
@@ -72,9 +74,7 @@ export function TranscriptHeader({
   // agent_set_permission command-palette form (commands.system.ts) or mod+p's coupled toggle.
   permissionProfile?: string;
   permissionRequest?: string;
-  // CODEX-SETPERMISSION-IS-COSMETIC-TO-THE-OPERATOR: false only after a live setPermission that
-  // did NOT reach the running process (always false for codex — see supervisor.ts setPermission).
-  // Undefined until a live change has happened this session; undefined renders no warning.
+  permissionApplication?: PermissionApplication;
   permissionAppliedToRunningProcess?: boolean;
   // DENIED-TOOL-CALL-INVISIBLE: a host-tool-policy deny used to leave no trace the operator
   // could see without scrolling the raw event feed at the right moment. This chip mirrors the
@@ -126,6 +126,12 @@ export function TranscriptHeader({
   voiceHistoryOpen?: boolean;
   onToggleVoiceHistory?: () => void;
 }) {
+  const permissionWarning = permissionApplication
+    ? permissionApplication.profileStatus === "failed" ? "apply failed" : permissionApplication.profileStatus === "pending" ? "next turn pending" : permissionApplication.profileStatus === "unverified" ? "profile unverified" : permissionApplication.routingStatus !== "applied" && permissionApplication.requestedRouting !== "auto" ? "routing unavailable" : ""
+    : permissionAppliedToRunningProcess === false ? "not applied" : "";
+  const permissionDetail = permissionApplication
+    ? `Requested: ${permissionApplication.requestedProfile}; effective: ${permissionApplication.effectiveProfile ?? "unknown"}. ${permissionApplication.profileStatus === "pending" ? "Awaiting the next invocation; existing in-flight work retains its prior posture." : permissionApplication.profileStatus === "unverified" ? `Exec submitted ${permissionApplication.submittedProfile ?? "profile options"}${permissionApplication.submittedVersion === undefined ? "" : ` (generation ${permissionApplication.submittedVersion})`}; effective native policy is not reported.` : permissionApplication.profileStatus === "failed" ? `Application failed: ${permissionApplication.error ?? "request rejected"}.` : "Native profile acknowledged."} Approval routing: ${permissionApplication.routingStatus}${permissionApplication.nativeApprovals ? "" : " (no native approval hooks)"}.`
+    : "Recorded but not confirmed applied to the running process.";
   const resources = useAgentResources(resourceAgentId, !!resourceAgentId, resourceRequest);
   const [metricsOpenFor, setMetricsOpenFor] = useState<string | null>(null);
   const metricsKey = resourceAgentId ?? fullId;
@@ -242,21 +248,21 @@ export function TranscriptHeader({
         {permissionProfile ? (
           <span
             className={`${styles.chip} ${
-              permissionAppliedToRunningProcess === false
+              permissionWarning.length > 0
                 ? styles.toneDanger
                 : permissionProfile === "full" && permissionRequest === "auto"
                   ? styles.toneWarn
                   : ""
             }`}
             title={
-              permissionAppliedToRunningProcess === false
-                ? "recorded but NOT applied to the running process — this agent's provider has no live permission hook, its sandbox is fixed at spawn; a respawn is required to actually apply this"
+              permissionApplication || permissionWarning.length > 0
+                ? permissionDetail
                 : `permission scope (change via agent_set_permission or ${displayChord("mod+p")})`
             }
           >
             {permissionProfile}
             {permissionRequest ? `·${permissionRequest}` : ""}
-            {permissionAppliedToRunningProcess === false ? " ⚠ not applied" : ""}
+            {permissionWarning ? ` ⚠ ${permissionWarning}` : ""}
           </span>
         ) : null}
         {toolPolicyDenied ? (
@@ -377,7 +383,7 @@ export function TranscriptHeader({
         </div>
         <div>{name} · {fullId}</div>
         {model && <div>Model: {model}{account ? ` · account ${account}` : ""}{effort ? ` · effort ${effort}` : ""}</div>}
-        {permissionProfile && <div>Permissions: {permissionProfile}{permissionRequest ? ` · ${permissionRequest}` : ""}{permissionAppliedToRunningProcess === false ? " · recorded but not applied to the running process; respawn required" : ""}</div>}
+        {permissionProfile && <div>Permissions: {permissionProfile}{permissionRequest ? ` · ${permissionRequest}` : ""}{permissionApplication || permissionWarning ? ` · ${permissionDetail}` : ""}</div>}
         {toolPolicyDenied && <div>Host-tool policy denied {lastToolPolicyDenial?.tool ?? "a tool"}{lastToolPolicyDenial?.profile ? ` · profile ${lastToolPolicyDenial.profile}` : ""}</div>}
         {(leaseChips ?? []).map(c => <div key={c.kind}>{c.label} · {c.title}</div>)}
         <div data-context-detail>Current prompt <span>{ctxBasis !== null ? fmtTokens(ctxBasis) : "unknown"}</span> / effective context limit <span>{limit > 0 ? fmtTokens(limit) : "unknown"}</span> · includes cached input; separate from cumulative usage.</div>

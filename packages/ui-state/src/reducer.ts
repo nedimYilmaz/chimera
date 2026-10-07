@@ -2360,12 +2360,18 @@ function projectEvent(state: UiState, e: NormalizedEvent, stampTs = false): UiSt
       // fold each authoritative-when-present (like remoteControl above) so the AgentDetail
       // permission chip reflects a live agent.setPermission the instant it lands, with no wait
       // for the next agent.list snapshot (the app polls agent.list only once at bootstrap).
-      if (e.data["permissionChanged"] === true) {
+      const permissionApplication = e.data["permissionApplication"] as AgentView["permissionApplication"];
+      const permissionFieldsCurrent = permissionApplication ? typeof permissionApplication.version === "number" && permissionApplication.version >= (agent.permissionApplication?.version ?? -1) : !agent.permissionApplication;
+      if (permissionApplication && permissionFieldsCurrent) {
+        agent.permissionApplication = permissionApplication;
+        agent.permissionAppliedToRunningProcess = e.data["appliedToRunningProcess"] === true;
+      }
+      if (e.data["permissionChanged"] === true && permissionFieldsCurrent) {
         if (typeof e.data["permissionProfile"] === "string") agent.permissionProfile = e.data["permissionProfile"] as string;
         if (typeof e.data["permissionRequest"] === "string") agent.permissionRequest = e.data["permissionRequest"] as string;
         // CODEX-SETPERMISSION-IS-COSMETIC-TO-THE-OPERATOR: fold whether THIS change actually
         // reached the running process, same authoritative-when-present pattern as the fields above.
-        if (typeof e.data["appliedToRunningProcess"] === "boolean")
+        if (!permissionApplication && !agent.permissionApplication && typeof e.data["appliedToRunningProcess"] === "boolean")
           agent.permissionAppliedToRunningProcess = e.data["appliedToRunningProcess"] as boolean;
       }
       break;
@@ -2685,8 +2691,11 @@ export function reduce(state: UiState, action: Action): UiState {
           // CONDUCTOR-FULL-ACCESS: authoritative-when-present, mirroring gitBranch above — a
           // snapshot carrying the spec updates the live permission scope; an absent field (older
           // daemon's summary path that drops spec) keeps the prior value so the chip never blanks.
-          permissionProfile: typeof r.spec?.permissionProfile === "string" ? r.spec.permissionProfile : prev.permissionProfile,
-          permissionRequest: typeof r.spec?.on?.permissionRequest === "string" ? r.spec.on.permissionRequest : prev.permissionRequest,
+          permissionProfile: (r.permissionApplication ? r.permissionApplication.version >= (prev.permissionApplication?.version ?? -1) : !prev.permissionApplication) && typeof r.spec?.permissionProfile === "string" ? r.spec.permissionProfile : prev.permissionProfile,
+          permissionRequest: (r.permissionApplication ? r.permissionApplication.version >= (prev.permissionApplication?.version ?? -1) : !prev.permissionApplication) && typeof r.spec?.on?.permissionRequest === "string" ? r.spec.on.permissionRequest : prev.permissionRequest,
+          permissionApplication: r.permissionApplication && r.permissionApplication.version >= (prev.permissionApplication?.version ?? -1) ? r.permissionApplication : prev.permissionApplication,
+          permissionAppliedToRunningProcess: r.permissionApplication && r.permissionApplication.version >= (prev.permissionApplication?.version ?? -1)
+            ? r.permissionApplication.profileStatus === "applied" && (r.permissionApplication.routingStatus === "applied" || r.permissionApplication.routingStatus === "bypassed" && r.permissionApplication.requestedRouting === "auto") : prev.permissionAppliedToRunningProcess,
           // DENIED-TOOL-CALL-INVISIBLE: sticky like turnBudgetExceeded above — once a snapshot
           // reports a denial, keep the warning even if a later poll races ahead of the event.
           toolPolicyDenied: r.toolPolicyDenied === true ? true : prev.toolPolicyDenied,

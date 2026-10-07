@@ -4,7 +4,7 @@ import type { CodexInput } from "./codex-input.js";
 import type { DialogDecider, PermissionDecider, NativeVoiceHandle } from "../backend.js";
 import { CodexRpcError, CodexRpc, codexConfigArgs, type RpcProcessFactory } from "./codex-rpc.js";
 import { resolveCodexBinary } from "../providers/codex-cli-models.js";
-import type { InitializeParams, UserInput, ToolRequestUserInputResponse } from "./codex-wire.generated.js";
+import type { InitializeParams, UserInput, TurnStartParams, SandboxPolicy, ToolRequestUserInputResponse } from "./codex-wire.generated.js";
 import type { CompactResult } from "@chimera/protocol";
 import type { RemoteControlHandleResult } from "../backend.js";
 import { codexVoicePersona } from "./codex-voice-persona.js";
@@ -50,6 +50,29 @@ export class CodexAppServer implements CodexLike {
   private threadId: string | null = null;
   private turnId: string | null = null;
   private active = false;
+  private fullAccess = false;
+  private workspacePolicy?: Extract<SandboxPolicy, { type: "workspaceWrite" }>;
+  private startingPosture?: Promise<boolean>;
+  onPermissionApplied?: (options: Row) => void;
+  onPermissionFailed?: (error: unknown) => void;
+
+  private acknowledgePermission(options: Row): boolean {
+    this.fullAccess = this.fullRiskGranted && options.sandboxMode === "danger-full-access" && options.approvalPolicy === "never";
+    this.onPermissionApplied?.(options);
+    return this.fullAccess;
+  }
+
+  private sandboxPolicy(options: Row): SandboxPolicy | undefined {
+    if (options.sandboxMode === undefined) return undefined;
+    if (options.sandboxMode === "danger-full-access") {
+      if (!this.fullRiskGranted) throw new Error("Full Codex access requires an explicit risk grant");
+      return { type: "dangerFullAccess" };
+    }
+    if (options.sandboxMode === "read-only") return { type: "readOnly", networkAccess: false };
+    if (options.sandboxMode === "workspace-write" && this.workspacePolicy) return { ...this.workspacePolicy, writableRoots: [...this.workspacePolicy.writableRoots] };
+    if (options.sandboxMode === "workspace-write") return { type: "workspaceWrite", writableRoots: [options.workingDirectory, ...(options.additionalDirectories ?? [])].filter(Boolean), networkAccess: options.networkAccessEnabled ?? false, excludeTmpdirEnvVar: options.excludeTmpdirEnvVar ?? false, excludeSlashTmp: options.excludeSlashTmp ?? false };
+    throw new Error("Unsupported app-server sandboxMode");
+  }
   private compactOnly = false;
   private sawCompaction = false;
   private events: CodexThreadEvent[] = [];
@@ -169,7 +192,7 @@ export class CodexAppServer implements CodexLike {
 
   private wakeIdle(): void { for (const done of [...this.idleWaiters]) done(); }
 
-  constructor(options: CodexFactoryOptions, private permission: PermissionDecider, private dialog?: DialogDecider, factory?: RpcProcessFactory, private suppressQuestions = false, private fullAccess = false) {
+  constructor(options: CodexFactoryOptions, private permission: PermissionDecider, private dialog?: DialogDecider, factory?: RpcProcessFactory, private suppressQuestions = false, private fullRiskGranted = false) {
     const env = { ...(options.env ?? {}) };
     // API-key login MUST be memory-only; never overwrite a shared subscription
     // auth.json/keychain entry. Keep the built-in provider for namespace tools.
@@ -211,19 +234,21 @@ export class CodexAppServer implements CodexLike {
     const owner = this;
     let started: Promise<void> | undefined;
     const ensure = () => started ??= (async () => {
+      const launchOptions = { ...options };
       await this.ready;
-      if (options.approvalPolicy !== undefined && !["untrusted", "on-request", "never"].includes(options.approvalPolicy)) throw new Error("Unsupported app-server approvalPolicy");
+      this.sandboxPolicy(launchOptions);
+      if (launchOptions.approvalPolicy !== undefined && !["untrusted", "on-request", "never"].includes(launchOptions.approvalPolicy)) throw new Error("Unsupported app-server approvalPolicy");
       const params = {
-        ...(resume ? { threadId: resume } : {}), model: options.model, cwd: options.workingDirectory,
-        approvalPolicy: options.approvalPolicy === "untrusted" ? "untrusted" : options.approvalPolicy ?? "on-request",
-        sandbox: options.sandboxMode,
+        ...(resume ? { threadId: resume } : {}), model: launchOptions.model, cwd: launchOptions.workingDirectory,
+        approvalPolicy: launchOptions.approvalPolicy === "untrusted" ? "untrusted" : launchOptions.approvalPolicy ?? "on-request",
+        sandbox: launchOptions.sandboxMode,
         config: {
           // Apply on resume as well as fresh starts, without writing config.toml.
           "features.realtime_conversation": this.realtimeEnabled,
-          ...(typeof options.developerInstructions === "string" ? { developer_instructions: options.developerInstructions } : {}),
-          ...(options.webSearchMode ? { web_search: options.webSearchMode } : options.webSearchEnabled !== undefined ? { web_search: options.webSearchEnabled ? "live" : "disabled" } : {}),
-          ...(options.networkAccessEnabled !== undefined ? { "sandbox_workspace_write.network_access": options.networkAccessEnabled } : {}),
-          ...(options.additionalDirectories ? { "sandbox_workspace_write.writable_roots": options.additionalDirectories } : {}),
+          ...(typeof launchOptions.developerInstructions === "string" ? { developer_instructions: launchOptions.developerInstructions } : {}),
+          ...(launchOptions.webSearchMode ? { web_search: launchOptions.webSearchMode } : launchOptions.webSearchEnabled !== undefined ? { web_search: launchOptions.webSearchEnabled ? "live" : "disabled" } : {}),
+          ...(launchOptions.networkAccessEnabled !== undefined ? { "sandbox_workspace_write.network_access": launchOptions.networkAccessEnabled } : {}),
+          ...(launchOptions.additionalDirectories ? { "sandbox_workspace_write.writable_roots": launchOptions.additionalDirectories } : {}),
         },
       };
       let result;
@@ -238,7 +263,7 @@ export class CodexAppServer implements CodexLike {
         result = await this.rpc.request("thread/start", {
           ...freshParams,
           config: { ...freshParams.config, developer_instructions: [
-            options.developerInstructions,
+            launchOptions.developerInstructions,
             "The previous Codex session could not be restored. This is a fresh session: prior conversation context is unavailable. Continue from the current user input without assuming earlier work or instructions you cannot see.",
           ].filter(Boolean).join("\n\n") },
         });
@@ -247,12 +272,21 @@ export class CodexAppServer implements CodexLike {
         this.push({ type: "thread.resume_fallback", previousThreadId: resume, reason });
       }
       this.threadId = result.thread.id;
+      // Preserve the CLI's authoritative workspace roots/network/tmp settings
+      // when changing only the profile, rather than replacing ambient restrictions.
+      const policy = result.sandbox;
+      if (policy?.type === "workspaceWrite" && Array.isArray(policy.writableRoots) && typeof policy.networkAccess === "boolean" && typeof policy.excludeTmpdirEnvVar === "boolean" && typeof policy.excludeSlashTmp === "boolean")
+        this.workspacePolicy = { ...policy, writableRoots: [...policy.writableRoots] };
+      // Bootstrap responses expose actual policies; older servers may omit them.
+      const sandboxMode = ({ dangerFullAccess: "danger-full-access", readOnly: "read-only", workspaceWrite: "workspace-write" } as Row)[result.sandbox?.type];
+      if (sandboxMode && result.approvalPolicy !== undefined) this.acknowledgePermission({ ...launchOptions, sandboxMode, approvalPolicy: result.approvalPolicy });
       this.push({ type: "thread.started", thread_id: this.threadId });
     })();
     this.ensureThread = ensure;
     return {
       get id() { return owner.threadId; },
       async runStreamed(input, turnOptions) {
+        const invocationOptions = { ...options };
         await ensure();
         if (owner.failure) throw owner.failure;
         if (owner.closed) throw new Error("Codex app-server connection closed");
@@ -280,10 +314,20 @@ export class CodexAppServer implements CodexLike {
         };
         signal?.addEventListener("abort", abort, { once: true });
         try {
-          const result = await owner.rpc.request("turn/start", { threadId: owner.threadId, input: wireInput(input), effort: options.modelReasoningEffort, ...(turnOptions?.outputSchema ? { outputSchema: turnOptions.outputSchema } : {}) });
-          owner.turnId = result.turn.id;
-          if (interrupted) abort();
-        } catch (error) { signal?.removeEventListener("abort", abort); owner.active = false; owner.consuming = false; owner.turnSignal = undefined; throw error; }
+          const params: TurnStartParams = { threadId: owner.threadId!, input: wireInput(input), effort: invocationOptions.modelReasoningEffort, approvalPolicy: invocationOptions.approvalPolicy, sandboxPolicy: owner.sandboxPolicy(invocationOptions), ...(turnOptions?.outputSchema ? { outputSchema: turnOptions.outputSchema } : {}) };
+          // Requests may arrive before the response. Wait for this exact turn's
+          // acceptance rather than borrowing the preceding turn's full bypass.
+          let resolvePosture!: (full: boolean) => void;
+          const posture = owner.startingPosture = new Promise<boolean>(resolve => { resolvePosture = resolve; });
+          try {
+            const result = await owner.rpc.request("turn/start", params);
+            owner.turnId = result.turn.id;
+            if (params.sandboxPolicy?.type === "workspaceWrite") owner.workspacePolicy = { ...params.sandboxPolicy, writableRoots: [...params.sandboxPolicy.writableRoots] };
+            resolvePosture(invocationOptions.sandboxMode === undefined ? owner.fullAccess : owner.acknowledgePermission(invocationOptions));
+            if (interrupted) abort();
+          } catch (error) { resolvePosture(false); throw error; }
+          finally { if (owner.startingPosture === posture) owner.startingPosture = undefined; }
+        } catch (error) { if (!signal?.aborted) owner.onPermissionFailed?.(error); signal?.removeEventListener("abort", abort); owner.active = false; owner.consuming = false; owner.turnSignal = undefined; throw error; }
         return { events: (async function* () {
           try {
             while (owner.active || owner.events.length) {
@@ -444,8 +488,12 @@ export class CodexAppServer implements CodexLike {
     if (p.threadId !== this.threadId || p.turnId && p.turnId !== this.turnId) throw new Error("Request does not belong to the active turn");
     const controller = new AbortController();
     const cancelled = new Promise<never>((_, reject) => { this.requests.set(id, { cancel: () => { reject(new Error("Codex request resolved or cancelled")); controller.abort(); } }); });
+    const posture = this.startingPosture;
+    const acknowledgedFullAccess = this.fullAccess;
     const answer = async () => {
-      if (this.fullAccess && ["item/commandExecution/requestApproval", "item/fileChange/requestApproval", "item/permissions/requestApproval"].includes(method)) {
+      const fullAccess = posture ? await posture : acknowledgedFullAccess;
+      if (controller.signal.aborted || p.turnId && p.turnId !== this.turnId) throw new Error("Request does not belong to the active turn");
+      if (fullAccess && ["item/commandExecution/requestApproval", "item/fileChange/requestApproval", "item/permissions/requestApproval"].includes(method)) {
         return method === "item/permissions/requestApproval" ? { permissions: p.permissions, scope: "turn" } : { decision: "accept" };
       }
       if (method === "item/fileChange/requestApproval") {
@@ -469,7 +517,7 @@ export class CodexAppServer implements CodexLike {
         // Codex-generated empty-form MCP execution approvals are not questions
         // or OAuth consent. Honor the operator's acknowledged full permission
         // for THIS call only. Never auto-fill arbitrary server forms or URLs.
-        if (this.fullAccess && method === "mcpServer/elicitation/request" && p.mode === "form" && p._meta?.codex_approval_kind === "mcp_tool_call" && p.requestedSchema?.type === "object" && p.requestedSchema.properties && Object.keys(p.requestedSchema.properties).length === 0 && !(p.requestedSchema.required?.length)) {
+        if (fullAccess && method === "mcpServer/elicitation/request" && p.mode === "form" && p._meta?.codex_approval_kind === "mcp_tool_call" && p.requestedSchema?.type === "object" && p.requestedSchema.properties && Object.keys(p.requestedSchema.properties).length === 0 && !(p.requestedSchema.required?.length)) {
           return { action: "accept", content: {}, _meta: null };
         }
         // Autonomy suppresses optional clarification, NOT MCP authorization.

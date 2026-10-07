@@ -58,11 +58,19 @@ not running. Any stdio MCP client (Claude Code, Codex, ...) can use
 `chimera-mcp`.
 
 **Upgrade** by running `npx @nedimyilmaz/chimera@latest install` again; your
-accounts and history in `~/.chimera` are kept. **Uninstall:** run
-`chimera stop`, close the app, then remove the login item (the macOS
-LaunchAgent, or `systemctl --user disable --now chimerad.service` on Linux),
-the app and the `chimera` install directory. Keep `~/.chimera` if you want your
-accounts and history.
+accounts and history in `~/.chimera` are kept. Close the desktop, then uninstall with:
+
+```sh
+npx @nedimyilmaz/chimera@latest uninstall
+```
+
+This removes the owned app, login integration, CLI payload and any verified global
+npm package, while preserving accounts and history. Add `--purge-data` to delete
+the selected `CHIMERA_HOME` (default `~/.chimera`), managed projects inside it,
+the exact app cache and verified Chimera credential records after typed path
+confirmation. `--dry-run` previews the scope without changes. External repositories,
+provider login stores, shared runtimes and npm's npx cache are preserved. See
+[uninstall scope and custom homes](https://github.com/nedimYilmaz/chimera/blob/main/docs/NPM.md#uninstall).
 
 ## Why
 
