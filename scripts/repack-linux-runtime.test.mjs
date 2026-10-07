@@ -10,6 +10,7 @@ async function fixture(t) {
   t.after(() => rm(root, {recursive: true, force: true}));
   const runtime = join(root, 'runtime'), source = join(root, 'thin.AppImage'), plugin = join(root, 'plugin.AppImage');
   await mkdir(runtime);
+  await mkdir(join(runtime, 'private'), {mode: 0o750});
   await writeFile(join(runtime, 'runtime.json'), JSON.stringify({version: '1.2.3', platform: 'linux', arch: 'x64'}));
   await writeFile(join(runtime, 'codex'), 'immutable static ELF', {mode: 0o755});
   await symlink('codex', join(runtime, 'codex-link'));
@@ -18,7 +19,7 @@ async function fixture(t) {
   return {runtime, source, plugin, version: '1.2.3', arch: 'x64'};
 }
 
-for (const fault of ['none', 'bytes', 'mode', 'link', 'plugin', 'embedded']) {
+for (const fault of ['none', 'bytes', 'mode', 'directory-mode', 'link', 'plugin', 'embedded', 'offset', 'extractor']) {
   test(`opaque runtime repack ${fault}: preserves originals and checks final extracted content`, async t => {
     const f = await fixture(t), before = await runtimeInventory(f.runtime), calls = [];
     let appDir, temporary;
@@ -36,21 +37,28 @@ for (const fault of ['none', 'bytes', 'mode', 'link', 'plugin', 'embedded']) {
         assert.equal(options.env.ARCH, 'x86_64'); assert.equal(options.env.LDAI_VERSION, '1.2.3');
         if (fault === 'plugin') throw new Error('pack failed');
         await writeFile(options.env.LDAI_OUTPUT, 'complete artifact', {mode: 0o755});
+      } else if (command !== 'unsquashfs') {
+        assert.deepEqual(args, ['--appimage-offset']);
+        return fault === 'offset' ? 'NaN\n' : '8\n';
       } else {
-        assert.deepEqual(args, ['--appimage-extract']);
-        await cp(appDir, join(options.cwd, 'squashfs-root'), {recursive: true, verbatimSymlinks: true});
-        const copy = join(options.cwd, 'squashfs-root/usr/lib/chimera');
+        assert.deepEqual(args.slice(0, 3), ['-no-progress', '-offset', '8']);
+        assert.equal(args[3], '-dest');
+        assert.equal(args[6], 'usr/lib/chimera/runtime');
+        if (fault === 'extractor') throw new Error('unsquashfs failed');
+        await cp(appDir, args[4], {recursive: true, verbatimSymlinks: true});
+        const copy = join(args[4], 'usr/lib/chimera');
         if (fault === 'bytes') await writeFile(join(copy, 'runtime/codex'), 'patched ELF');
         if (fault === 'mode') await chmod(join(copy, 'runtime/codex'), 0o644);
+        if (fault === 'directory-mode') await chmod(join(copy, 'runtime/private'), 0o700);
         if (fault === 'link') { await rm(join(copy, 'runtime/codex-link')); await symlink('wrong', join(copy, 'runtime/codex-link')); }
       }
     };
     if (fault === 'none') {
       await repackLinuxRuntime({...f, run});
       assert.equal(await readFile(f.source, 'utf8'), 'complete artifact');
-      assert.equal(calls.length, 3);
+      assert.equal(calls.length, 4);
     } else {
-      await assert.rejects(repackLinuxRuntime({...f, run}), /changed|pack failed|already contains/);
+      await assert.rejects(repackLinuxRuntime({...f, run}), /changed|pack failed|already contains|Invalid AppImage|unsquashfs failed/);
       assert.equal(await readFile(f.source, 'utf8'), 'original thin artifact');
     }
     assert.equal(await runtimeInventory(f.runtime), before);

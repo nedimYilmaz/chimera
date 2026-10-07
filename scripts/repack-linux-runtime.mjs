@@ -45,7 +45,13 @@ export async function repackLinuxRuntime({source, runtime, plugin, version, arch
       cwd: temp, stdio: 'inherit', timeout: 900_000,
       env: {...process.env, APPIMAGE_EXTRACT_AND_RUN: '1', ARCH: arch === 'arm64' ? 'aarch64' : 'x86_64', LDAI_OUTPUT: output, LDAI_VERSION: version},
     });
-    await run(output, ['--appimage-extract'], {cwd: verify, stdio: 'ignore', timeout: 180_000});
+    // The type2 runtime's --appimage-extract creates every directory as 0700,
+    // regardless of its archived mode. Read the actual SquashFS metadata instead
+    // of weakening the mode check or attributing that extractor change to packing.
+    const offsetText = String(await run(output, ['--appimage-offset'], {encoding: 'utf8', stdio: 'pipe', timeout: 30_000})).trim();
+    const offset = Number(offsetText);
+    if (!/^[1-9]\d*$/.test(offsetText) || !Number.isSafeInteger(offset) || offset >= (await lstat(output)).size) throw new Error('Invalid AppImage filesystem offset');
+    await run('unsquashfs', ['-no-progress', '-offset', offsetText, '-dest', join(verify, 'squashfs-root'), output, 'usr/lib/chimera/runtime'], {stdio: 'ignore', timeout: 180_000});
     if (await runtimeInventory(join(verify, 'squashfs-root/usr/lib/chimera/runtime')) !== before) throw new Error('Packaged runtime bytes, modes or links changed');
     // Keep the original artifact on any packing or verification failure.
     const replacement = source + '.complete';
