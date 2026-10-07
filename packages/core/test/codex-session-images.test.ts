@@ -1,7 +1,7 @@
 import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { open as openAsync } from "node:fs/promises";
+import { open as openAsync, opendir } from "node:fs/promises";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CodexSessionImages } from "@chimera/core/backends/codex-session-images";
 import { CodexAgentBackend, normalizeCodexEvent, type CodexFactory } from "@chimera/core/backends/codex";
@@ -13,7 +13,7 @@ import { cxSpec } from "./codex-backend-helpers.js";
 
 vi.mock("node:fs/promises", async importOriginal => {
   const actual = await importOriginal<typeof import("node:fs/promises")>();
-  return { ...actual, open: vi.fn(actual.open) };
+  return { ...actual, open: vi.fn(actual.open), opendir: vi.fn(actual.opendir) };
 });
 
 // Captured event_msg/item_completed shape from exec 0.160.0; all identifiers,
@@ -71,14 +71,33 @@ describe("Codex exec native image rollout delivery", () => {
 
   it("rejects a nonregular matching path before any file read and finds a newly flushed session", async () => {
     const { home, path } = fixture(); rmSync(path); mkdirSync(path);
+    // Exercise filesystem identity/rediscovery independently of CI scheduling latency.
+    // The separate deadline controls below retain the production elapsed-work bounds.
+    const options = { now: () => 0 };
     vi.mocked(openAsync).mockClear();
-    expect(await new CodexSessionImages(home, id, 0).read()).toEqual([{ type: "image_output.warning", reason: "nonregular-rollout" }]);
+    expect(await new CodexSessionImages(home, id, 0, options).read()).toEqual([{ type: "image_output.warning", reason: "nonregular-rollout" }]);
     expect(openAsync).not.toHaveBeenCalled();
     rmSync(path, { recursive: true });
-    const reader = new CodexSessionImages(home, id, 0);
+    const reader = new CodexSessionImages(home, id, 0, options);
     expect(await reader.read()).toEqual([]);
     writeFileSync(path, meta() + start() + image());
     expect(normalized(await reader.read()).at(-1)?.data.images).toEqual([{ mediaType: "image/png", data: png }]);
+  });
+
+  it("reports the default discovery deadline if filesystem work exhausts the budget", async () => {
+    const { home } = fixture(meta() + start() + image());
+    let clock = 0;
+    const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+    vi.mocked(opendir).mockImplementationOnce(async (...args: Parameters<typeof opendir>) => {
+      const directory = await actual.opendir(...args);
+      clock = 101;
+      return directory;
+    });
+    vi.mocked(openAsync).mockClear();
+    const reader = new CodexSessionImages(home, id, 0, { now: () => clock });
+    expect(await reader.read()).toEqual([{ type: "image_output.warning", reason: "discovery-limit" }]);
+    expect(openAsync).not.toHaveBeenCalled();
+    expect(await reader.read()).toEqual([]);
   });
 
   it("fails closed for ambiguous discovery, truncated files and missing/incomplete final identity", async () => {

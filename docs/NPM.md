@@ -65,9 +65,9 @@ restart after a failed migration. Older CLI release directories remain for recov
 
 ## Uninstall
 
-Uninstall support is included from **0.1.2**. Use these commands after that version
+Uninstall support is first published in **0.1.3**. Use these commands after that version
 is published; older packages do not provide this command. Close the desktop first
-(or use the installed `chimera uninstall` with version 0.1.2 or newer):
+(or use the installed `chimera uninstall` with version 0.1.3 or newer):
 
 ```sh
 npx @nedimyilmaz/chimera@latest uninstall

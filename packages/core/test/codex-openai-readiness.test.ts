@@ -43,9 +43,12 @@ describe("Codex/OpenAI readiness", () => {
   it("admits verified GPT-6 and reports providerOptions model and effort", async () => {
     const { factory } = fakeCodex([[{ type: "thread.started", thread_id: "th-1" }]]);
     const events: BackendEvent[] = [];
-    new CodexAgentBackend({ codexFactory: factory }).spawn(cxSpec({ model: "gpt-5.5", effort: "low", providerOptions: { model: "gpt-6-astra", modelReasoningEffort: "high" } }), (e) => events.push(e), async () => true);
-    await settle();
-    expect(events[0]?.data).toMatchObject({ model: "gpt-6-astra", effort: "high" });
+    const handle = new CodexAgentBackend({ codexFactory: factory }).spawn(cxSpec({ model: "gpt-5.5", effort: "low", providerOptions: { model: "gpt-6-astra", modelReasoningEffort: "high" } }), (e) => events.push(e), async () => true);
+    try {
+      // Permission status can precede startup; model telemetry belongs to agent_started.
+      await vi.waitFor(() => expect(events.find(e => e.kind === "agent_started")?.data)
+        .toMatchObject({ model: "gpt-6-astra", effort: "high" }));
+    } finally { await handle.kill(); }
   });
 
   it("materializes private attachments and retains content precedence and instructions", () => {
