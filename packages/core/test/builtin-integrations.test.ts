@@ -140,6 +140,18 @@ describe("manifest schema", () => {
 });
 
 describe("loadBuiltInContext / findRuntimeRoot", () => {
+  it("finds the installer-owned adjacent runtime without consulting environment paths", () => {
+    const fs = new FakeFs();
+    const base = "/opt/npm package";
+    const root = `${base}/desktop-runtime`;
+    fs.files.add(`${root}/runtime.json`);
+    const source = `file://${base.replaceAll(" ", "%20")}/packages/core/src/builtin-integrations.js`;
+    expect(findRuntimeRoot(source, fs)).toBeNull();
+    fs.files.add(`${root}/integrations/manifest.json`);
+    expect(findRuntimeRoot(source, fs)).toBe(root);
+    expect(findRuntimeRoot("file:///other/packages/core/src/builtin-integrations.js", fs)).toBeNull();
+  });
+
   const fsWith = (m: unknown, runtime: unknown) => {
     const fs = new FakeFs();
     fs.json.set("/rt/integrations/manifest.json", m);

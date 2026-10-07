@@ -32,9 +32,9 @@ try {
   const npm = join(runtime, windows ? 'node/node_modules/npm/bin/npm-cli.js' : 'node/lib/node_modules/npm/bin/npm-cli.js');
   assert.match(run([npm, '--version']), /^\d+\./);
   console.log('PASS embedded Node, npm and Git without developer PATH');
-  assert.match(run([join(runtime, 'bootstrap.mjs')]), /background service ready/);
+  assert.match(run([join(runtime, 'bootstrap.mjs'), '--service-only']), /background service ready/);
   const pid = await readFile(join(state, 'daemon.pid'), 'utf8');
-  run([join(runtime, 'bootstrap.mjs')]);
+  run([join(runtime, 'bootstrap.mjs'), '--service-only']);
   assert.equal(await readFile(join(state, 'daemon.pid'), 'utf8'), pid, 'Second open must reuse the daemon');
   const { ChimeraClient } = await import(pathToFileURL(join(runtime, 'packages/client/src/client.js')));
   client = await ChimeraClient.connect({ home: state, env, autostart: false });
@@ -86,10 +86,12 @@ try {
     assert.equal(desktop.sessionMode, 'exclusive');
     assert.equal(desktop.env.CUA_DRIVER_RS_TELEMETRY_ENABLED, '0');
   } else assert.equal(desktop, undefined);
+  if (m.integrations['chimera-browser'].state === 'bundled') {
   assert.deepEqual(browser.builtIn, { id: 'chimera-browser', version: m.integrations['chimera-browser'].version });
   assert.equal(browser.command, abs(realRoot, m.integrations['chimera-browser'].node));
   assert.equal(browser.sessionMode, 'agent', 'each agent must get its own browser');
   assert.ok(browser.args.includes(abs(realRoot, m.integrations['chimera-browser'].executable)));
+  } else assert.equal(browser, undefined);
   assert.equal(reg.laya, undefined, 'Laya registers only after its first-use download');
   for (const file of [join(state, 'mcpstore.json'), join(runtime, 'integrations/manifest.json'), join(runtime, 'runtime.json'), join(runtime, 'integrations/NOTICE.md'), join(runtime, 'integrations/laya/requirements.lock')]) {
     assert.ok(!(await readFile(file, 'utf8').catch(() => '')).includes(developerHome), `${file} leaks the developer home`);
@@ -97,18 +99,19 @@ try {
   const status = await client.request('computerUse.builtins.status', {});
   assert.equal(status.managed, true);
   const by = Object.fromEntries(status.integrations.map(i => [i.id, i]));
-  assert.equal(by['chimera-browser'].state, 'ready');
-  assert.equal(by.laya.state, 'not-installed');
-  assert.equal(by.laya.modelAssets, 'downloaded-on-first-use');
+  assert.equal(by['chimera-browser'].state, m.integrations['chimera-browser'].state === 'bundled' ? 'ready' : 'unsupported-platform');
+  assert.equal(by.laya.state, m.integrations.laya.state === 'managed-download' ? 'not-installed' : 'unsupported-platform');
   console.log('PASS built-in integrations registered from the relocated runtime, no developer path, Laya honestly not-installed');
 
   // Real tool discovery + a real call through the daemon's mcp_store, from the relocated runtime with a fresh HOME.
+  if (m.integrations['chimera-browser'].state === 'bundled') {
   const found = (await client.request('mcpstore.tools', { servers: ['chimera-browser'] })).servers.find(x => x.server === 'chimera-browser' || x.name === 'chimera-browser');
   const names = (found?.tools ?? []).map(t => t.name);
   assert.ok(names.includes('browser_navigate'), `chimera-browser tools not discovered: ${JSON.stringify(found).slice(0, 300)}`);
   const nav = await client.request('mcpstore.call', { server: 'chimera-browser', tool: 'browser_navigate', args: { url: 'data:text/html,<title>relocated</title><h1>hello chimera</h1>' }, agentId: isolated.agentId });
   assert.match(JSON.stringify(nav), /relocated|hello chimera/);
   console.log(`PASS chimera-browser: ${names.length} tools discovered and browser_navigate ran in the bundled Chrome`);
+  }
   if (m.integrations['chimera-desktop'].state === 'bundled') {
     const d = (await client.request('mcpstore.tools', { servers: ['chimera-desktop'] })).servers.find(x => x.server === 'chimera-desktop' || x.name === 'chimera-desktop');
     assert.match(JSON.stringify(d), /not running right now|desktop service/i, 'desktop must explain that the Chimera app hosts it');
@@ -125,7 +128,7 @@ try {
     await client.request('daemon.stop', {}).catch(() => {});
     client.close();
     for (let i = 0; i < 100; i++) { try { process.kill(Number(await readFile(join(state, 'daemon.pid'), 'utf8')), 0); } catch { break; } await new Promise(r => setTimeout(r, 100)); }
-    assert.match(execFileSync(bin, [join(root, 'bootstrap.mjs')], { cwd: home, env, encoding: 'utf8', timeout: 40_000 }), /background service ready/);
+    assert.match(execFileSync(bin, [join(root, 'bootstrap.mjs'), '--service-only'], { cwd: home, env, encoding: 'utf8', timeout: 40_000 }), /background service ready/);
     client = await ChimeraClient.connect({ home: state, env, autostart: false });
   };
   const before = await readStoreText();
@@ -139,23 +142,25 @@ try {
   for (let i = 0; i < 100; i++) { try { process.kill(Number(await readFile(join(state, 'daemon.pid'), 'utf8')), 0); } catch { break; } await new Promise(r => setTimeout(r, 100)); }
   await rename(runtime, moved);
   const movedNode = join(moved, windows ? 'node/node.exe' : 'node/bin/node');
-  assert.match(execFileSync(movedNode, [join(moved, 'bootstrap.mjs')], { cwd: home, env, encoding: 'utf8', timeout: 40_000 }), /background service ready/);
+  assert.match(execFileSync(movedNode, [join(moved, 'bootstrap.mjs'), '--service-only'], { cwd: home, env, encoding: 'utf8', timeout: 40_000 }), /background service ready/);
   client = await ChimeraClient.connect({ home: state, env, autostart: false });
   const movedRoot = await realpath(moved);
   reg = servers(await readStoreText());
+  if (m.integrations['chimera-browser'].state === 'bundled') {
   assert.equal(reg['chimera-browser'].command, abs(movedRoot, m.integrations['chimera-browser'].node), 'relocation must re-point the built-in');
   assert.ok(!(await readStoreText()).includes(realRoot), 'no stale install path may remain after the app moved');
   assert.deepEqual(reg['chimera-browser'].builtIn, { id: 'chimera-browser', version: m.integrations['chimera-browser'].version });
+  }
   assert.deepEqual(reg.laya, custom.laya, 'a custom server that merely shares a built-in name must stay untouched');
   assert.deepEqual(reg['my-tool'], custom['my-tool']);
   const afterMove = await client.request('computerUse.builtins.status', {});
-  assert.equal(afterMove.integrations.find(i => i.id === 'chimera-browser').state, 'ready');
+  assert.equal(afterMove.integrations.find(i => i.id === 'chimera-browser').state, m.integrations['chimera-browser'].state === 'bundled' ? 'ready' : 'unsupported-platform');
   console.log('PASS relocating the app re-points built-ins; custom MCP entries (incl. a custom "laya") are untouched');
 
   // Opt-in (downloads PyTorch, several hundred MB): the REAL first-use Laya install from the bundled python,
   // hash lock and wheel, then the MCP server answering from the relocated runtime. A custom `laya` from the
   // check above would (correctly) block registration, so remove it first.
-  if (process.env.CHIMERA_SMOKE_LAYA === '1') {
+  if (process.env.CHIMERA_SMOKE_LAYA === '1' && m.integrations.laya.state === 'managed-download') {
     // A bootstrap-started daemon is reparented to init, which any OTHER Chimera on this machine treats as an
     // orphan and reaps (HealthMonitor.sweepOrphanChimerads) -- fatal to a minutes-long install. Host the daemon
     // as our own child (ppid = this process) for this phase instead.

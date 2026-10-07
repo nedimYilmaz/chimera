@@ -72,7 +72,13 @@ export type BuiltInContext = { root: string; manifest: BuiltInManifest; pid?: nu
 export function findRuntimeRoot(startUrl: string = import.meta.url, fs: BuiltInFs = realFs): string | null {
   let root: string;
   try { root = resolve(dirname(fileURLToPath(startUrl)), "../../.."); } catch { return null; }
-  return fs.isFile(join(root, "runtime.json")) && fs.isFile(join(root, "integrations", "manifest.json")) ? root : null;
+  // The npm installer places the verified desktop runtime beside the CLI, so the
+  // login daemon and the desktop use the same integration payload. Never search PATH
+  // or accept an environment-provided runtime root.
+  for (const candidate of [root, join(root, "desktop-runtime")]) {
+    if (fs.isFile(join(candidate, "runtime.json")) && fs.isFile(join(candidate, "integrations", "manifest.json"))) return candidate;
+  }
+  return null;
 }
 
 const RuntimeInfo = z.object({ platform: z.string(), arch: z.string() }).passthrough();
@@ -201,7 +207,7 @@ export function resolveBuiltIns(ctx: BuiltInContext, home: string, fs: BuiltInFs
       } else if (sameBuild) {
         out.laya = { status: { ...base, state: "not-installed", reason: "Laya's model checkpoint is pinned to a reviewed revision and checksum, and this install has not verified it. Install again to download and check it." } };
       } else {
-        out.laya = { status: { ...base, state: "not-installed", reason: "Laya's Python packages and models download on first use." } };
+        out.laya = { status: { ...base, state: "not-installed", reason: "Laya setup has not completed. Finish installation to download and verify its Python packages and model." } };
       }
     }
   }

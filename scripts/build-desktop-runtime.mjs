@@ -121,6 +121,7 @@ try {
   // Only this checksum-verifying downloader runs; arbitrary dependency install hooks do not.
   run(node, [join(out, 'node_modules/dugite/script/download-git.js')]);
   await cp(join(root, 'scripts/desktop-bootstrap.mjs'), join(out, 'bootstrap.mjs'));
+  await cp(join(root, 'scripts/prepare-desktop-integrations.mjs'), join(out, 'prepare-integrations.mjs'));
   await cp(join(root, 'LICENSE'), join(out, 'LICENSE'));
   run(node, [join(out, 'bootstrap.mjs'), '--check']);
   const { artifacts } = await stageIntegrations({

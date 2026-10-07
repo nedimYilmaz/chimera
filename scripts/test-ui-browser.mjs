@@ -1426,6 +1426,9 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
     await click('[data-permission-submit]');
     await settleRender();
     check(`permission submitted ${width}px remains unverified with unknown policy`, await evaluate(`document.querySelector('[data-transcript-header]').textContent.includes('profile unverified') && !document.querySelector('[data-transcript-header]').textContent.includes('next turn pending') && [...document.querySelectorAll('[data-transcript-header] span')].some(e => e.title.includes('effective: unknown') && e.title.includes('Exec submitted readOnly (generation 1)') && e.title.includes('no native approval hooks'))`));
+    await click('[data-permission-fresh]');
+    await settleRender();
+    check(`permission fresh exec ${width}px uncertainty is informational`, await evaluate(`(() => { const chip = document.querySelector('[data-permission-tone="info"]'); return !!chip && chip.textContent.includes('full·auto') && chip.textContent.includes('profile unverified') && !chip.textContent.includes('⚠') && chip.title.includes('effective: unknown') && chip.title.includes('Exec submitted full (generation 0)'); })()`));
     await click('[data-permission-ack]');
     await settleRender();
     check(`permission acknowledged ${width}px clears pending warning`, await evaluate(`!document.querySelector('[data-transcript-header]').textContent.includes('next turn pending') && [...document.querySelectorAll('[data-transcript-header] span')].some(e => e.title.includes('effective: readOnly') && e.title.includes('Native profile acknowledged'))`));

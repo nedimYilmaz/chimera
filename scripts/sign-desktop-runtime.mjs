@@ -3,6 +3,7 @@
 import { open, readdir, mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { join, resolve, basename } from 'node:path';
 import { tmpdir } from 'node:os';
+import { randomBytes } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 
 if (process.platform !== 'darwin') throw new Error('macOS signing host required');
@@ -31,6 +32,28 @@ const profileFor = name => {
 const entitlements = {};
 for (const [name, keys] of Object.entries(profiles)) { entitlements[name] = join(temp, `${name}.plist`); await writeFile(entitlements[name], plist(keys)); }
 let count = 0;
+let signingKeychain;
+const security = args => {
+  try { return execFileSync('/usr/bin/security', args, { stdio: ['ignore', 'pipe', 'pipe'] }); }
+  catch { throw new Error(`Runtime signing keychain operation failed: ${args[0]}`); }
+};
+// Tauri imports CI certificates only during its build. Nested runtime signing happens earlier,
+// so use a private keychain here; never import release keys into the builder's login keychain.
+const keychains = process.env.APPLE_CERTIFICATE
+  ? [...security(['list-keychains', '-d', 'user']).toString().matchAll(/"([^"\n]+)"/g)].map(m => m[1]) : null;
+async function prepareKeychain() {
+  if (!process.env.APPLE_CERTIFICATE) return;
+  if (!process.env.APPLE_CERTIFICATE_PASSWORD) throw new Error('APPLE_CERTIFICATE_PASSWORD is required');
+  const certificate = join(temp, 'identity.p12');
+  await writeFile(certificate, Buffer.from(process.env.APPLE_CERTIFICATE, 'base64'), { mode: 0o600 });
+  signingKeychain = join(temp, 'runtime.keychain-db');
+  const password = randomBytes(32).toString('hex');
+  security(['create-keychain', '-p', password, signingKeychain]);
+  security(['unlock-keychain', '-p', password, signingKeychain]);
+  security(['import', certificate, '-k', signingKeychain, '-P', process.env.APPLE_CERTIFICATE_PASSWORD, '-T', '/usr/bin/codesign']);
+  security(['set-key-partition-list', '-S', 'apple-tool:,apple:,codesign:', '-s', '-k', password, signingKeychain]);
+}
+
 async function sign(dir) {
   for (const entry of await readdir(dir, { withFileTypes: true })) {
     const path = join(dir, entry.name);
@@ -41,11 +64,18 @@ async function sign(dir) {
     try { await fd.read(magic, 0, 4, 0); } finally { await fd.close(); }
     if (!['feedface', 'feedfacf', 'cefaedfe', 'cffaedfe', 'cafebabe', 'bebafeca', 'cafebabf', 'bfbafeca'].includes(magic.toString('hex'))) continue;
     const args = ['--force', '--sign', identity, '--timestamp', '--options', 'runtime'];
+    if (signingKeychain) args.push('--keychain', signingKeychain);
     const profile = profileFor(basename(path));
     if (profile) args.push('--entitlements', entitlements[profile]);
     execFileSync('/usr/bin/codesign', [...args, path], { stdio: ['ignore', 'ignore', 'pipe'] });
     count++;
   }
 }
-try { await sign(root); console.log(`Signed ${count} embedded Mach-O files`); }
-finally { await rm(temp, { recursive: true, force: true }); }
+try { await prepareKeychain(); await sign(root); console.log(`Signed ${count} embedded Mach-O files`); }
+finally {
+  try { if (signingKeychain) security(['delete-keychain', signingKeychain]); }
+  finally {
+    try { if (keychains) security(['list-keychains', '-d', 'user', '-s', ...keychains]); }
+    finally { await rm(temp, { recursive: true, force: true }); }
+  }
+}

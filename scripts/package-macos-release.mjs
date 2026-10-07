@@ -13,6 +13,11 @@ const app = join(root, 'packages/app/src-tauri/target/release/bundle/macos/chime
 const run = (command, args) => execFileSync(command, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] });
 if (run('/usr/libexec/PlistBuddy', ['-c', 'Print :CFBundleShortVersionString', join(app, 'Contents/Info.plist')]).trim() !== npm.version) throw new Error('Built app version differs from npm release');
 if (run('/usr/libexec/PlistBuddy', ['-c', 'Print :CFBundleIdentifier', join(app, 'Contents/Info.plist')]).trim() !== 'dev.chimera.desktop') throw new Error('Unexpected app identifier');
+const runtimeRoot = join(app, 'Contents/Resources/runtime');
+const runtime = JSON.parse(await readFile(join(runtimeRoot, 'runtime.json'), 'utf8'));
+const integrations = JSON.parse(await readFile(join(runtimeRoot, 'integrations/manifest.json'), 'utf8'));
+if (runtime.version !== npm.version || runtime.platform !== 'darwin' || runtime.arch !== process.arch || integrations.platform !== 'darwin' || integrations.arch !== process.arch) throw new Error('Missing or mismatched bundled Computer Use runtime');
+for (const id of ['chimera-desktop', 'chimera-browser', 'laya']) if (!integrations.integrations?.[id]) throw new Error(`Missing built-in integration: ${id}`);
 run('/usr/bin/codesign', ['--verify', '--deep', '--strict', app]);
 run('/usr/sbin/spctl', ['--assess', '--type', 'execute', app]);
 run('/usr/bin/xcrun', ['stapler', 'validate', app]);

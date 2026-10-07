@@ -50,8 +50,12 @@ jobs:
           windows_publisher_thumbprint: ${{ inputs.windows_publisher_thumbprint }}
       - name: Linux native dependencies
         run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev patchelf xdg-utils
+      - name: Stage and verify bundled Computer Use runtime
+        run: |
+          node scripts/build-desktop-runtime.mjs
+          node scripts/test-desktop-runtime.mjs
       - name: Build Linux AppImage
-        run: pnpm --filter @chimera/app tauri build --bundles appimage
+        run: pnpm --filter @chimera/app tauri build --config src-tauri/tauri.standalone.conf.json --bundles appimage
       - name: Verify and name native artifact
         run: node scripts/package-desktop-release.mjs
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

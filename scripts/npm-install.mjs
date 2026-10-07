@@ -1,4 +1,5 @@
 // Shipped inside the npm artifact. All downloads/build preparation precede service changes.
+import { prepareInstalledIntegrations } from './npm-install-integrations.mjs';
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -127,7 +128,7 @@ export async function install(args = process.argv.slice(3)) {
 
 // Dependencies are injectable for offline transaction tests; production uses the native
 // commands and the client from the exact permanent npm payload being installed.
-export async function installMac({ manifest, plan, args, packageRoot }, { run = exec, download: fetchRelease = download, ChimeraClient: Client } = {}) {
+export async function installMac({ manifest, plan, args, packageRoot }, { run = exec, download: fetchRelease = download, ChimeraClient: Client, prepareIntegrations = prepareInstalledIntegrations } = {}) {
   const exec = run;
   await exec('git', ['--version']);
   await exec('npm', ['--version']);
@@ -186,6 +187,7 @@ export async function installMac({ manifest, plan, args, packageRoot }, { run = 
     const permanent = join(releaseDir, 'node_modules', manifest.name);
     const cli = join(permanent, manifest.bin.chimera);
     await exec(process.execPath, [cli, 'doctor']);
+    await prepareIntegrations({ source: join(app, 'Contents/Resources/runtime'), permanent, plan, run });
     await mkdir(dirname(plan.app), { recursive: true });
     await mkdir(plan.bin, { recursive: true });
     await mkdir(dirname(plan.plist), { recursive: true });

@@ -137,7 +137,7 @@ const readme = await readFile(join(root, 'README.md'), 'utf8');
 await writeFile(join(out, 'README.md'), readme
   .replace(/(\]\(|src=")site\/assets\//g, '$1https://nedimyilmaz.github.io/chimera/assets/'));
 await mkdir(join(out, 'scripts'), { recursive: true });
-for (const file of ['npm-install.mjs', 'npm-install-portable.mjs', 'npm-install-platforms.mjs', 'npm-uninstall.mjs']) {
+for (const file of ['npm-install.mjs', 'npm-install-portable.mjs', 'npm-install-platforms.mjs', 'npm-install-integrations.mjs', 'npm-uninstall.mjs']) {
   await copyFile(join(root, 'scripts', file), join(out, 'scripts', file));
 }
 console.log(`Built ${name}@${version} in ${out}`);

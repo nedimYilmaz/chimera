@@ -55,6 +55,8 @@ export const PYTHON = {
 };
 
 export const LAYA = {
+  // Only native dependency closures reviewed and committed for this release.
+  targets: ['darwin-arm64'],
   version: '0.3.28',
   license: 'Apache-2.0',
   source: 'https://pypi.org/project/laya/0.3.28/',

@@ -330,7 +330,19 @@ it("exec submitted copy keeps effective policy unknown and routing unavailable",
   expect(chip.props.title).toContain("effective: unknown");
   expect(chip.props.title).toContain("Exec submitted readOnly (generation 2)");
   expect(chip.props.title).toContain("no native approval hooks");
-  expect(chip.children.join("")).toContain("profile unverified");
+  expect(chip.children.join("")).toContain("routing unavailable");
   expect(chip.children.join("")).not.toContain("next turn pending");
+  act(() => r.unmount());
+});
+
+
+it("fresh exec full/auto profile uncertainty is neutral and still inspectable", () => {
+  const r = renderHeader({ permissionProfile: "full", permissionRequest: "auto", permissionAppliedToRunningProcess: false,
+    permissionApplication: { version: 0, requestedProfile: "full", submittedProfile: "full", submittedVersion: 0, profileStatus: "unverified", requestedRouting: "auto", routingStatus: "unsupported", transport: "exec", nativeApprovals: false } });
+  const chip = r.root.findByProps({ "data-permission-tone": "info" });
+  expect(chip.children.join("")).toContain("profile unverified");
+  expect(chip.children.join("")).not.toContain("⚠");
+  expect(chip.props.title).toContain("effective: unknown");
+  expect(chip.props.title).toContain("Exec submitted full (generation 0)");
   act(() => r.unmount());
 });

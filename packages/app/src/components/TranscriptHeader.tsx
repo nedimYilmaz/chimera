@@ -126,9 +126,13 @@ export function TranscriptHeader({
   voiceHistoryOpen?: boolean;
   onToggleVoiceHistory?: () => void;
 }) {
+  // Exec acknowledges submitted options, but does not report effective policy. That is
+  // a capability limit, not a failed permission change; keep it inspectable without an alarm.
   const permissionWarning = permissionApplication
-    ? permissionApplication.profileStatus === "failed" ? "apply failed" : permissionApplication.profileStatus === "pending" ? "next turn pending" : permissionApplication.profileStatus === "unverified" ? "profile unverified" : permissionApplication.routingStatus !== "applied" && permissionApplication.requestedRouting !== "auto" ? "routing unavailable" : ""
+    ? permissionApplication.profileStatus === "failed" ? "apply failed" : permissionApplication.profileStatus !== "pending" && permissionApplication.routingStatus !== "applied" && permissionApplication.requestedRouting !== "auto" ? "routing unavailable" : ""
     : permissionAppliedToRunningProcess === false ? "not applied" : "";
+  const permissionInfo = permissionApplication?.profileStatus === "pending" ? "next turn pending"
+    : permissionApplication?.profileStatus === "unverified" ? "profile unverified" : "";
   const permissionDetail = permissionApplication
     ? `Requested: ${permissionApplication.requestedProfile}; effective: ${permissionApplication.effectiveProfile ?? "unknown"}. ${permissionApplication.profileStatus === "pending" ? "Awaiting the next invocation; existing in-flight work retains its prior posture." : permissionApplication.profileStatus === "unverified" ? `Exec submitted ${permissionApplication.submittedProfile ?? "profile options"}${permissionApplication.submittedVersion === undefined ? "" : ` (generation ${permissionApplication.submittedVersion})`}; effective native policy is not reported.` : permissionApplication.profileStatus === "failed" ? `Application failed: ${permissionApplication.error ?? "request rejected"}.` : "Native profile acknowledged."} Approval routing: ${permissionApplication.routingStatus}${permissionApplication.nativeApprovals ? "" : " (no native approval hooks)"}.`
     : "Recorded but not confirmed applied to the running process.";
@@ -247,10 +251,11 @@ export function TranscriptHeader({
             agent_set_permission palette form or mod+p. */}
         {permissionProfile ? (
           <span
+            data-permission-tone={permissionWarning ? "warning" : permissionInfo ? "info" : "normal"}
             className={`${styles.chip} ${
               permissionWarning.length > 0
                 ? styles.toneDanger
-                : permissionProfile === "full" && permissionRequest === "auto"
+                : !permissionInfo && permissionProfile === "full" && permissionRequest === "auto"
                   ? styles.toneWarn
                   : ""
             }`}
@@ -262,6 +267,7 @@ export function TranscriptHeader({
           >
             {permissionProfile}
             {permissionRequest ? `·${permissionRequest}` : ""}
+            {permissionInfo ? ` · ${permissionInfo}` : ""}
             {permissionWarning ? ` ⚠ ${permissionWarning}` : ""}
           </span>
         ) : null}

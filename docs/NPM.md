@@ -63,6 +63,23 @@ daemon; activation failures restore the previous app, CLI launchers and startup
 configuration. If a previous standalone daemon was stopped, it may need a manual
 restart after a failed migration. Older CLI release directories remain for recovery.
 
+## Built-in Computer Use
+
+The following setup behavior requires **0.1.4 or newer**. Earlier releases did not
+include the bundled Computer Use runtime.
+
+The desktop and its npm-installed daemon use the same bundled Computer Use runtime.
+Setup prepares Laya's pinned Python dependencies and downloads and verifies its model
+before activating the new installation. A model download or checksum failure fails setup;
+it is not reported as a completed installation. Direct standalone desktop launches start
+this setup automatically on first open and show its progress in Settings.
+
+Current reviewed integration support is platform-specific: desktop control is hosted by
+the macOS app; the browser is bundled on macOS and Linux x64; Laya's reviewed native
+Python dependency lock currently supports Apple Silicon macOS 14+. Other targets report
+an explicit unsupported status, rather than silently using unreviewed dependencies.
+macOS still requires the operator's Accessibility and Screen Recording grants.
+
 ## Uninstall
 
 Uninstall support is first published in **0.1.3**. Use these commands after that version

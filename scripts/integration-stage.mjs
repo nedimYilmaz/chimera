@@ -63,7 +63,7 @@ export function buildManifest({ platform, arch, nodeRel, desktop, browser, laya 
         : unsupported(`Google publishes no Chrome for Testing headless shell for ${key}, so Chimera ships no browser for it.`),
       laya: laya
         ? { state: 'managed-download', version: LAYA.version, python: pythonRel(platform), wheel: laya.wheel, wheelSha256: laya.wheelSha256, lock: laya.lock, lockSha256: laya.lockSha256, source: LAYA.source, checkpoint: LAYA.checkpoint }
-        : unsupported(`No pinned Python runtime for ${key}.`),
+        : unsupported(`Laya is not released for ${key}: no reviewed native dependency lock is available.`),
     },
   };
 }
@@ -158,7 +158,7 @@ export async function stageIntegrations({ out, stage, platform, arch, nodeRel, d
 
   // ----- python runtime (carries pip for the first-use Laya install) -----
   const py = PYTHON.assets[key];
-  if (py) {
+  if (py && LAYA.targets.includes(key)) {
     log(`Staging CPython ${PYTHON.version} (${key})…`);
     const archive = join(stage, py.file);
     await writeFile(archive, await verified(download, py.url, py.sha256, 'Python archive'));

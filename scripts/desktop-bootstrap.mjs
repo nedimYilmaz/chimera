@@ -22,6 +22,15 @@ if (process.argv[2] === '--check') {
   try {
     const status = await client.request('daemon.status', {});
     if (status.protocolVersion !== 1) throw new Error('Unsupported daemon protocol');
+    // Direct desktop launches have no npm setup phase. Start the same pinned setup on
+    // first open and expose installing/failed/ready through the existing Settings card.
+    // --service-only is reserved for the offline relocated-runtime smoke below.
+    if (!process.argv.includes('--service-only')) {
+      const builtIns = await client.request('computerUse.builtins.status', {});
+      const laya = builtIns.integrations.find(row => row.id === 'laya');
+      if (laya?.state === 'not-installed') await client.request('computerUse.builtins.install', { id: 'laya' });
+    }
+
     console.log('Chimera background service ready');
   } finally { client.close(); }
 }

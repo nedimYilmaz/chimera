@@ -67,7 +67,10 @@ trap 'rm -f -- "$release_marker"' EXIT
 echo "building the signed + notarized app (this can take several minutes while Apple notarizes)..."
 # Only the .app ships: package-macos-release.mjs tars it for the installer. Tauri notarizes the
 # .app but not a DMG, so a DMG bundle was a second, unnotarized artifact nothing published.
-(cd packages/app && pnpm tauri build --bundles app)
+node scripts/build-desktop-runtime.mjs
+node scripts/test-desktop-runtime.mjs
+node scripts/sign-desktop-runtime.mjs
+(cd packages/app && pnpm tauri build --config src-tauri/tauri.standalone.conf.json --bundles app)
 
 APP_PATH="packages/app/src-tauri/target/release/bundle/macos/chimera.app"
 # Refuse to validate a stale bundle left by an earlier local build.

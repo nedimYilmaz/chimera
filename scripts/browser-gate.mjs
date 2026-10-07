@@ -605,6 +605,7 @@ export const REQUIRED_CHECK_IDS = {
     "ui.permission-pending-390px-keeps-acknowledged-full-posture-visible",
     "ui.permission-submitted-390px-remains-unverified-with-unknown-policy",
     "ui.permission-acknowledged-390px-clears-pending-warning",
+    "ui.permission-fresh-exec-390px-uncertainty-is-informational",
     "ui.transcript-unknown-context-never-renders-billable-usage-as-100-percent",
     "ui.pane-voice-history-closes",
     "ui.pane-voice-history-reopens-once",

@@ -124,7 +124,7 @@ test('native macOS compilation reproduces old first-install failure without targ
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
-for (const scenario of ['fresh', 'closed', 'running', 'detection-error', 'quit-error', 'activation-error']) {
+for (const scenario of ['fresh', 'closed', 'running', 'detection-error', 'quit-error', 'activation-error', 'setup-error']) {
   test(`macOS offline installation transaction: ${scenario}`, async t => {
     // The mocked macOS transaction needs a UID even when this suite runs on Windows.
     const uid = Object.getOwnPropertyDescriptor(process, 'getuid');
@@ -178,11 +178,11 @@ for (const scenario of ['fresh', 'closed', 'running', 'detection-error', 'quit-e
     } };
     try {
       const task = installMac({ manifest, plan, args: ['--no-open'], packageRoot: dir }, {
-        run, ChimeraClient: Client,
+        run, ChimeraClient: Client, prepareIntegrations: async ({ plan: preparedPlan }) => { assert.equal(preparedPlan.state, plan.state); assert.ok(!calls.some(c => c.cmd === "/bin/launchctl" && c.args[0] === "bootout")); if (scenario === "setup-error") throw new Error("model setup denied"); },
         download: async url => url === plan.checksums ? Buffer.from(`${hash}  ${plan.asset}\n`) : payload,
       });
       if (failure) {
-        await assert.rejects(task, /detection denied|quit denied|activation denied/);
+        await assert.rejects(task, /detection denied|quit denied|activation denied|model setup denied/);
         assert.equal(await readFile(join(plan.app, 'old'), 'utf8'), 'original bundle');
         assert.equal(await readFile(bin, 'utf8'), '# Chimera npm installer\noriginal CLI');
         assert.equal((await lstat(bin)).mode & 0o777, originalBinMode);
@@ -327,7 +327,7 @@ for (const platform of ['linux', 'win32']) for (const fail of [false, true]) {
     } };
     try {
       const task = installPortable({ manifest: { name: '@test/chimera', bin: { chimera: 'cli.js', chimerad: 'daemon.js' } }, plan, args: ['--no-open'], packageRoot: dir },
-        { run, procRoot: dir, npmCommand: ['test-npm', []], ChimeraClient: Client, download: async url => url.endsWith('/sums') ? Buffer.from(`${hash}  ${plan.asset}\n`) : payload });
+        { run, procRoot: dir, npmCommand: ['test-npm', []], ChimeraClient: Client, prepareIntegrations: async ({ plan: preparedPlan }) => { assert.equal(preparedPlan.state, plan.state); }, download: async url => url.endsWith('/sums') ? Buffer.from(`${hash}  ${plan.asset}\n`) : payload });
       if (fail) {
         await assert.rejects(task, /simulated activation failure/);
         for (const file of managed) assert.equal(await readFile(file, 'utf8'), `old:${file}`);

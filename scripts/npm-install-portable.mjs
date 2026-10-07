@@ -1,4 +1,5 @@
 // Linux and Windows share a per-user file transaction; no machine-wide package manager is needed.
+import { prepareInstalledIntegrations } from './npm-install-integrations.mjs';
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { readFile, writeFile, mkdir, mkdtemp, lstat, readlink, symlink, copyFile, chmod, rm, readdir } from 'node:fs/promises';
@@ -102,6 +103,17 @@ export async function installPortable({ manifest, plan, args, packageRoot }, hoo
     await run(npm[0], [...npm[1], 'install', '--prefix', releaseDir, '--ignore-scripts', '--no-audit', '--no-fund', '--registry=https://registry.npmjs.org', join(temp, pack[0].filename)]);
     const permanent = join(releaseDir, 'node_modules', manifest.name);
     await run(process.execPath, [join(permanent, manifest.bin.chimera), 'doctor']);
+    if (!windows) {
+      const unpack = join(temp, 'desktop-resources');
+      await mkdir(unpack);
+      await run(artifact, ['--appimage-extract'], { cwd: unpack, timeout: 120_000 });
+      const candidates = ['chimera', 'chimera-app'].map(name => join(unpack, 'squashfs-root/usr/lib', name, 'runtime'));
+      const roots = [];
+      for (const candidate of candidates) if (await exists(join(candidate, 'runtime.json'))) roots.push(candidate);
+      if (roots.length !== 1 && !hooks.prepareIntegrations) throw new Error('Desktop archive is missing a unique bundled runtime');
+      await (hooks.prepareIntegrations ?? prepareInstalledIntegrations)({ source: roots[0], permanent, plan, run });
+    }
+
     clientClass = hooks.ChimeraClient ?? (await import(pathToFileURL(join(permanent, 'packages/client/src/client.js')).href)).ChimeraClient;
     const searchPath = [plan.bin, join(releaseDir, 'node_modules/.bin'), dirname(process.execPath), process.env.PATH ?? ''].join(delimiter);
     const daemon = join(permanent, manifest.bin.chimerad);
