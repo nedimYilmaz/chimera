@@ -1,3 +1,4 @@
+import { probeMessageIdentity } from "./probes/message-identity.mjs";
 import { probeProjectDelete } from "./probes/project-delete.mjs";
 import { probeCompactHeader } from "./probes/compact-header.mjs";
 import { probeWorkspaceScale } from "./probes/workspace-scale.mjs";
@@ -241,6 +242,7 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
     && networkGuard.attempts.length === 2 && networkGuard.attempts.every((attempt) => attempt.blocked), networkGuard);
 
 
+  await probeMessageIdentity({ show, settleRender, evaluate, check });
   await probeProjectDelete({ check, viewport, show, waitFor, evaluate, click, key, buttonKey, settleRender, screenshot });
 
   if (process.env.CHIMERA_BROWSER_GATE_HEADER_ONLY === "1") {

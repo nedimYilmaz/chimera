@@ -2896,7 +2896,7 @@ export class Engine {
           // guarantee: "pending" is a legitimate, honest answer, not a failure. Read fresh per
           // call (mirrors leanAgentContext/advisorModel's live-config convention), unlike
           // promptStallMs above which is boot-time-only.
-          return await this.supervisor.send(p.agentId, p.text, p.from, p.images, p.slash, p.content, { awaitAckMs: this.cfg.promptAck.ackWaitMs, force: p.force });
+          return await this.supervisor.send(p.agentId, p.text, p.from, p.images, p.slash, p.content, { awaitAckMs: this.cfg.promptAck.ackWaitMs, force: p.force, messageId: p.messageId });
         }
         case "agent.kill": {
           const agentId = Id.parse(params).agentId;

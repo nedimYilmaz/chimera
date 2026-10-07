@@ -53,8 +53,11 @@ describe("native provider slash dispatch", () => {
     const r = await engine.supervisor.spawn({ prompt: "fixture", cwd: home, isolation: "none", provider: "codex", conductor: true, permissionProfile: "full", acknowledgeCodexFullAccessRisk: true });
     try {
       await vi.waitFor(() => expect(r.sessionId).toBe("native-session"));
-      const result = await engine.supervisor.send(r.agentId, "/goal Test fixture", "app", undefined, true);
-      expect(result).toMatchObject({ ack: "command", turnStarted: false });
+      const messageId = "510fb1f9-f412-44c8-98ff-cc83ffdfac73";
+      const result = await engine.supervisor.send(r.agentId, "/goal Test fixture", "app", undefined, true, undefined, { messageId });
+      expect(result).toMatchObject({ ack: "command", turnStarted: false, deliveryId: messageId });
+      expect(engine.events.tail(r.agentId, 30).find(event => event.data.delivered)?.data.messageId).toBe(messageId);
+      expect(engine.events.tail(r.agentId, 30).find(event => event.data.delivered)?.data.messageMetadata).toMatchObject({ from: "app", source: "operator", engineId: "local" });
       expect(command).toHaveBeenCalledExactlyOnceWith("/goal Test fixture");
       const updated = engine.supervisor.status(r.agentId);
       expect(updated).toMatchObject({ agentId: r.agentId, accountName: r.accountName, sessionId: "native-session", state: "running" });

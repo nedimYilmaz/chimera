@@ -398,7 +398,7 @@ describe("GenericAgentBackend", () => {
     ]);
     const evs: BackendEvent[] = [];
     new GenericAgentBackend("test-provider", client).spawn(genSpec({ cwd: dir }), (e) => evs.push(e), allow);
-    await settle();
+    await waitUntil(() => evs.some((e) => e.kind === "result"));
     expect(evs.map((e) => e.kind)).toEqual(["agent_started", "tool_call", "tool_result", "message_complete", "turn_complete", "result"]);
     expect(evs[1]!.data).toMatchObject({ toolName: "read_file", input: { path: file } });
     expect(evs[2]!.data).toMatchObject({ toolName: "read_file", result: "world" });

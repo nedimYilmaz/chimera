@@ -10,6 +10,12 @@ export const RESULT_PREFIX = "__CHIMERA_BROWSER_GATE_RESULT__=";
 // may be added, but removing or skipping any existing ID must fail both boundaries.
 export const REQUIRED_CHECK_IDS = {
   "ui": [
+    "ui.message-identity-image-acknowledgement-keeps-one-row",
+    "ui.message-identity-intentional-image-repeat-keeps-two-rows",
+    "ui.message-identity-delivery-retry-keeps-two-rows",
+    "ui.message-identity-reload-preserves-two-ordered-image-bodies",
+    "ui.message-identity-same-id-different-origins-remain-separate",
+    "ui.message-identity-different-origins-survive-rendered-replay",
     "ui.project-delete-stale-resolve-same-target-keeps-focus-identity-path",
     "ui.project-delete-latest-resolve-same-target-owns-response",
     "ui.project-delete-stale-reject-same-target-keeps-focus-identity-path",

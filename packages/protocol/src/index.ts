@@ -3361,7 +3361,11 @@ export const TaskRecordSchema = z.object({
 export type TaskRecord = z.infer<typeof TaskRecordSchema>;
 
 // Delivery intent must survive the RPC boundary: ordinary mail never implies interruption.
-export const AgentSendOptionsSchema = z.object({ force: z.boolean().optional() });
+export const AgentSendOptionsSchema = z.object({
+  force: z.boolean().optional(),
+  // Correlates the optimistic row with its durable authored envelope.
+  messageId: z.string().uuid().optional(),
+});
 
 // F09: what agent.send answers instead of a bare {ok:true}. `turnStarted` is the simple read;
 // `ack` carries WHY, because "did a turn start" has no honest boolean answer for a message

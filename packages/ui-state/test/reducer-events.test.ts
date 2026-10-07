@@ -426,24 +426,24 @@ describe("reducer: event projection", () => {
   });
 
   it("OWN-TURNS-SURVIVE-RELOAD (live): a from:\"tui\" delivered event dedupes against the already-echoed (userSent) turn -- exactly one user turn, no dupe", () => {
-    const echoed = reduce(initialState, { type: "userSent", agentId: "a1", text: "already echoed" });
-    const st = feed(echoed, [ev("a1", "status", { delivered: true, from: "tui", text: "already echoed" })]);
+    const echoed = reduce(initialState, { type: "userSent", agentId: "a1", text: "already echoed", messageId: "echo-id", messageOrigin: { from: "tui", source: "operator", engineId: "local" } });
+    const st = feed(echoed, [ev("a1", "status", { delivered: true, from: "tui", text: "already echoed", messageId: "echo-id", messageMetadata: { from: "tui", source: "operator", engineId: "local" } })]);
     expect(st.agents["a1"]!.transcript).toMatchObject([{ role: "user", text: "already echoed" }]);
   });
 
   it("OWN-TURNS-SURVIVE-RELOAD (live): a from:\"app\" delivered event ALSO dedupes -- the app is a human cockpit surface that locally echoes its own sends, exactly like the tui", () => {
-    const echoed = reduce(initialState, { type: "userSent", agentId: "a1", text: "already echoed" });
-    const st = feed(echoed, [ev("a1", "status", { delivered: true, from: "app", text: "already echoed" })]);
+    const echoed = reduce(initialState, { type: "userSent", agentId: "a1", text: "already echoed", messageId: "echo-id", messageOrigin: { from: "app", source: "operator", engineId: "local" } });
+    const st = feed(echoed, [ev("a1", "status", { delivered: true, from: "app", text: "already echoed", messageId: "echo-id", messageMetadata: { from: "app", source: "operator", engineId: "local" } })]);
     expect(st.agents["a1"]!.transcript).toMatchObject([{ role: "user", text: "already echoed" }]);
     // no `from` marker: an own-surface turn must NOT render as an inbound "[from app]" delivery
     expect(st.agents["a1"]!.transcript[0]).not.toHaveProperty("from");
   });
 
   it("OWN-TURNS-SURVIVE-RELOAD (live): the echo may be followed by streamed assistant output before the delivered event lands -- still dedupes", () => {
-    const echoed = reduce(initialState, { type: "userSent", agentId: "a1", text: "already echoed" });
+    const echoed = reduce(initialState, { type: "userSent", agentId: "a1", text: "already echoed", messageId: "echo-id", messageOrigin: { from: "tui", source: "operator", engineId: "local" } });
     const st = feed(echoed, [
       ev("a1", "message_delta", { text: "working on it" }),
-      ev("a1", "status", { delivered: true, from: "tui", text: "already echoed" }),
+      ev("a1", "status", { delivered: true, from: "tui", text: "already echoed", messageId: "echo-id", messageMetadata: { from: "tui", source: "operator", engineId: "local" } }),
     ]);
     expect(st.agents["a1"]!.transcript).toMatchObject([
       { role: "user", text: "already echoed" },

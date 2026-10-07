@@ -1073,16 +1073,19 @@ export class AgentCommands {
   /** Local echo with a Date.now() stamp (userSent has no ts field — the stamp
    * rides this module's echoTs registry, merged into the transcript's
    * timestamp column by mergeEchoTimestamps). */
-  private echo(agentId: string, text: string, images?: Image[], content?: ContentBlock[], forced?: boolean): void {
+  private echo(agentId: string, text: string, images?: Image[], content?: ContentBlock[], forced?: boolean): string {
+    const messageId = crypto.randomUUID();
     const list = this.echoTs.get(agentId) ?? [];
     list.push(Date.now());
     this.echoTs.set(agentId, list);
     this.store.dispatch({
-      type: "userSent", agentId, text,
+      type: "userSent", agentId, text, messageId,
+      messageOrigin: { from: "app", source: "operator", engineId: "local" },
       ...(images && images.length > 0 ? { images } : {}),
       ...(content && content.length > 0 ? { content } : {}),
       ...(forced ? { forced: true } : {}),
     });
+    return messageId;
   }
 
   /** The composer's default cwd for lazy/main + form spawns. The webview has
@@ -1166,9 +1169,9 @@ export class AgentCommands {
       // this RPC's ack resolves reads busy=true and queues instead of ALSO
       // taking this direct-send branch (the two would otherwise race the
       // daemon directly, with one send silently lost — the reported bug).
-      this.echo(agentId, trimmed, imgs, blocks, busy && force);
+      const messageId = this.echo(agentId, trimmed, imgs, blocks, busy && force);
       try {
-        await this.rpc("agent.send", { agentId, text: trimmed, from: "app", ...(force ? { force: true } : {}), ...(imgs ? { images: imgs } : {}), ...(blocks ? { content: blocks } : {}), ...(slash ? { slash: true } : {}) });
+        await this.rpc("agent.send", { agentId, text: trimmed, from: "app", messageId, ...(force ? { force: true } : {}), ...(imgs ? { images: imgs } : {}), ...(blocks ? { content: blocks } : {}), ...(slash ? { slash: true } : {}) });
       } catch (err) {
         if (slash || !isUnknownAgent(err)) throw err;
         // Dead conductor self-heal: drop the stale id and respawn fresh with
@@ -1204,8 +1207,8 @@ export class AgentCommands {
         // Echo BEFORE the await — same race as sendToAgent's direct-send
         // branch (see its comment): busy must flip synchronously so a second
         // rapid send sees it and queues rather than also going mid-session.
-        this.echo(agentId, trimmed, imgs, blocks, forced);
-        await this.rpc("agent.send", { agentId, text: trimmed, from: "app", ...(force ? { force: true } : {}), ...(imgs ? { images: imgs } : {}), ...(blocks ? { content: blocks } : {}) });
+        const messageId = this.echo(agentId, trimmed, imgs, blocks, forced);
+        await this.rpc("agent.send", { agentId, text: trimmed, from: "app", messageId, ...(force ? { force: true } : {}), ...(imgs ? { images: imgs } : {}), ...(blocks ? { content: blocks } : {}) });
         if (this.store.getState().notice) this.store.dispatch({ type: "notice", message: null });
       };
 
@@ -1422,10 +1425,10 @@ export class AgentCommands {
     const blocks = item.content && item.content.length > 0 ? item.content : undefined;
     // Optimistic ordering: echo the "you" turn + drop the queued item NOW,
     // before the await, mirroring the non-queued send path's local echo.
-    this.echo(agentId, item.text, imgs, blocks);
+    const messageId = this.echo(agentId, item.text, imgs, blocks);
     this.store.dispatch({ type: "outboxRemove", id: item.id });
     try {
-      await this.rpc("agent.send", { agentId, text: item.text, from: "app", ...(imgs ? { images: imgs } : {}), ...(blocks ? { content: blocks } : {}), ...(item.slash ? { slash: true } : {}) });
+      await this.rpc("agent.send", { agentId, text: item.text, from: "app", messageId, ...(imgs ? { images: imgs } : {}), ...(blocks ? { content: blocks } : {}), ...(item.slash ? { slash: true } : {}) });
     } catch (err) {
       const message = typeof err === "object" && err !== null && "message" in err
         ? String((err as { message: unknown }).message)

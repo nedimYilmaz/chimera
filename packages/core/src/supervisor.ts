@@ -5459,7 +5459,7 @@ export class AgentSupervisor {
 
   private readonly commandOperations = new Map<string, Promise<AgentSendResult>>();
 
-  private async codexCommand(agentId: string, text: string, from: string): Promise<AgentSendResult> {
+  private async codexCommand(agentId: string, text: string, from: string, messageId: string, author: Principal): Promise<AgentSendResult> {
     const command = parseCodexCommand(text);
     const r = this.status(agentId);
     if (r.state !== "running") throw new AgentNotRunningError(`Agent is ${r.state}; resume it before using a native command`);
@@ -5488,9 +5488,9 @@ export class AgentSupervisor {
     }
     if (!handle?.command) throw new GuardrailError("This Codex backend does not expose native commands");
     const output = command.name === "compact" ? (await this.compact(agentId)).message : await handle.command(text);
-    this.deps.events.append({ agentId, kind: "status", data: this.scrub({ delivered: true, from, text, slash: true, nativeCommand: true }) });
+    this.deps.events.append({ agentId, kind: "status", data: this.scrub({ delivered: true, from, text, messageId, messageMetadata: { ...author, kind: "user_message" }, slash: true, nativeCommand: true }) });
     this.deps.events.append({ agentId, kind: "message_complete", data: this.scrub({ text: output, role: "system", localCommand: true }) });
-    return { ok: true, delivered: true, turnStarted: false, ack: "command", ackMs: null, deliveryId: randomUUID(), stallThresholdMs: this.promptStallMs };
+    return { ok: true, delivered: true, turnStarted: false, ack: "command", ackMs: null, deliveryId: messageId, stallThresholdMs: this.promptStallMs };
   }
 
   async send(agentId: string, text: string, from = "caller", images?: Image[], slash = false, content?: ContentBlock[], opts?: { awaitAckMs?: number; messageId?: string; force?: boolean; author?: Principal; engineId?: string; taskId?: string }): Promise<AgentSendResult> {
@@ -5513,7 +5513,7 @@ export class AgentSupervisor {
       if (r.provider === "codex") {
         if (images?.length || content?.length) throw new GuardrailError("Send Codex native commands without attachments");
         const previous = this.commandOperations.get(agentId) ?? Promise.resolve();
-        const operation = previous.catch(() => {}).then(() => this.codexCommand(agentId, text, from));
+        const operation = previous.catch(() => {}).then(() => this.codexCommand(agentId, text, from, message.id, message.author));
         this.commandOperations.set(agentId, operation);
         try { return await operation; }
         finally {

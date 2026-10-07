@@ -1,4 +1,4 @@
-import { ForkLineageSchema } from "@chimera/protocol";
+import { ForkLineageSchema, PrincipalSchema } from "@chimera/protocol";
 import { mcpListenerTransitions } from "./mcpListener.js";
 import { ATTENTION_EVENT_KINDS, parseAgentAddress, ToolOutputImagesSchema, ToolOutputImageWarningsSchema, type ToolOutputImageWarning, type AccountQuotaWindow, type ContentBlock, type NormalizedEvent, type TaskState } from "@chimera/protocol";
 import { EVENT_BUFFER_MAX, initialState, NO_PROJECT_CONDUCTOR_KEY, TAB_ORDER, TOOLS_BUFFER_MAX, TRANSCRIPT_BUFFER_MAX, type Action, type AgentQuestion, type AgentRecordLite, type AgentView, type BackgroundTaskItem, type DeepLink, type Image, type McpServerView, type SlashCommandView, type TokenUsage, type TranscriptItem, type UiState } from "./types.js";
@@ -862,15 +862,6 @@ function compactionBannerText(e: NormalizedEvent): string {
   return `⇥ context compacted (${triggerLabel}): dropped ${String(droppedRounds ?? "?")} earlier round(s), ${size(before)} → ${size(after)}`;
 }
 
-// OWN-TURNS-SURVIVE-RELOAD: a "delivered" status event with from==="tui" fires
-// for EVERY send, live or replayed. Live, the sending client already pushed a
-// local echo via "userSent" (a plain user turn, no `from`) before the delivered
-// event round-trips back — so this dedupes against that echo rather than
-// blanket-skipping, which is what silently dropped the user's own turns from
-// a rebuilt-from-history transcript after a reload (no echo survives in
-// memory across a reload, only the event history does). Search a bounded tail
-// window, not just the last item -- the echo may be followed by the
-// assistant's streaming reply before the delivered event lands.
 // BUDGET-EVENTS-INVISIBLE: the four supervisor budget status events (live-estimate pause,
 // booked pause ±afterResume, operator release, auto-reconcile back under the cap) only ever
 // reached the pause banner, which renders the CURRENT state and nothing about how the tree got
@@ -900,14 +891,11 @@ export function budgetStatusLine(data: Record<string, unknown>): string | null {
   return `budget pause cleared — this tree is back under its ${fmtBudgetUsd(f.maxBudgetUsd)} cap (${fmtBudgetUsd(f.totalCostUsd)} spent).`;
 }
 
-const RECENT_ECHO_WINDOW = 8;
-function hasRecentUserEcho(transcript: TranscriptItem[], text: string): boolean {
-  const start = Math.max(0, transcript.length - RECENT_ECHO_WINDOW);
-  for (let i = transcript.length - 1; i >= start; i--) {
-    const item = transcript[i]!;
-    if (item.role === "user" && item.from === undefined && item.text === text) return true;
-  }
-  return false;
+const MessageOriginSchema = PrincipalSchema.pick({ from: true, source: true, engineId: true }).strip();
+function userMessageKey(item: TranscriptItem): string | undefined {
+  if (item.role !== "user" || !item.messageId || !item.messageOrigin) return undefined;
+  const { from, source, engineId } = item.messageOrigin;
+  return JSON.stringify([item.messageId, from, source, engineId]);
 }
 
 // Reserved system-event agentId namespaces (engine.ts): config_changed/_error,
@@ -2325,39 +2313,35 @@ function projectEvent(state: UiState, e: NormalizedEvent, stampTs = false): UiSt
         agent.pendingCommand = e.data["text"];
       }
       if (e.data["delivered"] === true) {
-        // Task 4's mailbox-delivery record: render user turns from OTHER clients;
-        // a LIVE send from THIS client is already locally echoed (userSent), so
-        // it must not duplicate. DELIVERY.MARK: coalesce a missing OR empty
-        // origin to "?" (not just nullish — an empty string is falsy in the
-        // renderer's marker check, so storing "" would silently degrade the
-        // turn back to a plain "you"). A real deliverTo `from` is always a
-        // non-empty agent id.
         const from = e.data["from"] ? String(e.data["from"]) : "?";
         const text = String(e.data["text"] ?? "");
-        // Thread the STRUCTURED origin (`from`) onto the turn so the renderer
-        // marks it as an incoming agent delivery (distinct label + color), never
-        // string-matching a text prefix. A genuine user turn from a human cockpit
-        // surface (from === "tui" OR "app") carries no `from` -- see
-        // OWN-TURNS-SURVIVE-RELOAD above for why this dedupes rather than
-        // blanket-skips. Both surfaces locally echo their own sends, so both must
-        // dedupe here or the sending client renders every own turn twice (and
-        // mislabeled as an inbound "[from app]" delivery).
-        // D9: the daemon mirrors `images`/`content` on this event now (previously
-        // text-only), so a delivered turn from another client replays with the
-        // same attachments/block order instead of losing them after a reload.
         const deliveredImages = Array.isArray(e.data["images"]) ? (e.data["images"] as Image[]) : undefined;
         const deliveredContent = Array.isArray(e.data["content"]) ? (e.data["content"] as ContentBlock[]) : undefined;
         const extra = {
           ...(deliveredImages && deliveredImages.length > 0 ? { images: deliveredImages } : {}),
           ...(deliveredContent && deliveredContent.length > 0 ? { content: deliveredContent } : {}),
         };
-        if (from === "tui" || from === "app") {
-          if (!hasRecentUserEcho(agent.transcript, text)) {
-            agent.transcript.push({ role: "user", text, ...extra, ...at });
-          }
-        } else {
-          agent.transcript.push({ role: "user", text, from, ...extra, ...at });
-        }
+        const messageId = typeof e.data["messageId"] === "string" ? e.data["messageId"] : undefined;
+        const parsedOrigin = MessageOriginSchema.safeParse(e.data["messageMetadata"]);
+        const messageOrigin = parsedOrigin.success && parsedOrigin.data.from === from ? parsedOrigin.data : undefined;
+        const key = userMessageKey({ role: "user", text, messageId, messageOrigin });
+        const index = key ? agent.transcript.findIndex(item => userMessageKey(item) === key) : -1;
+        const previous = index >= 0 ? agent.transcript[index] : undefined;
+        const row: TranscriptItem = {
+          role: "user", text, ...extra, ...at,
+          ...(messageId ? { messageId } : {}),
+          ...(messageOrigin ? { messageOrigin } : {}),
+          ...(from === "tui" || from === "app" ? {} : { from }),
+          ...(e.data["force"] === true || previous?.role === "user" && previous.forced ? { forced: true } : {}),
+          ...(previous?.role === "user" && previous.seq !== undefined ? {
+            seq: previous.seq, ...(previous.ts !== undefined ? { ts: previous.ts } : {}),
+          } : {}),
+        };
+        // Authored identity survives whitespace changes, redaction and delivery
+        // retries, scoped to observed author identity. Unknown origins and
+        // distinct IDs remain distinct; UUID reuse cannot replace another author.
+        if (index >= 0) agent.transcript[index] = row;
+        else agent.transcript.push(row);
       }
       if (e.data["permissionResolved"] === true && typeof e.data["requestId"] === "string") {
         // Task 4's timeout-fallback record: the daemon already resolved this request —
@@ -3219,6 +3203,10 @@ export function reduce(state: UiState, action: Action): UiState {
       let scratch: UiState = initialState;
       for (const e of sorted) scratch = projectEvent(scratch, e, action.stampTs === true);
       const rows = scratch.agents[action.agentId]?.transcript ?? [];
+      // A retry can fall in a different history page from its first delivery.
+      // Keep the first authored position across pages as well as within a page.
+      const messageKeys = new Set(rows.map(userMessageKey).filter((key): key is string => key !== undefined));
+      const retained = prev.transcript.filter(row => { const key = userMessageKey(row); return !key || !messageKeys.has(key); });
       const minSeq = Math.min(prev.historyMinSeq ?? Infinity, sorted[0]!.seq);
       return {
         ...state,
@@ -3226,7 +3214,7 @@ export function reduce(state: UiState, action: Action): UiState {
           ...state.agents,
           [action.agentId]: {
             ...prev,
-            transcript: rows.length > 0 ? [...rows, ...prev.transcript] : prev.transcript,
+            transcript: rows.length > 0 ? [...rows, ...retained] : prev.transcript,
             historyMinSeq: minSeq,
           },
         },
@@ -3299,6 +3287,8 @@ export function reduce(state: UiState, action: Action): UiState {
               ...prev.transcript,
               {
                 role: "user", text: action.text,
+                ...(action.messageId ? { messageId: action.messageId } : {}),
+                ...(action.messageOrigin ? { messageOrigin: action.messageOrigin } : {}),
                 ...(action.images && action.images.length > 0 ? { images: action.images } : {}),
                 ...(action.content && action.content.length > 0 ? { content: action.content } : {}),
                 ...(action.forced ? { forced: true } : {}),

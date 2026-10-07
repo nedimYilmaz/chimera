@@ -1,3 +1,4 @@
+import { MessageIdentityFixture, messageIdentityFixture } from "./message-identity";
 import { projectDeleteFixture } from "./project-delete";
 import { RecoveryProbe, resetRecovery, recoveryRpc } from "./recovery";
 import "../../src/components/ArtifactPreviewCard";
@@ -116,6 +117,7 @@ declare global {
       softState(phase: "busy" | "idle" | "paused"): void;
       workspaceSnapshot(): unknown;
       clearComposer(): void;
+      messageIdentity: typeof messageIdentityFixture;
       bookmarkOpened(): number;
       secretWrites(): unknown[];
       designSanitize(source: string): string;
@@ -157,7 +159,7 @@ declare global {
 type EdgeCase = "external-focus" | "cancel-focus" | "inline-child" | "portal-child" | "no-close" | "guard-popup";
 type ActionScenario = "confirm-actions" | "team-actions" | "queue-actions";
 type MainScreen = "review" | "welcome" | "projects" | "memory" | "events" | "roles" | "inbox" | "slo" | "runs" | "help" | "agents" | "settings" | "teams" | "queues";
-type Scenario = "project-delete" | "qa-recovery" | "qa-liveboard" | "project-canvas" | "inspector-registry" | "operator-settings" | "operator-read" | "operator-control" | "conversation-fork" | "context-links" | "stt" | "git-review" | "issue-board" | "resources" | "output-images" | "teams-stability" | "team-roles-stability" | "roles-stability" | "desktop-preview" | "workflow-transcript" | "computer-use" | "background-task" | "project-import" | "slash-codex" | "slash-claude" | "group-order" | "quick-spawn" | "workspace-tools" | "keyboard" | `screen-${MainScreen}` | "metrics" | "accounts" | "local-links" | "design" | "design-error" | "design-large" | "secrets" | "live-names" | EdgeCase | ActionScenario | "topbar" | "modal" | "voice" | "ptt" | "transcript" | "pane" | "queues" | "teams" | "settings" | "spawn";
+type Scenario = "message-identity" | "project-delete" | "qa-recovery" | "qa-liveboard" | "project-canvas" | "inspector-registry" | "operator-settings" | "operator-read" | "operator-control" | "conversation-fork" | "context-links" | "stt" | "git-review" | "issue-board" | "resources" | "output-images" | "teams-stability" | "team-roles-stability" | "roles-stability" | "desktop-preview" | "workflow-transcript" | "computer-use" | "background-task" | "project-import" | "slash-codex" | "slash-claude" | "group-order" | "quick-spawn" | "workspace-tools" | "keyboard" | `screen-${MainScreen}` | "metrics" | "accounts" | "local-links" | "design" | "design-error" | "design-large" | "secrets" | "live-names" | EdgeCase | ActionScenario | "topbar" | "modal" | "voice" | "ptt" | "transcript" | "pane" | "queues" | "teams" | "settings" | "spawn";
 
 type PttSnapshot = { starts: number; stops: number; sends: string[]; backgroundActions: number };
 let sttActive = false;
@@ -827,6 +829,7 @@ function ScenarioView({ name }: { name: Scenario }) {
   if (name === "project-canvas") return <CanvasNavigationProbe />;
   if (name === "git-review") return <GitReviewProbe />;
   if (name === "issue-board") return <Stage><TopBar /><main data-issue-board style={{ position: "relative", flex: 1, minWidth: 0, minHeight: 0, overflow: "auto" }}><IssueSources queue="issue-queue" /><div data-issue-task-row role="button" tabIndex={0} onKeyDown={onRowKeyDown(() => {})} style={{ padding: 12 }}>Fictional queue task <IssueChip queue="issue-queue" taskId="issue-task" /></div><OverlayOutlet host="queues" /></main><Footer /></Stage>;
+  if (name === "message-identity") return <MessageIdentityFixture />;
   if (name === "slash-codex" || name === "slash-claude") return <Stage><div style={{padding: 24, marginTop: 260}}><Composer /></div></Stage>;
   if (name === "stt") return <Stage><TopBar /><div data-stt-stage style={{ flex: 1, minHeight: 0, minWidth: 0, overflow: "auto", padding: 12 }}><LocalSpeechSettings /></div><Composer /><Footer /></Stage>;
   if (name === "resources" || name === "context-links" || name === "conversation-fork") return <MainScreenProbe name="agents" />;
@@ -895,6 +898,7 @@ const computerRequest = async (command: string) => {
   return computerStatus;
 };
 function show(name: Scenario): void {
+  if (name === "message-identity") messageIdentityFixture.reset();
   resetRecovery(name);
   projectDeleteFixture.active = name === "project-delete";
   if (projectDeleteFixture.active) { projectDeleteFixture.reset(); appStore.dispatch({ type: "selectTab", tab: "projects" }); }
@@ -1188,6 +1192,7 @@ window.__UI_QA__ = {
   imageAgentSelection: () => appStore.dispatch({ type: "selectAgent", agentId: "image-test-other-selection" }),
   workspaceSnapshot: () => ({data:workspaceTools.getState(),composer:composerLocal.getState().composeText,filter:currentFleetFilter()}),
   bookmarkOpened: () => openedBookmark,
+  messageIdentity: messageIdentityFixture,
   clearComposer: () => composerLocal.set({composeText:"",pendingImages:[]}),
   secretWrites: () => secretWrites,
   designSanitize: (source) => staticDesignDocument(source).html,

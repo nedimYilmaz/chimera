@@ -1,0 +1,30 @@
+export async function probeMessageIdentity({ show, settleRender, evaluate, check }) {
+  await show("message-identity");
+  await evaluate("window.__UI_QA__.messageIdentity.send()");
+  await settleRender();
+  const before = await evaluate("document.querySelectorAll('[data-message-identity] [data-own]').length");
+  await evaluate("window.__UI_QA__.messageIdentity.ack(0)");
+  await settleRender();
+  const ownRows = () => evaluate("document.querySelectorAll('[data-message-identity] [data-own]').length");
+  check("message identity image acknowledgement keeps one row", before === 1 && await ownRows() === 1);
+  await evaluate("window.__UI_QA__.messageIdentity.send()");
+  await evaluate("window.__UI_QA__.messageIdentity.ack(1)");
+  await settleRender();
+  const ids = await evaluate("window.__UI_QA__.messageIdentity.snapshot().requests");
+  check("message identity intentional image repeat keeps two rows", await ownRows() === 2 && ids.length === 2 && ids[0] !== ids[1]);
+  await evaluate("window.__UI_QA__.messageIdentity.ack(0)");
+  await settleRender();
+  check("message identity delivery retry keeps two rows", await ownRows() === 2);
+  await evaluate("window.__UI_QA__.messageIdentity.reload()");
+  await settleRender();
+  const rows = await evaluate("window.__UI_QA__.messageIdentity.snapshot().rows");
+  check("message identity reload preserves two ordered image bodies", await ownRows() === 2 && rows.every(row => row.content[0].type === "image" && row.content[1].text.startsWith(" ")));
+  await evaluate("window.__UI_QA__.messageIdentity.collide()");
+  await settleRender();
+  const collision = await evaluate("window.__UI_QA__.messageIdentity.snapshot().rows");
+  check("message identity same ID different origins remain separate", collision.length === 5 && await evaluate("document.querySelectorAll('[data-message-identity] [data-bkey]').length") === 5 && collision[0].content[0].type === "image");
+  await evaluate("window.__UI_QA__.messageIdentity.reload()");
+  await settleRender();
+  const reloaded = await evaluate("window.__UI_QA__.messageIdentity.snapshot().rows");
+  check("message identity different origins survive rendered replay", reloaded.length === 5 && await evaluate("document.querySelectorAll('[data-message-identity] [data-bkey]').length") === 5 && reloaded[0].content[0].type === "image");
+}

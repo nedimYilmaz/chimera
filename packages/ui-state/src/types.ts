@@ -1,4 +1,4 @@
-import type { CodexContextLimits, AccountQuota, AccountQuotaReason, ToolOutputImage, ToolOutputImageWarning, AgentGroup, ContentBlock, EffortLevel, FailureCause as ProtocolFailureCause, McpListenerStatus, MemoryGetResult, MemoryRecord, MemorySearchMode, NormalizedEvent, ReviewSession, TaskEvidence, TaskState, WakeScheduling, WorkflowSpec, WorkflowStep } from "@chimera/protocol";
+import type { Principal, CodexContextLimits, AccountQuota, AccountQuotaReason, ToolOutputImage, ToolOutputImageWarning, AgentGroup, ContentBlock, EffortLevel, FailureCause as ProtocolFailureCause, McpListenerStatus, MemoryGetResult, MemoryRecord, MemorySearchMode, NormalizedEvent, ReviewSession, TaskEvidence, TaskState, WakeScheduling, WorkflowSpec, WorkflowStep } from "@chimera/protocol";
 
 export type WorkflowGraphEdgeKind = "implicit" | "route" | "fanOutJoin" | "planResume" | "subWorkflowJoin";
 export type WorkflowGraphNode = { id: string; step: WorkflowStep };
@@ -135,7 +135,7 @@ export type TranscriptItem =
   // FORCE-SEND-MIDTURN: `forced` — this turn bypassed the busy-hold outbox
   // (a direct opt+enter send while the target was mid-turn) — renders a
   // distinct tag next to "you" so it reads apart from an ordinary send.
-  | { role: "user"; text: string; images?: Image[]; content?: ContentBlock[]; from?: string; ts?: number; forced?: boolean; seq?: number }
+  | { role: "user"; text: string; messageId?: string; messageOrigin?: Pick<Principal, "from" | "source" | "engineId">; images?: Image[]; content?: ContentBlock[]; from?: string; ts?: number; forced?: boolean; seq?: number }
   // TURN-COST-VISIBLE: `turnId` is the assistant message this call arrived on. Calls sharing one
   // were produced in a single model turn (one context read between them); calls with different ones
   // each cost their own. Optional — a backend that does not report it simply shows no turn count.
@@ -1420,7 +1420,7 @@ export type Action =
   // (opt+enter while the target was mid-turn) — carried onto the projected
   // transcript item so the UI can render a distinct tag. Omitted (not `false`)
   // for every ordinary send, keeping a plain turn byte-identical to before.
-  | { type: "userSent"; agentId: string; text: string; images?: Image[]; content?: ContentBlock[]; forced?: boolean }
+  | { type: "userSent"; agentId: string; text: string; messageId?: string; messageOrigin?: Pick<Principal, "from" | "source" | "engineId">; images?: Image[]; content?: ContentBlock[]; forced?: boolean }
   | { type: "commandError"; message: string | null }     // null clears the error line
   // F22.UI: a CLIENT-ORIGINATED transcript line. worktree.leaseHandoff/leaseRelease succeed
   // silently — the daemon emits no event for either — so without this the operator would take
