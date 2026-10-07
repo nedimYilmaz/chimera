@@ -55,7 +55,7 @@ jobs:
           node scripts/build-desktop-runtime.mjs
           node scripts/test-desktop-runtime.mjs
       - name: Build Linux AppImage
-        run: pnpm --filter @chimera/app tauri build --config src-tauri/tauri.standalone.conf.json --bundles appimage
+        run: pnpm --filter @chimera/app tauri build --verbose --config src-tauri/tauri.standalone.conf.json --bundles appimage
       - name: Verify and name native artifact
         run: node scripts/package-desktop-release.mjs
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

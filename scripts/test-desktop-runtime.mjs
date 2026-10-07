@@ -72,7 +72,8 @@ try {
   await mcp.close(); mcp = undefined;
   const realRoot = await realpath(runtime);
   const storeFile = join(state, 'mcpstore.json');
-  const readStoreText = () => readFile(storeFile, 'utf8');
+  // Unsupported targets legitimately have no built-ins and therefore no registry yet.
+  const readStoreText = () => readFile(storeFile, 'utf8').catch(error => { if (error.code === 'ENOENT') return '{}'; throw error; });
   const servers = text => { const raw = JSON.parse(text); return raw.servers ?? raw; };
   const manifestOf = async root => JSON.parse(await readFile(join(root, 'integrations/manifest.json'), 'utf8'));
   const m = await manifestOf(runtime);

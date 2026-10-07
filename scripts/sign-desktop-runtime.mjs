@@ -33,6 +33,7 @@ const entitlements = {};
 for (const [name, keys] of Object.entries(profiles)) { entitlements[name] = join(temp, `${name}.plist`); await writeFile(entitlements[name], plist(keys)); }
 let count = 0;
 let signingKeychain;
+let signingIdentity = identity;
 const security = args => {
   try { return execFileSync('/usr/bin/security', args, { stdio: ['ignore', 'pipe', 'pipe'] }); }
   catch { throw new Error(`Runtime signing keychain operation failed: ${args[0]}`); }
@@ -49,9 +50,16 @@ async function prepareKeychain() {
   signingKeychain = join(temp, 'runtime.keychain-db');
   const password = randomBytes(32).toString('hex');
   security(['create-keychain', '-p', password, signingKeychain]);
+  security(['set-keychain-settings', '-lut', '21600', signingKeychain]);
   security(['unlock-keychain', '-p', password, signingKeychain]);
   security(['import', certificate, '-k', signingKeychain, '-P', process.env.APPLE_CERTIFICATE_PASSWORD, '-T', '/usr/bin/codesign']);
   security(['set-key-partition-list', '-S', 'apple-tool:,apple:,codesign:', '-s', '-k', password, signingKeychain]);
+  // Private-key resolution uses the search list even with codesign --keychain. Restore it
+  // in finally; select the exact imported certificate by fingerprint, never an ambiguous name.
+  security(['list-keychains', '-d', 'user', '-s', signingKeychain, ...keychains]);
+  const found = [...security(['find-identity', '-v', '-p', 'codesigning', signingKeychain]).toString().matchAll(/\b([A-Fa-f0-9]{40}) \"([^\"]+)\"/g)].filter(match => match[2] === identity);
+  if (found.length !== 1) throw new Error('The private keychain must contain exactly the requested signing identity');
+  signingIdentity = found[0][1];
 }
 
 async function sign(dir) {
@@ -63,7 +71,7 @@ async function sign(dir) {
     const magic = Buffer.alloc(4);
     try { await fd.read(magic, 0, 4, 0); } finally { await fd.close(); }
     if (!['feedface', 'feedfacf', 'cefaedfe', 'cffaedfe', 'cafebabe', 'bebafeca', 'cafebabf', 'bfbafeca'].includes(magic.toString('hex'))) continue;
-    const args = ['--force', '--sign', identity, '--timestamp', '--options', 'runtime'];
+    const args = ['--force', '--sign', signingIdentity, '--timestamp', '--options', 'runtime'];
     if (signingKeychain) args.push('--keychain', signingKeychain);
     const profile = profileFor(basename(path));
     if (profile) args.push('--entitlements', entitlements[profile]);

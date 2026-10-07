@@ -266,12 +266,12 @@ describe("resolveBuiltIns", () => {
     fs.json.set(p.ready, { ...ready, checkpoint: { ...CHECKPOINT, revision: "main" } });
     expect(resolveBuiltIns(ctx, "/h", fs).laya.entry).toBeUndefined();
   });
-  it("a different laya build is still the plain first-use download, not the checkpoint message", () => {
+  it("a different Laya build requests installation, not a checkpoint repair", () => {
     const { ctx, fs } = stage(manifest());
     const p = layaPaths(ctx, "/h");
     fs.json.set(p.ready, { version: "0.3.1", wheelSha256: SHA, lockSha256: SHA, installedAt: "x", checkpoint: CHECKPOINT });
     fs.dirs.add(p.site);
-    expect(resolveBuiltIns(ctx, "/h", fs).laya.status).toMatchObject({ state: "not-installed", reason: "Laya's Python packages and models download on first use." });
+    expect(resolveBuiltIns(ctx, "/h", fs).laya.status).toMatchObject({ state: "not-installed", reason: "Laya setup has not completed. Finish installation to download and verify its Python packages and model." });
   });
   it("distinguishes installing, interrupted and failed installs", () => {
     const { ctx, fs } = stage(manifest());
