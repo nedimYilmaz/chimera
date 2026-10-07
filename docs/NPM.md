@@ -80,6 +80,18 @@ Python dependency lock currently supports Apple Silicon macOS 14+. Other targets
 an explicit unsupported status, rather than silently using unreviewed dependencies.
 macOS still requires the operator's Accessibility and Screen Recording grants.
 
+To let desktop agents use an already signed-in Chrome/Chromium profile, open
+**Settings → MCP → Chimera Computer Use → Allow existing browser access**.
+Review the scope, check the acknowledgement, and confirm. This permission is off
+by default and is separate from macOS screen permissions. It is saved for future
+launches and can be removed in the same panel.
+
+If desktop control is running, confirmation restarts only that service; an
+in-progress browser action may need to be retried. Chimera and agent sessions stay
+open. Saving permission while stopped does not start desktop control. The panel
+shows whether permission is saved or active, including a failed service restart.
+Agents cannot grant this permission through an MCP tool or a chat acknowledgement.
+
 ## Uninstall
 
 Uninstall support is first published in **0.1.3**. Use these commands after that version

@@ -884,7 +884,7 @@ function ScenarioView({ name }: { name: Scenario }) {
 }
 
 let root: Root | null = null;
-let computerStatus = { autoStart: false, configured: true, running: false, permissionOwner: "Chimera", accessibility: false, screenRecording: false };
+let computerStatus = { autoStart: false, configured: true, existingProfileAllowed: false, existingProfileActive: false, running: false, permissionOwner: "Chimera", accessibility: false, screenRecording: false };
 // The daemon's view of the Chimera-managed integrations (computerUse.builtins.status). Installing Laya
 // flips only its row, the way the real first-use download does.
 const freshBuiltIns = () => ({ managed: true, integrations: [
@@ -898,9 +898,10 @@ const installBuiltInTool = async () => {
   builtInsFixture = { ...(builtInsFixture as { integrations: { id: string }[] }), integrations: (builtInsFixture as { integrations: { id: string }[] }).integrations.map(i => i.id === "laya" ? { ...i, state: "installing", reason: undefined } : i) } as never;
   return { started: true };
 };
-const computerRequest = async (command: string) => {
-  if (command === "computer_use_start") computerStatus = { ...computerStatus, running: true, autoStart: true };
-  if (command === "computer_use_stop") computerStatus = { ...computerStatus, running: false, autoStart: false };
+const computerRequest = async (command: string, args?: Record<string, unknown>) => {
+  if (command === "computer_use_browser_access") computerStatus = { ...computerStatus, existingProfileAllowed: args?.allowed === true, existingProfileActive: computerStatus.running && args?.allowed === true };
+  if (command === "computer_use_start") computerStatus = { ...computerStatus, running: true, autoStart: true, existingProfileActive: computerStatus.existingProfileAllowed };
+  if (command === "computer_use_stop") computerStatus = { ...computerStatus, running: false, autoStart: false, existingProfileActive: false };
   if (command === "computer_use_permissions") computerStatus = { ...computerStatus, accessibility: true, screenRecording: true };
   return computerStatus;
 };

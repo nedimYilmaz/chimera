@@ -66,6 +66,7 @@ fn main() {
             computer_use::computer_use_start,
             computer_use::computer_use_stop,
             computer_use::computer_use_permissions,
+            computer_use::computer_use_browser_access,
             commands::rpc_call,
             commands::subscribe,
             commands::daemon_status,

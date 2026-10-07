@@ -8,3 +8,9 @@
 .builtIns li { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; min-width: 0; overflow-wrap: anywhere; }
 .builtIns small { flex-basis: 100%; color: var(--faint); }
 .badge { padding: 0 6px; border: 1px solid var(--line-strong); border-radius: 4px; font-size: 0.85em; }
+
+.browserAccess, .consent { display: grid; gap: 10px; min-width: 0; }
+.consent { margin: 0; border: 1px solid var(--line-strong); padding: 12px; }
+.consent legend, .consent label { overflow-wrap: anywhere; }
+.consent label { display: flex; align-items: flex-start; gap: 8px; }
+.consent input { flex-shrink: 0; }

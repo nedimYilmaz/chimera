@@ -8,7 +8,22 @@ use tauri::State;
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct Config { driver_path: PathBuf, socket_path: String }
 
-struct Runtime { child: Child }
+struct Runtime { child: Child, existing_profile: bool }
+impl Runtime {
+    fn stop_checked(&mut self) -> Result<(), String> {
+        drop(self.child.stdin.take());
+        let deadline = Instant::now() + Duration::from_secs(3);
+        loop {
+            if self.child.try_wait().map_err(|_| "Could not verify desktop control shutdown")?.is_some() { return Ok(()); }
+            if Instant::now() >= deadline {
+                self.child.kill().map_err(|_| "Could not stop desktop control; browser access has not changed")?;
+                self.child.wait().map_err(|_| "Could not verify desktop control shutdown")?;
+                return Ok(());
+            }
+            std::thread::sleep(Duration::from_millis(25));
+        }
+    }
+}
 impl Drop for Runtime {
     // The driver only unlinks its endpoint on a liveness-pipe EOF; SIGKILL strands the socket
     // and the next launch's driver refuses to start over it. Kill is only the hung-driver fallback.
@@ -36,6 +51,8 @@ pub struct Status {
     running: bool,
     auto_start: bool,
     permission_owner: &'static str,
+    existing_profile_allowed: bool,
+    existing_profile_active: bool,
     accessibility: Option<bool>,
     screen_recording: Option<bool>,
 }
@@ -90,7 +107,18 @@ fn config(home: &Path, resources: Option<&Path>) -> Result<Option<(Config, &'sta
 }
 
 #[derive(Serialize, Deserialize, Default)]
-struct Preferences { enabled: bool }
+struct Preferences {
+    enabled: bool,
+    #[serde(default)]
+    existing_profile_allowed: bool,
+}
+fn read_preferences(home: &Path) -> Result<Preferences, String> {
+    match std::fs::read(home.join("computer-use/preferences.json")) {
+        Ok(bytes) => serde_json::from_slice(&bytes).map_err(|e| format!("Invalid desktop preference: {e}")),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Preferences::default()),
+        Err(e) => Err(e.to_string()),
+    }
+}
 
 fn auto_start(home: &Path) -> Result<bool, String> {
     let path = home.join("computer-use/preferences.json");
@@ -109,20 +137,26 @@ fn auto_start(home: &Path) -> Result<bool, String> {
     }
 }
 fn save_enabled(home: &Path, enabled: bool) -> Result<(), String> {
+    let mut prefs = read_preferences(home)?;
+    prefs.enabled = enabled;
+    save_preferences(home, &prefs)
+}
+fn save_preferences(home: &Path, prefs: &Preferences) -> Result<(), String> {
     use std::io::Write;
     let dir = home.join("computer-use");
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let mut file = tempfile::NamedTempFile::new_in(&dir).map_err(|e| e.to_string())?;
-    file.write_all(&serde_json::to_vec(&Preferences { enabled }).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+    file.write_all(&serde_json::to_vec(prefs).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
     file.as_file().sync_all().map_err(|e| e.to_string())?;
     file.persist(dir.join("preferences.json")).map_err(|e| e.to_string())?;
     Ok(())
 }
 
-fn driver_command(cfg: &Config, bundle_id: &str) -> Command {
+fn driver_command(cfg: &Config, bundle_id: &str, existing_profile: bool) -> Command {
     let mut cmd = Command::new(&cfg.driver_path);
     cmd.args(["serve", "--embedded", "--parent-liveness-stdio", "--no-permissions-gate", "--socket", &cfg.socket_path, "--host-bundle-id", bundle_id, "--permission-mode", "standard"])
         .env_clear().stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null());
+    if existing_profile { cmd.args(["--grant", "existing-profile"]); }
     // No provider credentials or ambient driver mode/profile overrides cross this boundary.
     for key in ["HOME", "USERPROFILE", "PATH", "TMPDIR", "TEMP", "TMP", "LANG", "LC_ALL", "DISPLAY", "XAUTHORITY", "XDG_SESSION_TYPE", "WAYLAND_DISPLAY", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS", "SystemRoot", "WINDIR", "APPDATA", "LOCALAPPDATA"] {
         if let Some(value) = std::env::var_os(key) { cmd.env(key, value); }
@@ -164,12 +198,36 @@ impl ComputerUseState {
         let (accessibility, screen_recording) = permissions(false);
         Ok(Status {
             configured: resolved.is_some(), driver_source: resolved.as_ref().map(|(_, source)| *source), running: owned.is_some(),
+            existing_profile_allowed: read_preferences(home)?.existing_profile_allowed,
+            existing_profile_active: owned.as_ref().is_some_and(|runtime| runtime.existing_profile),
             auto_start: auto_start(home)?, permission_owner: "Chimera", accessibility, screen_recording,
         })
     }
     pub fn start(&self, home: &Path, bundle_id: &str) -> Result<(), String> {
-        let (cfg, _) = config(home, self.resources())?.ok_or("Chimera Computer Use runtime is not installed.")?;
         let mut owned = self.0.lock().map_err(|e| e.to_string())?;
+        self.start_locked(home, bundle_id, &mut owned)
+    }
+    fn set_existing_profile(&self, home: &Path, bundle_id: &str, allowed: bool) -> Result<(), String> {
+        config(home, self.resources())?.ok_or("Chimera Computer Use runtime is not installed.")?;
+        let mut owned = self.0.lock().map_err(|e| e.to_string())?;
+        let running = match owned.as_mut() {
+            Some(runtime) => runtime.child.try_wait().map_err(|e| e.to_string())?.is_none(),
+            None => false,
+        };
+        let mut prefs = read_preferences(home)?;
+        if prefs.existing_profile_allowed == allowed && (!running || owned.as_ref().is_some_and(|r| r.existing_profile == allowed)) { return Ok(()); }
+        prefs.enabled = auto_start(home)?;
+        prefs.existing_profile_allowed = allowed;
+        // Persist intent first; failed persistence leaves the running service untouched.
+        save_preferences(home, &prefs)?;
+        if !running { return Ok(()); }
+        // Only our owned service is restarted, under the same lock as start/stop.
+        if let Some(runtime) = owned.as_mut() { runtime.stop_checked()?; }
+        owned.take();
+        self.start_locked(home, bundle_id, &mut owned)
+    }
+    fn start_locked(&self, home: &Path, bundle_id: &str, owned: &mut Option<Runtime>) -> Result<(), String> {
+        let (cfg, _) = config(home, self.resources())?.ok_or("Chimera Computer Use runtime is not installed.")?;
         if let Some(runtime) = owned.as_mut() {
             if runtime.child.try_wait().map_err(|e| e.to_string())?.is_none() { save_enabled(home, true)?; return Ok(()); }
             owned.take();
@@ -182,7 +240,8 @@ impl ComputerUseState {
         if std::fs::symlink_metadata(&cfg.socket_path).is_ok_and(|m| std::os::unix::fs::FileTypeExt::is_socket(&m.file_type())) {
             std::fs::remove_file(&cfg.socket_path).map_err(|e| format!("Could not remove the stale desktop endpoint: {e}"))?;
         }
-        let mut runtime = Runtime { child: driver_command(&cfg, bundle_id).spawn().map_err(|e| format!("Could not start Chimera Computer Use: {e}"))? };
+        let existing_profile = read_preferences(home)?.existing_profile_allowed;
+        let mut runtime = Runtime { child: driver_command(&cfg, bundle_id, existing_profile).spawn().map_err(|e| format!("Could not start Chimera Computer Use: {e}"))?, existing_profile };
         let deadline = Instant::now() + Duration::from_secs(12);
         while Instant::now() < deadline {
             if runtime.child.try_wait().map_err(|e| e.to_string())?.is_some() { return Err("Chimera Computer Use exited before it was ready.".into()); }
@@ -241,6 +300,17 @@ pub async fn computer_use_stop(state: State<'_, ComputerUseState>) -> Result<Sta
     let state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || { let home = crate::daemon::chimera_home(); state.disable(&home)?; state.status(&home) }).await.map_err(|e| e.to_string())?
 }
+// Operator-only Tauri command: never exposed as an agent RPC or MCP tool.
+#[tauri::command]
+pub async fn computer_use_browser_access(app: tauri::AppHandle, state: State<'_, ComputerUseState>, allowed: bool) -> Result<Status, String> {
+    let state = state.inner().clone(); let bundle_id = app.config().identifier.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let home = crate::daemon::chimera_home();
+        state.set_existing_profile(&home, &bundle_id, allowed)?;
+        state.status(&home)
+    }).await.map_err(|e| e.to_string())?
+}
+
 #[tauri::command]
 pub async fn computer_use_permissions(app: tauri::AppHandle) -> Result<(), String> {
     let (tx, rx) = tokio::sync::oneshot::channel();
@@ -276,7 +346,7 @@ mod tests {
     #[test]
     fn host_launch_keeps_identity_and_parent_liveness() {
         let cfg = Config { driver_path: PathBuf::from("/runtime with spaces/driver"), socket_path: "/private/test.sock".into() };
-        let cmd = driver_command(&cfg, "dev.chimera.desktop");
+        let cmd = driver_command(&cfg, "dev.chimera.desktop", false);
         let args: Vec<_> = cmd.get_args().map(|s| s.to_string_lossy().to_string()).collect();
         assert!(args.contains(&"--embedded".into())); assert!(args.contains(&"--parent-liveness-stdio".into()));
         assert!(args.windows(2).any(|p| p == ["--host-bundle-id", "dev.chimera.desktop"]));
@@ -603,5 +673,117 @@ printf '\377\330\377\331' > "$out"
             assert!(capture_preview_with(&program, root.path(), None, Duration::from_secs(10)).unwrap_err().contains("size or format"));
             no_frames(root.path());
         }
+    }
+}
+
+#[cfg(all(test, unix))]
+mod browser_access_tests {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt;
+
+    fn fixture() -> (tempfile::TempDir, ComputerUseState, PathBuf) {
+        let home = tempfile::tempdir_in("/tmp").unwrap();
+        let dir = home.path().join("computer-use"); std::fs::create_dir(&dir).unwrap();
+        let program = home.path().join("driver");
+        std::fs::write(&program, r#"#!/usr/bin/python3
+import os, socket, sys, json
+path = sys.argv[sys.argv.index('--socket') + 1]
+with open(os.path.join(os.path.dirname(path), 'args.json'), 'w') as f: json.dump(sys.argv[1:], f)
+if os.path.exists(path): os.unlink(path)
+s = socket.socket(socket.AF_UNIX); s.bind(path); s.listen(4)
+sys.stdin.buffer.read()
+s.close(); os.unlink(path)
+"#).unwrap();
+        std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o700)).unwrap();
+        std::fs::write(dir.join("desktop.json"), serde_json::json!({"driverPath":program,"socketPath":dir.join("d.sock")}).to_string()).unwrap();
+        (home, ComputerUseState::default(), program)
+    }
+    fn args(home: &Path) -> Vec<String> { serde_json::from_slice(&std::fs::read(home.join("computer-use/args.json")).unwrap()).unwrap() }
+    fn pid(state: &ComputerUseState) -> u32 { state.0.lock().unwrap().as_ref().unwrap().child.id() }
+
+    #[test]
+    fn consent_defaults_off_and_only_explicit_grant_restarts_owned_service() {
+        let (home, state, _) = fixture();
+        state.start(home.path(), "dev.chimera.desktop").unwrap();
+        let old = pid(&state);
+        assert!(!args(home.path()).contains(&"--grant".into()));
+        state.set_existing_profile(home.path(), "dev.chimera.desktop", false).unwrap();
+        assert_eq!(pid(&state), old);
+        state.set_existing_profile(home.path(), "dev.chimera.desktop", true).unwrap();
+        let granted = pid(&state); assert_ne!(granted, old);
+        assert!(args(home.path()).windows(2).any(|p| p == ["--grant", "existing-profile"]));
+        assert!(args(home.path()).windows(2).any(|p| p == ["--permission-mode", "standard"]));
+        assert!(!args(home.path()).contains(&"--dangerously-bypass-approvals".into()));
+        assert!(state.status(home.path()).unwrap().existing_profile_active);
+        state.set_existing_profile(home.path(), "dev.chimera.desktop", true).unwrap();
+        assert_eq!(pid(&state), granted);
+        state.set_existing_profile(home.path(), "dev.chimera.desktop", false).unwrap();
+        assert_ne!(pid(&state), granted);
+        assert!(!state.status(home.path()).unwrap().existing_profile_allowed);
+        assert!(!state.status(home.path()).unwrap().existing_profile_active);
+        assert!(!args(home.path()).contains(&"--grant".into()));
+        state.stop();
+    }
+
+    #[test]
+    fn saving_consent_while_stopped_never_starts_and_stop_preserves_the_explicit_choice() {
+        let (home, state, _) = fixture();
+        state.set_existing_profile(home.path(), "dev.chimera.desktop", true).unwrap();
+        let status = state.status(home.path()).unwrap();
+        assert!(status.existing_profile_allowed); assert!(!status.existing_profile_active && !status.running && !status.auto_start);
+        assert!(!state.resume(home.path(), "dev.chimera.desktop").unwrap());
+        state.start(home.path(), "dev.chimera.desktop").unwrap();
+        state.disable(home.path()).unwrap();
+        assert!(read_preferences(home.path()).unwrap().existing_profile_allowed);
+        assert!(!auto_start(home.path()).unwrap());
+        state.start(home.path(), "dev.chimera.desktop").unwrap();
+        assert!(state.status(home.path()).unwrap().existing_profile_active);
+        state.stop();
+    }
+
+    #[test]
+    fn legacy_preferences_do_not_grant_and_invalid_preferences_keep_the_owned_process() {
+        let (home, state, _) = fixture();
+        let prefs = home.path().join("computer-use/preferences.json");
+        std::fs::write(&prefs, r#"{"enabled":true}"#).unwrap();
+        assert!(!read_preferences(home.path()).unwrap().existing_profile_allowed);
+        state.start(home.path(), "dev.chimera.desktop").unwrap(); let original = pid(&state);
+        std::fs::write(&prefs, "invalid").unwrap();
+        assert!(state.set_existing_profile(home.path(), "dev.chimera.desktop", true).is_err());
+        assert_eq!(pid(&state), original);
+        assert!(!args(home.path()).contains(&"--grant".into()));
+        state.stop();
+    }
+
+    #[test]
+    fn failed_preference_write_preserves_running_permissions() {
+        extern "C" { fn geteuid() -> u32; }
+        // Root bypasses directory mode restrictions; hosted and local GUI builds run as a user.
+        if unsafe { geteuid() } == 0 { return; }
+        let (home, state, _) = fixture();
+        state.start(home.path(), "dev.chimera.desktop").unwrap(); let original = pid(&state);
+        let dir = home.path().join("computer-use");
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o500)).unwrap();
+        let result = state.set_existing_profile(home.path(), "dev.chimera.desktop", true);
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+        assert!(result.is_err()); assert_eq!(pid(&state), original);
+        let status = state.status(home.path()).unwrap();
+        assert!(!status.existing_profile_allowed && !status.existing_profile_active);
+        state.stop();
+    }
+
+    #[test]
+    fn failed_restart_never_reports_consent_as_active_and_does_not_take_over_foreign_service() {
+        let (home, state, program) = fixture();
+        state.start(home.path(), "dev.chimera.desktop").unwrap(); let original = pid(&state);
+        let other = ComputerUseState::default();
+        other.set_existing_profile(home.path(), "dev.chimera.desktop", true).unwrap();
+        assert!(!other.status(home.path()).unwrap().existing_profile_active);
+        assert_eq!(pid(&state), original);
+        assert!(!state.status(home.path()).unwrap().existing_profile_active);
+        std::fs::write(&program, "#!/bin/sh\nexit 1\n").unwrap();
+        assert!(state.set_existing_profile(home.path(), "dev.chimera.desktop", true).is_err());
+        let status = state.status(home.path()).unwrap();
+        assert!(status.existing_profile_allowed); assert!(!status.existing_profile_active && !status.running);
     }
 }

@@ -42,8 +42,8 @@ const text = () => textOf(root());
 const row = (id: string) => root().findAll(n => n.props["data-built-in"] === id)[0]!;
 const button = (label: string) => root().findAll(n => n.type === "button" && textOf(n) === label)[0];
 
-async function mount(o: { native?: object; built?: () => Promise<unknown>; install?: (id: "laya") => Promise<unknown> }) {
-  const request = vi.fn(async () => o.native ?? status);
+async function mount(o: { request?: (command: string, args?: Record<string, unknown>) => Promise<unknown>; native?: object; built?: () => Promise<unknown>; install?: (id: "laya") => Promise<unknown> }) {
+  const request = vi.fn(o.request ?? (async () => o.native ?? status));
   const installBuiltInTool = vi.fn(o.install ?? (async () => ({ started: true })));
   const builtInsStatus = vi.fn((o.built ?? (async () => rows())) as () => Promise<BuiltInsStatusResult>);
   await act(async () => { renderer = create(React.createElement(ComputerUseCard, { request, builtInsStatus, installBuiltInTool })); await vi.advanceTimersByTimeAsync(0); });
@@ -122,5 +122,53 @@ describe("ComputerUseCard — Chimera-managed built-in integrations", () => {
     await mount({ built: async () => { throw new Error("daemon down"); } });
     expect(text()).toContain("Accessibility: allowed");
     expect(root().findAll(n => n.props["data-built-ins"] !== undefined)).toHaveLength(0);
+  });
+});
+
+
+describe("ComputerUseCard — operator browser consent", () => {
+  it("requires explicit acknowledgement and supports cancel, grant and revoke", async () => {
+    let native = { ...status, running: true, existingProfileAllowed: false, existingProfileActive: false };
+    const m = await mount({ request: async (command, args) => {
+      if (command === "computer_use_browser_access") native = { ...native, existingProfileAllowed: args?.allowed === true, existingProfileActive: args?.allowed === true };
+      return native;
+    } });
+    expect(m.request.mock.calls.filter(c => c[0] === "computer_use_browser_access")).toHaveLength(0);
+    await act(async () => { button("Allow existing browser access")!.props.onClick(); });
+    expect(button("Allow and restart desktop control")!.props.disabled).toBe(true);
+    await act(async () => { button("Allow and restart desktop control")!.props.onClick(); });
+    expect(m.request.mock.calls.filter(c => c[0] === "computer_use_browser_access")).toHaveLength(0);
+    await act(async () => { button("Cancel")!.props.onClick(); });
+    expect(button("Allow and restart desktop control")).toBeUndefined();
+    await act(async () => { button("Allow existing browser access")!.props.onClick(); });
+    await act(async () => { root().findAll(n => n.type === "input" && n.props.type === "checkbox")[0]!.props.onChange({target:{checked:true}}); });
+    await act(async () => { button("Allow and restart desktop control")!.props.onClick(); });
+    expect(m.request).toHaveBeenCalledWith("computer_use_browser_access", {allowed:true});
+    expect(text()).toContain("Allowed · active");
+    await act(async () => { button("Remove browser access")!.props.onClick(); });
+    await act(async () => { button("Remove and restart desktop control")!.props.onClick(); });
+    expect(m.request).toHaveBeenCalledWith("computer_use_browser_access", {allowed:false});
+    expect(text()).toContain("Not allowed");
+    expect(m.request.mock.calls.filter(c => c[0] === "computer_use_permissions" || c[0] === "computer_use_start")).toHaveLength(0);
+  });
+
+  it("distinguishes saved intent from a failed restart and offers no implicit escalation", async () => {
+    let native = { ...status, running: true, existingProfileAllowed: false, existingProfileActive: false };
+    await mount({ request: async command => {
+      if (command === "computer_use_browser_access") { native = {...native, running:false, existingProfileAllowed:true}; throw new Error("Driver restart failed"); }
+      return native;
+    } });
+    await act(async () => { button("Allow existing browser access")!.props.onClick(); });
+    await act(async () => { root().findAll(n => n.type === "input" && n.props.type === "checkbox")[0]!.props.onChange({target:{checked:true}}); });
+    await act(async () => { button("Allow and restart desktop control")!.props.onClick(); });
+    expect(text()).toContain("Driver restart failed");
+    expect(text()).toContain("Allowed for next start");
+    expect(text()).not.toContain("Allowed · active");
+    expect(button("Start desktop control")!.props.disabled).toBe(false);
+  });
+
+  it("older native hosts do not show an unsupported permission control", async () => {
+    await mount({});
+    expect(button("Allow existing browser access")).toBeUndefined();
   });
 });
