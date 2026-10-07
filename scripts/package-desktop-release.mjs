@@ -1,6 +1,7 @@
 // Give native outputs the exact version/architecture names selected by the shared installer.
-import { readFile, copyFile, mkdir, readdir } from 'node:fs/promises';
+import { readFile, copyFile, mkdir, readdir, mkdtemp, rm } from 'node:fs/promises';
 import { dirname, resolve, join, basename } from 'node:path';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { installPlan } from './npm-install.mjs';
@@ -32,6 +33,18 @@ if (process.platform === 'darwin') {
     execFileSync('powershell.exe', psCommand(`if ((Get-Item -LiteralPath ${psQuote(source)}).VersionInfo.ProductVersion -ne ${psQuote(plan.version)}) { throw 'Built app version mismatch' }`), { stdio: 'inherit' });
   } else if (!basename(source).includes(`_${manifest.version}_`)) {
     throw new Error('AppImage filename must contain the matching Tauri release version');
+  }
+  if (process.platform === 'linux') {
+    // Verify the resources AFTER linuxdeploy has processed them, outside their AppDir.
+    // The npm installer copies this same runtime to a permanent, independently located daemon.
+    const temp = await mkdtemp(join(tmpdir(), 'chimera-packaged-runtime-'));
+    try {
+      execFileSync(source, ['--appimage-extract'], { cwd: temp, stdio: 'ignore', timeout: 180_000 });
+      const resources = join(temp, 'squashfs-root/usr/lib/chimera/runtime');
+      const runtime = JSON.parse(await readFile(join(resources, 'runtime.json'), 'utf8'));
+      if (runtime.version !== manifest.version || runtime.platform !== process.platform || runtime.arch !== process.arch) throw new Error('Packaged runtime version/target mismatch');
+      execFileSync(process.execPath, [join(root, 'scripts/test-desktop-runtime.mjs'), resources], { stdio: 'inherit', timeout: 180_000 });
+    } finally { await rm(temp, {recursive:true,force:true}); }
   }
   await mkdir(join(root, 'dist'), { recursive: true });
   const artifact = join(root, 'dist', plan.asset);

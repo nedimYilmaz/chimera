@@ -12,8 +12,10 @@ export async function prepareInstalledIntegrations({ source, permanent, plan, ru
   for (const file of [relativeNode, 'prepare-integrations.mjs']) if (!(await lstat(join(source, file))).isFile()) throw new Error(`Missing regular runtime file: ${file}`);
   const root = join(permanent, 'desktop-runtime');
   try { await lstat(root); throw new Error('Refusing to replace an existing prepared runtime'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  console.log('Preparing bundled Computer Use. Laya model setup can take several minutes on a fresh installation…');
   await cp(source, root, { recursive: true, verbatimSymlinks: true, errorOnExist: true, force: false });
   // This command installs only the pinned Python/model assets; it never starts a daemon or app.
-  await run(join(root, relativeNode), [join(root, 'prepare-integrations.mjs'), plan.state, plan.version], { timeout: 45 * 60_000, maxBuffer: 4 * 1024 * 1024 });
+  const result = await run(join(root, relativeNode), [join(root, 'prepare-integrations.mjs'), plan.state, plan.version], { timeout: 45 * 60_000, maxBuffer: 4 * 1024 * 1024 });
+  if (result?.stdout) process.stdout.write(result.stdout);
   return root;
 }

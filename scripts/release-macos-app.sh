@@ -67,7 +67,7 @@ trap 'rm -f -- "$release_marker"' EXIT
 echo "building the signed + notarized app (this can take several minutes while Apple notarizes)..."
 # Only the .app ships: package-macos-release.mjs tars it for the installer. Tauri notarizes the
 # .app but not a DMG, so a DMG bundle was a second, unnotarized artifact nothing published.
-node --test scripts/sign-desktop-runtime.test.mjs
+node --test scripts/sign-desktop-runtime.test.mjs scripts/prune-desktop-prebuilds.test.mjs
 node scripts/build-desktop-runtime.mjs
 node scripts/test-desktop-runtime.mjs
 node scripts/sign-desktop-runtime.mjs
@@ -87,6 +87,8 @@ codesign -dv --verbose=4 "$APP_PATH"
 codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 spctl -a -t execute -v "$APP_PATH"
 xcrun stapler validate "$APP_PATH"
+# Signing/bundling must not break the embedded Node, provider CLIs or browser.
+node scripts/test-desktop-runtime.mjs "$APP_PATH/Contents/Resources/runtime"
 
 echo
 echo "all checks passed: $APP_PATH is signed, notarized, and stapled."

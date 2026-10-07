@@ -9,6 +9,7 @@ import { execFileSync } from 'node:child_process';
 import ts from 'typescript';
 import { PLAYWRIGHT_MCP } from './integration-pins.mjs';
 import { stageIntegrations } from './integration-stage.mjs';
+import { pruneDesktopPrebuilds } from './prune-desktop-prebuilds.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const target = join(root, 'packages/app/src-tauri/standalone/runtime');
@@ -118,6 +119,8 @@ try {
   const npm = join(out, platform === 'win32' ? 'node/node_modules/npm/bin/npm-cli.js' : 'node/lib/node_modules/npm/bin/npm-cli.js');
   run(node, [npm, 'install', '--ignore-scripts', '--omit=dev', '--no-fund', '--no-audit', '--registry=https://registry.npmjs.org']);
   run(node, [npm, 'audit', '--omit=dev', '--audit-level=high', '--registry=https://registry.npmjs.org']);
+  const prunedPrebuilds = await pruneDesktopPrebuilds(out, platform, process.arch);
+  console.log(`Removed ${prunedPrebuilds.length} foreign-platform Bare prebuilds`);
   // Only this checksum-verifying downloader runs; arbitrary dependency install hooks do not.
   run(node, [join(out, 'node_modules/dugite/script/download-git.js')]);
   await cp(join(root, 'scripts/desktop-bootstrap.mjs'), join(out, 'bootstrap.mjs'));
@@ -128,7 +131,7 @@ try {
     out, stage, platform, arch: process.arch, repoRoot: root, download, run,
     nodeRel: platform === 'win32' ? 'node/node.exe' : 'node/bin/node',
   });
-  await writeFile(join(out, 'runtime.json'), JSON.stringify({ version, platform, arch: process.arch, nodeVersion, nodeSha256: expected, git: 'dugite@3.2.3', integrations: artifacts }, null, 2));
+  await writeFile(join(out, 'runtime.json'), JSON.stringify({ version, platform, arch: process.arch, nodeVersion, nodeSha256: expected, git: 'dugite@3.2.3', prunedPrebuilds, integrations: artifacts }, null, 2));
   await mkdir(dirname(target), { recursive: true });
   await rm(target, { recursive: true, force: true });
   await cp(out, target, { recursive: true, verbatimSymlinks: true });

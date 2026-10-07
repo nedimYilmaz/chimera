@@ -56,6 +56,9 @@ for (const scenario of ['success', 'missing-identity', 'sign-failure', 'import-f
     assert.ok(deleted, 'private keychain cleanup is required after failure or success');
     assert.deepEqual(calls.at(-1).args, ['list-keychains','-d','user','-s','/original/login.keychain-db']);
     await assert.rejects(readFile(deleted.args[1]), {code:'ENOENT'});
+    const imported = calls.find(call => call.command === '/usr/bin/security' && call.args[0] === 'import');
+    assert.ok(imported);
+    await assert.rejects(readFile(imported.args[1]), {code:'ENOENT'}); // actual fixture certificate must be erased
     assert.equal(calls.filter(call=>call.command==='/usr/bin/codesign').length, ['success','sign-failure'].includes(scenario)?1:0);
   });
 }
