@@ -132,8 +132,10 @@ await writeFile(join(out, 'package.json'), JSON.stringify({
   bin, imports, dependencies, overrides,
 }, null, 2) + '\n');
 await copyFile(join(root, 'LICENSE'), join(out, 'LICENSE'));
-// The public repository carries no docs/ tree; the project README is the package README.
-await copyFile(join(root, 'README.md'), join(out, 'README.md'));
+// npm does not ship site/; use the public site's assets instead of broken relative images.
+const readme = await readFile(join(root, 'README.md'), 'utf8');
+await writeFile(join(out, 'README.md'), readme
+  .replace(/(\]\(|src=")site\/assets\//g, '$1https://nedimyilmaz.github.io/chimera/assets/'));
 await mkdir(join(out, 'scripts'), { recursive: true });
 for (const file of ['npm-install.mjs', 'npm-install-portable.mjs', 'npm-install-platforms.mjs']) {
   await copyFile(join(root, 'scripts', file), join(out, 'scripts', file));

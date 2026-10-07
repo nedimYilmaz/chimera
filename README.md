@@ -219,37 +219,16 @@ smaller capabilities that don't fit in this list.
 
 ## How it works
 
-```mermaid
-flowchart LR
-    subgraph Clients
-        MCPCLIENT["MCP client<br/>(Claude Code, Codex, ...)"]
-        APP["Desktop app"]
-    end
+The desktop app and MCP clients reach the same engine through the daemon:
 
-    MCPSRV["chimera MCP server<br/>(packages/mcp)"]
-    CLIENTLIB["RPC client<br/>(packages/client)"]
-
-    MCPCLIENT --> MCPSRV --> CLIENTLIB
-    APP --> CLIENTLIB
-
-    CLIENTLIB -- "unix socket, framed RPC" --> DAEMON
-
-    subgraph DAEMON["chimerad (packages/daemon)"]
-        ENGINE["Engine (packages/core)"]
-    end
-
-    ENGINE --> SCHED["Scheduler<br/>queues, workflows, gates"]
-    ENGINE --> SUP["Supervisor<br/>lifecycle, budgets, failover"]
-    ENGINE --> MEM["MemoryStore"]
-    ENGINE --> HOOKS["HookEngine"]
-
-    SUP --> BACKENDS["Backends<br/>claude / codex / kimi / generic"]
-    BACKENDS --> WT["one git worktree per agent"]
-
-    ENGINE --> EVENTS[("events/*.jsonl")]
-    EVENTS --> UISTATE["reducer<br/>(packages/ui-state)"]
-    UISTATE --> APP
-```
+| Path | Components and responsibilities |
+| --- | --- |
+| MCP requests | MCP client (Claude Code, Codex, ...) → Chimera MCP server (`packages/mcp`) → RPC client (`packages/client`). |
+| Desktop requests | Desktop app → the same RPC client. |
+| Daemon connection | RPC client → framed RPC over a unix socket → `chimerad` (`packages/daemon`) → Engine (`packages/core`). |
+| Coordination | Engine → Scheduler (queues, workflows, gates), Supervisor (lifecycle, budgets, failover), MemoryStore and HookEngine. |
+| Agent execution | Supervisor → provider backends (Claude, Codex, Kimi or generic) → one git worktree per agent. |
+| UI updates | Engine → `events/*.jsonl` → reducer (`packages/ui-state`) → desktop app. |
 
 **The daemon and the engine.** `packages/daemon` is a thin unix-socket RPC
 server plus persistence. Everything that matters — the engine, scheduler,
