@@ -41,15 +41,33 @@ jobs:
         with:
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        id: node
         with:
           node-version: '24'
       - run: npm install --global pnpm@11.11.0
+      # PRs never read/write this trusted store; installs still run on hits and cold misses.
+      - name: Locate pnpm content store
+        id: pnpm-store
+        if: github.event_name != 'pull_request' && github.event_name != 'pull_request_target' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+        shell: bash
+        run: |
+          store_path=$(pnpm store path --silent)
+          echo "path=$store_path" >> "$GITHUB_OUTPUT"
+      - name: Cache pnpm content store
+        if: github.event_name != 'pull_request' && github.event_name != 'pull_request_target' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-store-v1-${{ runner.os }}-${{ runner.arch }}-node-${{ steps.node.outputs.node-version }}-pnpm-11.11.0-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'patches/**') }}
       - run: pnpm install --frozen-lockfile
       - run: node scripts/audit-secrets.mjs
       - run: git diff --check
       - name: Portable typecheck and native gate regressions
         run: node --test scripts/typecheck.test.mjs
+      - name: Release cache and source coverage regressions
+        run: node --test scripts/release-workflows.test.mjs
       - name: Portable source tests
+        if: runner.os == 'Windows'
         run: pnpm exec vitest run --maxWorkers=4 packages/protocol/test packages/app/test packages/client/test/doctor.test.ts packages/core/test/paths-platform.test.ts
       - name: Full Unix source suite
         if: runner.os != 'Windows'

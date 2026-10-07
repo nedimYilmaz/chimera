@@ -4990,6 +4990,9 @@ export class Engine {
       // chip), so this is a default, not a lock. Only the FRESH spawn reads config; a resumed
       // record keeps its stored profile (reattach.ts).
       permissionProfile: this.cfg.conductorPermissionProfile,
+      // The configured full-access conductor policy grants the matching Codex
+      // posture, just as for project conductors. Ordinary spawns still need opt-in.
+      acknowledgeCodexFullAccessRisk: this.cfg.conductorPermissionProfile === "full",
       resume: priorSessionId,
       resumeOnly: true,
       instructions: MAIN_CONDUCTOR_INSTRUCTIONS,
