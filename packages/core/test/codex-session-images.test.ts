@@ -100,6 +100,22 @@ describe("Codex exec native image rollout delivery", () => {
     expect(await reader.read()).toEqual([]);
   });
 
+  it("reports the default read deadline and closes the file if opening exhausts the budget", async () => {
+    const { home } = fixture(meta() + start() + image());
+    let clock = 0;
+    const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+    let opened: Awaited<ReturnType<typeof openAsync>> | undefined;
+    vi.mocked(openAsync).mockImplementationOnce(async (...args: Parameters<typeof openAsync>) => {
+      opened = await actual.open(...args);
+      clock = 201;
+      return opened;
+    });
+    const reader = new CodexSessionImages(home, id, 0, { now: () => clock });
+    expect(await reader.read()).toEqual([{ type: "image_output.warning", reason: "read-work-limit" }]);
+    expect(opened).toBeDefined();
+    await expect(opened!.stat()).rejects.toMatchObject({ code: "EBADF" });
+  });
+
   it("fails closed for ambiguous discovery, truncated files and missing/incomplete final identity", async () => {
     const { home, path } = fixture(meta() + start() + image());
     const another = join(home, "sessions", "2026", "10", "08"); mkdirSync(another);
@@ -372,6 +388,8 @@ describe("Codex exec native image rollout delivery", () => {
   });
 
   it("makes oversized/malformed/failing output explicit and never invents an image from a savedPath", async () => {
+    // Record validation is independent of host I/O speed; deadline behavior has its own controls.
+    const options = { now: () => 0 };
     const large = Buffer.alloc(TOOL_OUTPUT_IMAGE_MAX_BYTES + 1); Buffer.from(png, "base64").copy(large);
     for (const [item, expected] of [
       [{ result: large.toString("base64") }, { imageOutputWarnings: ["too-large"] }],
@@ -380,7 +398,7 @@ describe("Codex exec native image rollout delivery", () => {
       [{ status: "failed", failure: { type: "usageLimitExceeded" }, result: "" }, { isError: true, result: "Image generation failed" }],
     ] as const) {
       const { home } = fixture(meta() + start() + image(item));
-      const rows = normalized(await new CodexSessionImages(home, id, 0).read());
+      const rows = normalized(await new CodexSessionImages(home, id, 0, options).read());
       expect(rows.at(-1)?.data).toMatchObject(expected);
       expect(rows.at(-1)?.data.images).toBeUndefined();
       expect(JSON.stringify(rows.map(row => row.raw))).not.toContain(large.toString("base64"));
@@ -388,10 +406,10 @@ describe("Codex exec native image rollout delivery", () => {
     const { home, path } = fixture(meta() + start());
     appendFileSync(path, image({ result: "x".repeat(8 * 1024 * 1024) }));
     appendFileSync(path, image({ id: "after-large" }));
-    const rows = normalized(await new CodexSessionImages(home, id, 0).read());
+    const rows = normalized(await new CodexSessionImages(home, id, 0, options).read());
     expect(rows[0]?.data).toMatchObject({ imageOutputOmitted: true, reason: "record-too-large" });
     expect(rows.at(-1)?.data.toolId).toBe("after-large");
-    expect(await new CodexSessionImages(home + "-missing", id, 0).read()).toEqual([]);
+    expect(await new CodexSessionImages(home + "-missing", id, 0, options).read()).toEqual([]);
   });
 
   it.each(["none", "imageGeneration", "Extension"])("delivers missing exec output once with stdout=%s, including exit flush", async (forwarded) => {
