@@ -43,6 +43,8 @@ vi.mock("../src/rpc/bridge", () => ({
 import { Liveboard } from "../src/components/Liveboard";
 import { appStore } from "../src/state/store";
 
+const DECOY = { agentId: "selected-decoy", state: "done" as const, accountName: "acct-decoy", provider: "claude", costUsd: 0, createdAt: 0 };
+
 // Same NormalizedEvent-fixture convention as TranscriptPanel.test.tsx's `ev`.
 function ev(seq: number, kind: string, agentId: string, ts: number, data: Record<string, unknown> = {}) {
   return { seq, ts, engineId: "local", agentId, kind, data };
@@ -83,7 +85,7 @@ describe("Liveboard — per-lane history backfill", () => {
   it("backfills a lane whose agent is not the selection, replacing 'no transcript yet'", async () => {
     appStore.dispatch({
       type: "agentRecords",
-      records: [{ agentId: "lb-agent-1", state: "done", accountName: "acct-a", provider: "claude", costUsd: 0, createdAt: 1 }],
+      records: [DECOY, { agentId: "lb-agent-1", state: "done", accountName: "acct-a", provider: "claude", costUsd: 0, createdAt: 1 }],
     });
     appStore.dispatch({ type: "liveboardLaneAdd", agentId: "lb-agent-1" });
     tailByAgent.set("lb-agent-1", [
@@ -102,7 +104,7 @@ describe("Liveboard — per-lane history backfill", () => {
   it("requests agent.tail at most once per agent even across re-renders", async () => {
     appStore.dispatch({
       type: "agentRecords",
-      records: [{ agentId: "lb-agent-2", state: "running", accountName: "acct-b", provider: "claude", costUsd: 0, createdAt: 2 }],
+      records: [DECOY, { agentId: "lb-agent-2", state: "running", accountName: "acct-b", provider: "claude", costUsd: 0, createdAt: 2 }],
     });
     appStore.dispatch({ type: "liveboardLaneAdd", agentId: "lb-agent-2" });
     tailByAgent.set("lb-agent-2", [ev(1, "message_delta", "lb-agent-2", 10, { text: "hi" })]);
@@ -115,7 +117,7 @@ describe("Liveboard — per-lane history backfill", () => {
     await act(async () => {
       appStore.dispatch({
         type: "agentRecords",
-        records: [{ agentId: "lb-agent-2", state: "running", accountName: "acct-b", provider: "claude", costUsd: 0.01, createdAt: 2 }],
+        records: [DECOY, { agentId: "lb-agent-2", state: "running", accountName: "acct-b", provider: "claude", costUsd: 0.01, createdAt: 2 }],
       });
       await Promise.resolve();
       await Promise.resolve();
@@ -126,7 +128,7 @@ describe("Liveboard — per-lane history backfill", () => {
   it("does not backfill an agent whose history is already loaded or has content", async () => {
     appStore.dispatch({
       type: "agentRecords",
-      records: [{ agentId: "lb-agent-3", state: "done", accountName: "acct-c", provider: "claude", costUsd: 0, createdAt: 3 }],
+      records: [DECOY, { agentId: "lb-agent-3", state: "done", accountName: "acct-c", provider: "claude", costUsd: 0, createdAt: 3 }],
     });
     appStore.dispatch({ type: "liveboardLaneAdd", agentId: "lb-agent-3" });
     appStore.dispatch({ type: "backfillHistory", agentId: "lb-agent-3", events: [] });
@@ -143,7 +145,7 @@ describe("Liveboard failed initial history", () => {
     if (liveRenderer) { act(() => liveRenderer!.unmount()); liveRenderer = null; }
     for (const lane of appStore.getState().liveboardLanes) appStore.dispatch({ type: "liveboardLaneRemove", agentId: lane.agentId });
     appStore.dispatch({ type: "connected", connected: true });
-    appStore.dispatch({ type: "agentRecords", records: [{ agentId: "lb-error", state: "done", accountName: "acct-a", provider: "claude", costUsd: 0, createdAt: 10 }] });
+    appStore.dispatch({ type: "agentRecords", records: [DECOY, { agentId: "lb-error", state: "done", accountName: "acct-a", provider: "claude", costUsd: 0, createdAt: 10 }] });
     appStore.dispatch({ type: "liveboardLaneAdd", agentId: "lb-error" });
     tailErrors.set("lb-error", new Error("fixture offline"));
     const renderer = await renderBoard();
@@ -163,7 +165,7 @@ it("invalidates pre-disconnect replies, dedups retry and keeps selection through
   if (liveRenderer) { act(() => liveRenderer!.unmount()); liveRenderer = null; }
   for (const lane of appStore.getState().liveboardLanes) appStore.dispatch({ type: "liveboardLaneRemove", agentId: lane.agentId });
   appStore.dispatch({ type: "connected", connected: true });
-  appStore.dispatch({ type: "agentRecords", records: [{ agentId: "lb-late", state: "done", accountName: "acct-a", provider: "claude", costUsd: 0, createdAt: 11 }] });
+  appStore.dispatch({ type: "agentRecords", records: [DECOY, { agentId: "lb-late", state: "done", accountName: "acct-a", provider: "claude", costUsd: 0, createdAt: 11 }] });
   appStore.dispatch({ type: "liveboardLaneAdd", agentId: "lb-late" });
   const pending: ((events: unknown[]) => void)[] = [];
   tailPending.set("lb-late", () => new Promise(resolve => pending.push(resolve)));

@@ -50,6 +50,7 @@ function isImageMediaType(v: string): v is Image["mediaType"] {
 export type FileView =
   | { kind: "error"; message: string }
   | { kind: "image"; mediaType: Image["mediaType"]; data: string }
+  | { kind: "media"; media: "video" | "audio"; path: string }
   | { kind: "binary"; sizeBytes: number }
   | { kind: "text"; content: string; lang: string | null; truncated: boolean; sizeBytes: number; shownBytes: number };
 
@@ -58,6 +59,9 @@ export type FileView =
 export function classifyFileView(selected: FsSelectedFile): FileView {
   if (selected.status === "error") return { kind: "error", message: selected.message };
   const r = selected.result;
+  if (r.binary && r.absolutePath && (r.mediaType?.startsWith("video/") || r.mediaType?.startsWith("audio/"))) {
+    return { kind: "media", media: r.mediaType.startsWith("video/") ? "video" : "audio", path: r.absolutePath };
+  }
   if (r.binary && r.mediaType && isImageMediaType(r.mediaType)) {
     return { kind: "image", mediaType: r.mediaType, data: r.content };
   }

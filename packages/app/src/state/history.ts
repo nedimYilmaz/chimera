@@ -6,6 +6,24 @@ export const HISTORY_PAGE = 500;
 
 type Request = <T = unknown>(method: string, params?: unknown) => Promise<T>;
 
+type HistoryPage = { events: NormalizedEvent[]; exhausted: boolean };
+
+// Event count does not bound bytes: a single tool result can be several MiB.
+// Retry a rejected page at the same cursor, preserving every original event.
+async function fetchHistoryPage(agentId: string, request: Request, toSeq?: number): Promise<HistoryPage> {
+  let limit = HISTORY_PAGE;
+  for (;;) {
+    try {
+      const batch = await request<NormalizedEvent[]>("events.replay", { agentId, ...(toSeq === undefined ? {} : { toSeq }), limit });
+      const events = Array.isArray(batch) ? batch : [];
+      return { events, exhausted: events.length < limit };
+    } catch (error) {
+      if ((error as { code?: string } | null)?.code !== "response-too-large" || limit === 1) throw error;
+      limit = Math.max(1, Math.floor(limit / 2));
+    }
+  }
+}
+
 // TRANSCRIPT-TAIL-FIRST: the newest page — no fromSeq/toSeq. events.replay's own
 // "no fromSeq" branch (packages/core/src/events.ts) already serves the NEWEST
 // `limit` events for the agent, so this is the exact content the transcript pane
@@ -13,17 +31,15 @@ type Request = <T = unknown>(method: string, params?: unknown) => Promise<T>;
 // dispatched via backfillHistory the instant it resolves — the operator sees the
 // tail before anything older has even been asked for.
 export async function fetchNewestHistoryPage(agentId: string, request: Request): Promise<NormalizedEvent[]> {
-  const batch = await request<NormalizedEvent[]>("events.replay", { agentId, limit: HISTORY_PAGE });
-  return Array.isArray(batch) ? batch : [];
+  return (await fetchHistoryPage(agentId, request)).events;
 }
 
 // TRANSCRIPT-LAZY-OLDER: the next OLDER page, bounded by `toSeq` just below the
 // oldest seq seen so far. Still no fromSeq — events.replay's "no fromSeq" branch
 // keeps returning the NEWEST `limit` events, just now bounded above by toSeq, so
 // each call walks one page further back. Returns [] when nothing older remains.
-async function fetchOlderHistoryPage(agentId: string, request: Request, beforeSeq: number): Promise<NormalizedEvent[]> {
-  const batch = await request<NormalizedEvent[]>("events.replay", { agentId, toSeq: beforeSeq - 1, limit: HISTORY_PAGE });
-  return Array.isArray(batch) ? batch : [];
+async function fetchOlderHistoryPage(agentId: string, request: Request, beforeSeq: number): Promise<HistoryPage> {
+  return fetchHistoryPage(agentId, request, beforeSeq - 1);
 }
 
 // TRANSCRIPT-LAZY-OLDER (merged with remote's TRANSCRIPT-WINDOWING state
@@ -54,15 +70,15 @@ export async function requestOlderHistoryPage(store: UiStore, agentId: string, r
   if (!agent || agent.historyMinSeq === null) return;
   if (agent.historyOlderLoadState === "loading" || agent.historyOlderExhausted) return;
   store.dispatch({ type: "historyOlderLoadStarted", agentId });
-  let batch: NormalizedEvent[];
+  let page: HistoryPage;
   try {
-    batch = await fetchOlderHistoryPage(agentId, request, agent.historyMinSeq);
+    page = await fetchOlderHistoryPage(agentId, request, agent.historyMinSeq);
   } catch (err: unknown) {
     store.dispatch({ type: "historyOlderLoadFailed", agentId, message: errorText(err) });
     return;
   }
-  if (batch.length > 0) store.dispatch({ type: "prependHistory", agentId, events: batch });
-  store.dispatch({ type: "historyOlderLoadFinished", agentId, exhausted: batch.length < HISTORY_PAGE });
+  if (page.events.length > 0) store.dispatch({ type: "prependHistory", agentId, events: page.events });
+  store.dispatch({ type: "historyOlderLoadFinished", agentId, exhausted: page.exhausted });
 }
 
 // W3 review finding 4 — the retired TUI store's lazy history backfill (loadHistory + the
@@ -123,8 +139,8 @@ export function installHistoryBackfill(
     // request fires so the pane can render a skeleton instead of a blank body
     // while this is in flight.
     store.dispatch({ type: "historyLoadStarted", agentId: sel });
-    void fetchNewestHistoryPage(sel, request)
-      .then((events) => {
+    void fetchHistoryPage(sel, request)
+      .then(({ events, exhausted }) => {
         // Defensive: the dev mock seam answers unknown methods with null —
         // treat any non-array reply as an empty history rather than crashing
         // the reducer's replay loop.
@@ -136,7 +152,7 @@ export function installHistoryBackfill(
         // check on data already in hand) and flip the "older" state to a
         // settled "loaded" rather than leaving it "idle" forever. Anything
         // older than that is fetched ONLY on a scroll-to-top trigger, never here.
-        if (newestPage.length < HISTORY_PAGE) {
+        if (exhausted) {
           store.dispatch({ type: "historyOlderLoadFinished", agentId: sel, exhausted: true });
         }
       })

@@ -1,3 +1,5 @@
+import { codexTransportFor } from "./codex-transport.js";
+export { codexTransportFor } from "./codex-transport.js";
 import type { PermissionApplication } from "@chimera/protocol";
 import { CHIMERA_READ_TOOLS, CHIMERA_COMMUNICATION_TOOLS, chimeraAccess, chimeraToolRestrictions } from "@chimera/protocol/chimera-capabilities";
 import type { AgentDelivery } from "@chimera/protocol";
@@ -133,6 +135,17 @@ function mergeTurnInputs(inputs: CodexLoopInput[]): CodexLoopInput {
     ...(preamble ? { preamble } : {}),
     ...(inputs.some(input => input.preserveBlocks) ? { preserveBlocks: true } : {}),
   };
+}
+
+function isCodexReconnectNotice(ev: CodexThreadEvent): boolean {
+  if (ev.type !== "error" || typeof ev["message"] !== "string") return false;
+  // Exec 0.160 forwards native retry notifications as top-level errors while
+  // the turn is still running. Killing the iterator here cancels that retry.
+  // The JSONL envelope drops willRetry; recognize only its numbered notice.
+  const match = /^Reconnecting\.\.\. ([1-9]\d*)\/([1-9]\d*)(?: \([^\r\n]*\))?$/.exec(ev["message"]);
+  if (!match) return false;
+  const attempt = Number(match[1]), total = Number(match[2]);
+  return Number.isSafeInteger(attempt) && Number.isSafeInteger(total) && attempt <= total;
 }
 
 export function normalizeCodexEvent(ev: CodexThreadEvent, deltas?: Map<string, string>, effectiveModel?: string, effort?: string): BackendEvent | BackendEvent[] | null {
@@ -286,6 +299,7 @@ function normalizeCodexEventContent(ev: CodexThreadEvent, deltas?: Map<string, s
     case "turn.failed":
       return { kind: "error", data: { message: String((ev["error"] as { message?: string } | undefined)?.message ?? "codex turn failed") }, raw: ev };
     case "error":
+      if (isCodexReconnectNotice(ev)) return { kind: "status", data: { reconnecting: true, message: ev["message"] }, raw: ev };
       return { kind: "error", data: { message: String(ev["message"] ?? "codex error") }, raw: ev };
     default:
       return { kind: "status", data: { codexEvent: ev.type }, raw: ev };
@@ -387,7 +401,8 @@ export function buildCodexOptions(spec: ResolvedAgentSpec): CodexFactoryOptions 
   const env: Record<string, string> = {};
   for (const [k, v] of Object.entries(process.env)) if (v !== undefined) env[k] = v;
   Object.assign(env, spec.env);                       // credential + CODEX_HOME + CHIMERA_* win
-  const apiKey = spec.env["OPENAI_API_KEY"] ?? spec.env["CODEX_API_KEY"];
+  // Empty overrides can scrub inherited credentials; they must not hide another explicit key.
+  const apiKey = [spec.env["OPENAI_API_KEY"], spec.env["CODEX_API_KEY"]].find(value => value?.trim());
 
   const servers: Record<string, unknown> = { ...spec.mcpServers };
   if (chimeraAccess(spec) !== "none") {
@@ -528,11 +543,6 @@ export function buildCodexOptions(spec: ResolvedAgentSpec): CodexFactoryOptions 
   };
 }
 
-export function codexTransportFor(spec: ResolvedAgentSpec): "exec" | "app-server" {
-  const transport = spec.providerOptions["codexTransport"] ?? (spec.permissionProfile === "full" ? "exec" : "app-server");
-  if (transport !== "exec" && transport !== "app-server") throw new Error("codexTransport must be exec or app-server");
-  return transport;
-}
 
 export function buildThreadOptions(spec: ResolvedAgentSpec, cwd: string): Record<string, unknown> {
   // Always pass an explicit model. Leaving it absent lets ambient CLI config select an unknown
@@ -560,7 +570,7 @@ export class CodexAgentBackend implements AgentBackend {
   // authoritative run cost through catalog pricing when a model is outside protocol's hardcoded map.
   constructor(private deps: { codexFactory?: CodexFactory; appServerProcess?: RpcProcessFactory; interruptGraceMs?: number; modelCatalog?: () => ModelMetadataLookup | undefined; validateModel?: typeof validateCodexModel } = {}) {}
 
-  // Exec enforces permissions at the sandbox level; the opt-in app-server also
+  // Exec enforces permissions at the sandbox level; the default app-server also
   // routes native approvals/dialogs and steering. Neither exposes Claude's
   // per-tool canUseTool hook, so the supervisor's full-access risk gate remains.
   spawn(spec: ResolvedAgentSpec, sink: EventSink, _decidePermission: PermissionDecider, _decideDialog?: DialogDecider): AgentHandle {
@@ -569,6 +579,7 @@ export class CodexAgentBackend implements AgentBackend {
     const { workdir: cwd } = ensureWorkdir(spec);
     const factoryOptions = buildCodexOptions(spec);
     const threadOptions = buildThreadOptions(spec, cwd);
+    let fullRiskGranted = spec.acknowledgeCodexFullAccessRisk;
     let desired = { version: spec.permissionVersion ?? 0, permissionProfile: spec.permissionProfile, permissionRequest: spec.on.permissionRequest };
     threadOptions.chimeraPermissionVersion = desired.version;
     let desiredThreadOptions = { ...threadOptions };
@@ -586,7 +597,7 @@ export class CodexAgentBackend implements AgentBackend {
       options?.sandboxMode === "danger-full-access" ? "full" : options?.sandboxMode === "workspace-write" ? "acceptEdits" : options?.sandboxMode === "read-only" ? "readOnly" : undefined;
     const application = (): PermissionApplication => {
       const effectiveProfile = profileOf(effectiveOptions);
-      const bypass = effectiveOptions?.sandboxMode === "danger-full-access" && effectiveOptions.approvalPolicy === "never" && spec.acknowledgeCodexFullAccessRisk;
+      const bypass = effectiveOptions?.sandboxMode === "danger-full-access" && effectiveOptions.approvalPolicy === "never" && fullRiskGranted;
       const profileMatches = effectiveProfile === desired.permissionProfile && effectiveOptions?.sandboxMode === desiredThreadOptions.sandboxMode && effectiveOptions?.approvalPolicy === desiredThreadOptions.approvalPolicy;
       const changingFlight = inFlightOptions && (inFlightOptions.sandboxMode !== desiredThreadOptions.sandboxMode || inFlightOptions.approvalPolicy !== desiredThreadOptions.approvalPolicy);
       return { version: desired.version, requestedProfile: desired.permissionProfile, ...(effectiveProfile ? { effectiveProfile } : {}),
@@ -599,7 +610,11 @@ export class CodexAgentBackend implements AgentBackend {
       const permissionApplication = application();
       sink({ kind: "status", data: { permissionApplication, appliedToRunningProcess: permissionApplication.profileStatus === "applied" && (permissionApplication.routingStatus === "applied" || permissionApplication.routingStatus === "bypassed" && permissionApplication.requestedRouting === "auto") } });
     };
-    if (transport === "app-server") threadOptions["developerInstructions"] = spec.instructions;
+    if (transport === "app-server") {
+      threadOptions["developerInstructions"] = spec.instructions;
+      // Explicit connection transitions must not silently replace the conversation.
+      threadOptions["requireResume"] = spec.providerOptions.codexRequireResume === true;
+    }
     // Injected SDK fakes retain deterministic validation; real sessions consult
     // the same configured binary used for execution, including future models.
     if (this.deps.codexFactory && !this.deps.validateModel) assertCodexToolDeferral(factoryOptions, threadOptions);
@@ -875,7 +890,7 @@ export class CodexAgentBackend implements AgentBackend {
                 // before rollout ingestion so the same image is persisted once.
                 const streamedItem = raw.item as CodexItem | undefined;
                 if (raw.type === "item.completed" && isCodexImageItem(streamedItem) && typeof streamedItem?.id === "string") streamedImages.add(streamedItem.id);
-                const terminalFailure = raw.type === "turn.failed" || raw.type === "error";
+                const terminalFailure = raw.type === "turn.failed" || (raw.type === "error" && !isCodexReconnectNotice(raw));
                 // Preserve only images already available at failure. Waiting for
                 // another provider frame would weaken the existing error exit.
                 if (transport === "exec" && id && raw.type !== "thread.started") await readImages(id, raw.type === "turn.completed" || terminalFailure, terminalFailure);
@@ -1031,7 +1046,11 @@ export class CodexAgentBackend implements AgentBackend {
       get processPid() { return codex instanceof CodexAppServer ? codex.processPid : null; },
       ...(codex instanceof CodexAppServer ? { command: (text: string) => codex.command(text) } : {}),
       updatePermission: request => {
-        if (request.permissionProfile === "full" && !spec.acknowledgeCodexFullAccessRisk) throw new Error("Full Codex access requires an explicit risk grant");
+        if (request.permissionProfile === "full" && request.acknowledgeCodexFullAccessRisk === true) {
+          fullRiskGranted = true;
+          if (codex instanceof CodexAppServer) codex.grantFullAccessRisk();
+        }
+        if (request.permissionProfile === "full" && !fullRiskGranted) throw new Error("Full Codex access requires an explicit risk grant");
         desired = { ...request };
         const next = buildThreadOptions({ ...spec, permissionProfile: request.permissionProfile, providerOptions: { ...spec.providerOptions, codexTransport: transport } }, cwd);
         // Preserve the transport and session; only the next invocation's profile
@@ -1041,7 +1060,7 @@ export class CodexAgentBackend implements AgentBackend {
         return application();
       },
       isTurnActive: () => executingTurn || codex instanceof CodexAppServer && codex.isTurnActive(),
-      ...(codex instanceof CodexAppServer ? { compact: () => codex.compact(), compactOwner: "sdk" as const, remoteControl: (enable: boolean) => codex.remoteControl(enable) } : {}),
+      ...(codex instanceof CodexAppServer ? { compact: () => codex.compact(), compactOwner: "sdk" as const, remoteControl: (enable: boolean, name?: string) => codex.remoteControl(enable, name) } : {}),
       ...(codex instanceof CodexAppServer && codex.realtimeEnabled ? { nativeVoice: codex.nativeVoice } : {}),
       send: async (text: string, images?: Image[], content?: ContentBlock[], delivery?: AgentDelivery) => {
         if (loop.ended || loop.closed) throw new Error("input stream closed");

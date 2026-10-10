@@ -118,7 +118,7 @@ describe("AgentSpecSchema", () => {
     // inherit is a non-strict object, so an old caller passing plugins:true parses —
     // the field is simply dropped, and inherit resolves to settingSources only.
     const parsed = AgentSpecSchema.parse({ prompt: "x", cwd: "/t", inherit: { plugins: true } });
-    expect(parsed.inherit).toEqual({ settingSources: [] });
+    expect(parsed.inherit).toEqual({ settingSources: ["project", "user"] });
     expect("plugins" in parsed.inherit).toBe(false);
   });
 });

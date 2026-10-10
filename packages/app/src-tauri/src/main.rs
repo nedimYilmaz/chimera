@@ -75,6 +75,8 @@ fn main() {
             commands::read_artifact,
             commands::open_artifact,
             commands::open_artifact_url,
+            chimera_app::local_files::prepare_local_media,
+            chimera_app::local_files::open_local_file,
             commands::set_dock_badge,
             commands::write_export,
             commands::checkpoint_files_since,

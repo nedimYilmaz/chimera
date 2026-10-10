@@ -104,6 +104,8 @@ describe("Codex protocol subset freshness gate", () => {
       join(generatedFixture, "InitializeParams.ts"),
       'import type { ClientInfo } from "./ClientInfo";\nexport type InitializeParams = { clientInfo: ClientInfo };\n',
     );
+    await writeFile(join(generatedFixture, "v2/ThreadSetNameParams.ts"), 'export type ThreadSetNameParams = { threadId: string, name: string };\n');
+    await writeFile(join(generatedFixture, "v2/ThreadResumeParams.ts"), 'export type ThreadResumeParams = { threadId: string, excludeTurns?: boolean };\n');
     await writeFile(join(generatedFixture, "v2/UserInput.ts"), 'export type UserInput = { "type": "text", text: string };\n');
     await writeFile(join(generatedFixture, "v2/TurnStartParams.ts"), 'import type { UserInput } from "./UserInput";\nexport type TurnStartParams = { threadId: string, input: UserInput[] };\n');
     await writeFile(join(generatedFixture, "v2/AskForApproval.ts"), 'export type AskForApproval = "never";\n');

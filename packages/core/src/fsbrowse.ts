@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { FsEntry, FsEntryKind, FsGitStatus, FsListResult, FsReadResult } from "@chimera/protocol";
 import { isPathUnder, ProjectPathError } from "./projects.js";
 import { ARTIFACT_MAX_BYTES } from "./artifacts.js";
@@ -25,6 +25,20 @@ export const FS_READ_MAX_BYTES = 2 * 1024 * 1024;
 const SNIFF_BYTES = 8 * 1024;
 
 export class FileTooLargeError extends Error { code = "protocol" as const; name = "FileTooLargeError"; }
+
+// The WebView streams these directly through the native file scope; never shuttle
+// an entire movie through JSON-RPC. A codec the OS cannot decode gets an open-in-app fallback.
+const STREAM_MEDIA: Record<string, string> = {
+  ".mp4": "video/mp4", ".m4v": "video/mp4", ".mov": "video/quicktime",
+  ".webm": "video/webm", ".ogv": "video/ogg", ".mkv": "video/x-matroska", ".avi": "video/x-msvideo",
+  ".mp3": "audio/mpeg", ".m4a": "audio/mp4", ".aac": "audio/aac",
+  ".wav": "audio/wav", ".ogg": "audio/ogg", ".opus": "audio/ogg", ".flac": "audio/flac",
+  ".pdf": "application/pdf",
+  ".doc": "application/msword", ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ".xls": "application/vnd.ms-excel", ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ".ppt": "application/vnd.ms-powerpoint", ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  ".odt": "application/vnd.oasis.opendocument.text", ".ods": "application/vnd.oasis.opendocument.spreadsheet", ".odp": "application/vnd.oasis.opendocument.presentation",
+};
 
 const IMAGE_SIGNATURES: Array<{ mediaType: string; magic: number[] }> = [
   { mediaType: "image/png", magic: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a] },
@@ -144,6 +158,10 @@ export function readFile(projectRoot: string, relPath: string): FsReadResult {
     throw new ProjectPathError(`no such file or directory: "${relPath}"`);
   }
   if (!stat.isFile()) throw new ProjectPathError(`not a file: "${relPath}"`);
+  const streamType = STREAM_MEDIA[extname(target).toLowerCase()];
+  if (streamType) {
+    return { path: relPath, absolutePath: target, encoding: "utf8", content: "", sizeBytes: stat.size, binary: true, mediaType: streamType, truncated: false };
+  }
   if (stat.size > ARTIFACT_MAX_BYTES) {
     throw new FileTooLargeError(`"${relPath}" is ${stat.size} bytes, over the ${ARTIFACT_MAX_BYTES}-byte cap — refused`);
   }
@@ -152,16 +170,16 @@ export function readFile(projectRoot: string, relPath: string): FsReadResult {
   const head = buf.subarray(0, SNIFF_BYTES);
   const mediaType = detectImageMediaType(head);
   if (mediaType) {
-    return { path: relPath, encoding: "base64", content: buf.toString("base64"), sizeBytes: stat.size, binary: true, mediaType, truncated: false };
+    return { path: relPath, absolutePath: target, encoding: "base64", content: buf.toString("base64"), sizeBytes: stat.size, binary: true, mediaType, truncated: false };
   }
   if (head.includes(0)) {
     // Non-image binary: the UI shows a placeholder, no point shipping the bytes.
-    return { path: relPath, encoding: "utf8", content: "", sizeBytes: stat.size, binary: true, mediaType: null, truncated: false };
+    return { path: relPath, absolutePath: target, encoding: "utf8", content: "", sizeBytes: stat.size, binary: true, mediaType: null, truncated: false };
   }
 
   const truncated = buf.length > FS_READ_MAX_BYTES;
   const text = (truncated ? buf.subarray(0, FS_READ_MAX_BYTES) : buf).toString("utf8"); // lossy, mirrors read_artifact's from_utf8_lossy
-  return { path: relPath, encoding: "utf8", content: text, sizeBytes: stat.size, binary: false, mediaType: null, truncated };
+  return { path: relPath, absolutePath: target, encoding: "utf8", content: text, sizeBytes: stat.size, binary: false, mediaType: null, truncated };
 }
 
 // PATH-LINK-TILDE-AND-SCOPE — expands a "~"-prefixed path against the REAL OS

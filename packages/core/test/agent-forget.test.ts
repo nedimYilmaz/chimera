@@ -27,6 +27,8 @@ describe("agent.forget", () => {
     const out = await e.handle("agent.forget", { agentIds: [a.agentId] }, { trustedLocalClient: true }) as
       { purged: number; agentIds: string[]; eventsRemoved: number; chronicleDocsRemoved: number };
     expect(out).toMatchObject({ purged: 1, agentIds: [a.agentId] });
+    expect(e.events.replay({ fromSeq: 1, limit: 10_000 }).some(ev => ev.agentId === "eventlog"
+      && JSON.stringify(ev.data.agentIds) === JSON.stringify([a.agentId]))).toBe(true);
     expect(() => e.supervisor.status(a.agentId)).toThrow();     // dismissed
     expect(e.supervisor.status(b.agentId)).toBeTruthy();        // the sweep did NOT widen
 

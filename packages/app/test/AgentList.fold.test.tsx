@@ -68,7 +68,7 @@ function walk(node: TreeNode | string | null, visit: (n: TreeNode) => void): voi
 function findRow(root: TreeNode | null, idToken: string): TreeNode | undefined {
   let hit: TreeNode | undefined;
   walk(root, (n) => {
-    if (typeof n.props?.onClick === "function" && flattenText(n).includes(idToken) && !hit) hit = n;
+    if (n.props?.["data-agent-row"] === idToken && !hit) hit = n;
   });
   return hit;
 }
@@ -145,15 +145,15 @@ describe("AgentList Row — the click-to-fold caret is gone (AGENTLIST-CARET-REM
     expect(folded).not.toContain("▸");
   });
 
-  it("has no separate caret onClick: a parent row wires exactly one onClick (row-select), no nested clickable", () => {
+  it("has no separate caret click target alongside the standard row actions", () => {
     seed("par5", "kid5");
     const row = findRow(render(), "par5");
     expect(row).toBeDefined();
-    // The row container itself carries the select-on-click; a resurrected caret
-    // would add a SECOND onClick-bearing node nested inside the row.
+    // Small rosters expose inline mark/pin/rename/kill actions. Those are not
+    // fold controls; a separate caret would add an unregistered click target.
     let nestedClickables = 0;
     (row!.children ?? []).forEach((c) => walk(c as TreeNode, (n) => {
-      if (typeof n.props?.onClick === "function") nestedClickables++;
+      if (typeof n.props?.onClick === "function" && !n.props["data-agent-action"]) nestedClickables++;
     }));
     expect(nestedClickables).toBe(0);
   });

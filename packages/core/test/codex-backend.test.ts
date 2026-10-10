@@ -437,6 +437,15 @@ describe("buildCodexOptions — env/apiKey/MCP-grant branch coverage", () => {
     expect(buildCodexOptions(spec).apiKey).toBe("sk-codex-only");
   });
 
+  it.each(["", " \t"])("ignores a blank primary API key (%j)", primary => {
+    expect(buildCodexOptions({ ...cxSpec(), env: { OPENAI_API_KEY: primary, CODEX_API_KEY: "synthetic-secondary" } }).apiKey).toBe("synthetic-secondary");
+    expect(buildCodexOptions({ ...cxSpec(), env: { OPENAI_API_KEY: primary, CODEX_API_KEY: "" } })).not.toHaveProperty("apiKey");
+  });
+
+  it("keeps explicit primary API key precedence without rewriting the credential", () => {
+    expect(buildCodexOptions({ ...cxSpec(), env: { OPENAI_API_KEY: "synthetic-primary", CODEX_API_KEY: "synthetic-secondary" } }).apiKey).toBe("synthetic-primary");
+  });
+
   it("merges process.env then lets spec.env win (the SDK does not auto-inherit when env is provided)", () => {
     const original = process.env["CODEX_HOME"];
     process.env["CODEX_HOME"] = "should-be-overridden";

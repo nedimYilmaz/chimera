@@ -167,6 +167,7 @@ export type HealthMonitorDeps = {
     // compiling (and keeps its current behavior — no idleReapMs, no reaping). A real
     // AgentSupervisor always has it.
     parkIdle?(agentId: string, idleMs: number): Promise<void>;
+    maintainRemoteControl?(agentId: string): Promise<void>;
     // PAUSED-CONDUCTOR: same OPTIONAL convention as parkIdle above — absent on the health tests'
     // lightweight stubs (which then reap as before). True ⇒ this agent still owns live
     // sub-agents and must not be parked out from under them.
@@ -281,6 +282,8 @@ export class HealthMonitor {
   // OS, never assumed from a remembered pid alone).
   private termedAgentPids = new Map<number, string>();
 
+  private remoteChecks = new Map<string, { at: number; pending: boolean }>();
+
   constructor(private readonly deps: HealthMonitorDeps) {}
 
   private now(): number { return (this.deps.now ?? Date.now)(); }
@@ -349,6 +352,11 @@ export class HealthMonitor {
     const retentionMs = this.deps.terminalRetentionMs ?? 0;
     if (retentionMs > 0) this.deps.purgeExpiredTerminal?.(retentionMs);
     const records = this.deps.supervisor.list();
+    const remoteCandidate = (a: AgentRecord) => !a.shadow && a.remoteControlIntent?.enabled
+      && (a.state === "running" || a.state === "paused" && (a.pauseReason === "idle-timeout" || a.pauseReason === "daemon-restart"));
+    const remoteIds = new Set(records.filter(remoteCandidate).map(a => a.agentId));
+    for (const id of this.remoteChecks.keys()) if (!remoteIds.has(id)) this.remoteChecks.delete(id);
+
     // IDLE-REAP-PARENT: an agent that live work still reports INTO is not idle, it is waiting.
     // Every non-settled child (spawned under it, dispatched by it, or told to deliverTo it) will
     // land mail in its box, and the parked→revive round trip that mail would trigger costs a
@@ -365,7 +373,20 @@ export class HealthMonitor {
       if (r.spec.deliverTo) awaitedBy.add(r.spec.deliverTo);
     }
     for (const a of records) {
-      if (a.state !== "running" || a.shadow) continue;
+      if (a.shadow || a.state !== "running" && !remoteCandidate(a)) continue;
+      if (remoteCandidate(a)) {
+        let check = this.remoteChecks.get(a.agentId);
+        if (!check) { check = { at: a.state === "paused" ? now - 60 * 60_000 : now, pending: false }; this.remoteChecks.set(a.agentId, check); }
+        if (!check.pending && now - check.at >= 60 * 60_000) {
+          check.at = now; check.pending = true;
+          const owned = check;
+          void Promise.resolve().then(() => this.deps.supervisor.maintainRemoteControl?.(a.agentId))
+            .catch(() => {}).finally(() => { owned.pending = false; });
+        }
+        // A quiet remote session may be awaiting phone input. Do not reap or report it
+        // as wedged; active turns still retain their normal error/liveness protection.
+        if (a.state !== "running" || this.midTurn.get(a.agentId) !== true) continue;
+      }
       const idleCapable = a.spec.conductor === true || a.spec.persistent === true;
       const last = this.lastActivity.get(a.agentId) ?? now;
       const idle = now - last;

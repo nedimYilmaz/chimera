@@ -35,6 +35,12 @@ describe("languageForPath", () => {
 });
 
 describe("classifyFileView — routes an FsSelectedFile to a viewer pane", () => {
+  it.each([["video/mp4", "video"], ["audio/mpeg", "audio"]] as const)("routes %s using only the canonical native path", (mediaType, media) => {
+    const result = okResult({ binary: true, mediaType, absolutePath: "/project/a movie.mp4", content: "" });
+    expect(classifyFileView({ status: "ok", path: "a movie.mp4", result })).toEqual({ kind: "media", media, path: result.absolutePath });
+    delete result.absolutePath;
+    expect(classifyFileView({ status: "ok", path: "a movie.mp4", result }).kind).toBe("binary");
+  });
   it("text → the text pane, with a shiki lang derived from the path", () => {
     const selected: FsSelectedFile = { path: "src/main.rs", status: "ok", result: okResult() };
     const view = classifyFileView(selected);

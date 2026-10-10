@@ -4,6 +4,7 @@
  *
  *   node --import tsx scripts/eval-laya.ts [--versions 0.3.22,0.3.27] [--trials 3] [--floor 0.9]
  *        [--python <base python>] [--out results.json] [--report report.md] [--cache dir]
+ *        [--pypi-json <reviewed candidate fixture>]
  *
  * What is held fixed, and how that is proven rather than assumed:
  *   - checkpoint: the Hub snapshot at LAYA.checkpoint.revision must already be in the local cache and
@@ -51,6 +52,7 @@ const MAX_WHEEL_BYTES = 8 * 1024 * 1024;
 const { values } = parseArgs({ options: {
   versions: { type: "string", default: "0.3.22,0.3.27" }, trials: { type: "string", default: "3" }, floor: { type: "string", default: "0.9" },
   python: { type: "string" }, out: { type: "string" }, report: { type: "string" }, cache: { type: "string", default: join(tmpdir(), "chimera-laya-eval") },
+  "pypi-json": { type: "string" },
 } });
 const versions = values.versions!.split(",").map(v => v.trim()).filter(Boolean);
 const trials = Number(values.trials);
@@ -76,7 +78,10 @@ const fixturePath = fileURLToPath(new URL("./fixtures/pypi-laya.json", import.me
 async function wheelFor(version: string): Promise<LayaWheel> {
   if (version === LAYA.version) return LAYA.wheel as LayaWheel;
   const fixture = JSON.parse(await readFile(fixturePath, "utf8")) as { releases?: Record<string, unknown> };
-  const wheel = latestStable({ releases: { [version]: fixture.releases?.[version] } })?.wheel;
+  // Keep historical digests available after a candidate becomes the pin, so the same command replays.
+  const candidate = values["pypi-json"] ? JSON.parse(await readFile(values["pypi-json"], "utf8")) as { releases?: Record<string, unknown> } : null;
+  const releases = { ...fixture.releases, ...candidate?.releases };
+  const wheel = latestStable({ releases: { [version]: releases[version] } })?.wheel;
   assert(wheel, `Laya ${version} is neither the pin nor recorded in ${fixturePath}; record its digest there first`);
   return wheel;
 }
@@ -177,11 +182,11 @@ const textOf = (raw: Raw) => JSON.stringify(raw.content ?? raw);
 const verdict = (r: LayaEvalRecord) => { const g = gateRecord(r, { floor }); return "execute" in g ? `execute:${g.execute}` : "fallback"; };
 const verdictDiffs = (a: readonly LayaEvalRecord[], b: readonly LayaEvalRecord[]) => a.filter((r, i) => b[i] && verdict(r) !== verdict(b[i]!)).length;
 
-function serverEnv(overlay: string, checkpointHub: string, digests: Record<string, Record<string, string>>): Record<string, string> {
+function serverEnv(overlay: string, checkpointHub: string, digests: Record<string, string>): Record<string, string> {
   return {
     // English only and fully offline: auto-routing must never be able to reach for the multilingual checkpoint.
     HF_HUB_OFFLINE: "1", HF_HUB_CACHE: checkpointHub, LAYA_MODELS: "english", LAYA_DEFAULT_MODEL: "english", LAYA_AUTO_TASK: "0",
-    LAYA_REVISION: "reviewed", LAYA_SHA256_DIGESTS: JSON.stringify(digests), PYTHONNOUSERSITE: "1", PYTHONPATH: overlay,
+    LAYA_REVISION: LAYA.checkpoint.revision, LAYA_SHA256_DIGESTS: JSON.stringify(digests), PYTHONNOUSERSITE: "1", PYTHONPATH: overlay,
   };
 }
 
@@ -254,7 +259,7 @@ function parseLayaPayload(call: { raw: Raw }): any {
 
 /** A wrong digest must make the server refuse to load the checkpoint; a server that answers anyway is not verifying it. */
 async function negativeControl(version: string, overlay: string, hub: string) {
-  const route = await openRoute(serverEnv(overlay, hub, { english: { "model.safetensors": "0".repeat(64) } }));
+  const route = await openRoute(serverEnv(overlay, hub, { "model.safetensors": "0".repeat(64) }));
   try {
     const c = LAYA_EVAL_CASES[0]!;
     const { raw } = await route.call("laya_predict", buildLayaChoiceRequest({ task: c.task, observation: c.observation, actions: c.actions, minConfidence: floor }));
@@ -277,7 +282,7 @@ for (const version of versions) {
   log(`laya ${version}: imported from ${overlay} (mcp ${staged.get(version)!.proof.mcp}, torch ${staged.get(version)!.proof.torch})`);
 }
 const sameRevisions = new Set([...staged.values()].map(s => JSON.stringify(s.proof.pinnedRevisions))).size === 1;
-const checkpointDigests = { english: LAYA.checkpoint.files as Record<string, string> };
+const checkpointDigests = LAYA.checkpoint.files as Record<string, string>;
 
 const runs: TrialResult[] = [];
 for (let trial = 0; trial < trials; trial++) {

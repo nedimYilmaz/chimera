@@ -18,6 +18,14 @@ function priorAgent(over: Partial<AgentRecord> & { agentId: string }): AgentReco
 }
 
 describe("replayAgentsAsOf (R2: deterministic fold-from-log, bounded to any seq)", () => {
+  it("restores an explicit live Codex risk grant from the snapshot gap", () => {
+    const events = new EventLog(mkdtempSync(join(tmpdir(), "chimera-replay-risk-")));
+    const baseline: ReplaySnapshotSource = { agents: [priorAgent({ agentId: "codex-risk", provider: "codex" })], lastSeq: 0 };
+    events.append({ agentId: "codex-risk", kind: "status", data: { permissionChanged: true, permissionProfile: "full", acknowledgeCodexFullAccessRisk: true } });
+    expect(replayAgentsAsOf(baseline, events)[0]?.spec).toMatchObject({ permissionProfile: "full", acknowledgeCodexFullAccessRisk: true });
+    expect(baseline.agents![0]?.spec.acknowledgeCodexFullAccessRisk).toBe(false);
+  });
+
   it("recovers branch identity from the snapshot gap and ignores malformed lineage", () => {
     const events = new EventLog(mkdtempSync(join(tmpdir(), "chimera-replay-")));
     const baseline: ReplaySnapshotSource = { agents: [priorAgent({ agentId: "child" })], lastSeq: 0 };

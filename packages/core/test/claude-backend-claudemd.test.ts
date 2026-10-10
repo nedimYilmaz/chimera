@@ -17,7 +17,7 @@ function fakeQuery(messages: Msg[] = []) {
 }
 function spec(over: Record<string, unknown> = {}): ResolvedAgentSpec {
   return {
-    ...AgentSpecSchema.parse({ prompt: "task", cwd: "/tmp/repo", isolation: "none", ...over }),
+    ...AgentSpecSchema.parse({ prompt: "task", cwd: "/tmp/repo", isolation: "none", inherit: { settingSources: [] }, ...over }),
     agentId: "ag-1", accountName: "second", resolvedProvider: "claude",
     env: { CHIMERA_AGENT_ID: "ag-1", CHIMERA_DEPTH: "0" }, depth: 0,
   } as ResolvedAgentSpec;

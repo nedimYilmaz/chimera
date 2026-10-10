@@ -16,6 +16,7 @@ import { OverlayCard, OverlayCardHeader } from "./OverlayCard";
 import { PathPicker } from "./PathPicker";
 import { isPathUnderRoot } from "../state/pathRefs";
 import styles from "./SpawnCard.module.css";
+import { nativeMcpPatch } from "../state/nativeMcpSettings";
 
 // W4 build item 6 — the spawn-agent form (mock showSpawn, line 282-312;
 // coverage B6 spawn row): OverlayCard center, width 680. ↑↓ fields, enter
@@ -75,7 +76,7 @@ const UNPRICED_WHY: Record<string, string> = {
 };
 const unpricedWhy = (kind: string): string => UNPRICED_WHY[kind] ?? "not priced by chimera";
 
-const FIELDS = ["prompt", "name", "cwd", "account", "profile", "autonomy", "model", "effort", "conductor", "session", "role", "deliverTo", "budget", "engine", "isolation", "runtime", "settings", "orchestration", "instructions"] as const;
+const FIELDS = ["prompt", "name", "cwd", "account", "profile", "autonomy", "model", "effort", "conductor", "session", "role", "deliverTo", "budget", "engine", "isolation", "runtime", "settings", "nativeMcps", "executionMode", "orchestration", "instructions"] as const;
 type Field = (typeof FIELDS)[number] | "provider";
 const QUICK_FIELDS: readonly Field[] = ["provider", "account", "model"];
 
@@ -108,7 +109,14 @@ export function computeRoleSpecOverrides(
   role: Record<string, unknown>,
   submitted: Record<string, unknown>,
 ): Record<string, unknown> {
-  return buildSessionRolePatch(role, { ...role, ...submitted });
+  return {
+    ...buildSessionRolePatch(role, { ...role, ...submitted }),
+    // loadSettings is an AgentSpec convenience field, not a RoleSpec field.
+    ...(submitted.loadSettings !== undefined && submitted.loadSettings !== role.loadSettings
+      ? { loadSettings: submitted.loadSettings } : {}),
+    ...(submitted.strictMcpConfig !== undefined && (role.providerOptions as Record<string, unknown> | undefined)?.strictMcpConfig !== undefined
+      ? { strictMcpConfig: submitted.strictMcpConfig } : {}),
+  };
 }
 
 export function SpawnCard({ onClose, quick = false }: { onClose: () => void; quick?: boolean }) {
@@ -137,7 +145,7 @@ export function SpawnCard({ onClose, quick = false }: { onClose: () => void; qui
     deliverTo: "", engine: "local", isolation: "none", runtime: "sdk",
     // SPAWN-SETTING-SOURCES: "" = auto (defer to the resolved project's own toggle, or the
     // picked role's own value — see the settings chip row below), "on"/"off" = explicit.
-    settings: "",
+    settings: "", nativeMcps: "", executionMode: "",
     // CROSS-PROVIDER-MCP-STORE: "" = auto (defer to the picked role's own orchestration.allow,
     // or the schema default false with no role — see the orchestration chip row below),
     // "on"/"off" = explicit spec.orchestration.allow.
@@ -423,7 +431,10 @@ export function SpawnCard({ onClose, quick = false }: { onClose: () => void; qui
   }, [active, fields]);
 
   const set = (field: Field) => (v: string): void => {
-    setValues((s) => ({ ...s, [field]: v }));
+    setValues((s) => ({ ...s, [field]: v,
+      ...(field === "nativeMcps" && v === "on" ? { settings: "on" } : {}),
+      ...(field === "settings" && v !== "on" && s.nativeMcps === "on" ? { nativeMcps: "" } : {}),
+    }));
     if (error) setError(null);
   };
 
@@ -439,6 +450,8 @@ export function SpawnCard({ onClose, quick = false }: { onClose: () => void; qui
     // TERMINAL-RUNTIME: cycled like isolation — the two together are "where does this run".
     else if (field === "runtime") set("runtime")(cycleValue(["sdk", "terminal"], values.runtime.trim() || "sdk", reverse));
     else if (field === "settings") set("settings")(cycleValue(["", "on", "off"], values.settings, reverse));
+    else if (field === "executionMode" && effectiveProvider === "claude" && values.runtime !== "terminal") set("executionMode")(cycleValue(["", "auto", "execute", "plan"], values.executionMode, reverse));
+    else if (field === "nativeMcps" && effectiveProvider === "claude" && values.runtime !== "terminal") set("nativeMcps")(cycleValue(["", "on", "off"], values.nativeMcps, reverse));
     else if (field === "orchestration") set("orchestration")(cycleValue(["", "on", "off"], values.orchestration, reverse));
   };
 
@@ -494,6 +507,9 @@ export function SpawnCard({ onClose, quick = false }: { onClose: () => void; qui
       // role / role leaves it unset too) this spawn's resolved project's own toggle.
       ...(values.settings === "on" ? { loadSettings: true } : {}),
       ...(values.settings === "off" ? { loadSettings: false } : {}),
+      ...(effectiveProvider === "claude" && values.runtime !== "terminal" && values.executionMode ? { executionMode: values.executionMode } : {}),
+      ...(effectiveProvider === "claude" && values.runtime !== "terminal" && values.nativeMcps
+        ? nativeMcpPatch(values.nativeMcps === "on") : {}),
       // CROSS-PROVIDER-MCP-STORE: same "auto stays out of roleFields entirely" convention —
       // the daemon then defers to the picked role's own orchestration.allow, or the schema
       // default (false) with no role.
@@ -555,6 +571,8 @@ export function SpawnCard({ onClose, quick = false }: { onClose: () => void; qui
       ...(values.role.trim() ? { role: values.role.trim() } : {}),
       ...(engine && engine !== "local" ? { engine } : {}),
       ...(overrides["loadSettings"] !== undefined ? { loadSettings: overrides["loadSettings"] as boolean } : {}),
+      ...(overrides["executionMode"] ? { executionMode: overrides["executionMode"] as "plan" | "execute" | "auto" } : {}),
+      ...(overrides["strictMcpConfig"] !== undefined ? { strictMcpConfig: overrides["strictMcpConfig"] as boolean } : {}),
       ...(overrides["orchestration"] !== undefined ? { orchestration: overrides["orchestration"] as boolean } : {}),
     };
     void commands.spawnAgent(input);
@@ -985,13 +1003,7 @@ export function SpawnCard({ onClose, quick = false }: { onClose: () => void; qui
               </span>
             </span>
           </div>
-          {/* SPAWN-SETTING-SOURCES: on = load your ~/.claude user settings + this cwd's
-              project .claude/ (if registered) + every installed plugin's MCP tools — the
-              control that was missing entirely before this field existed (only reachable by
-              hand-authoring a role). off = today's lean default (no plugin surface, lower
-              token cost). auto defers to the resolved project's own "load project & global
-              skills" toggle (ProjectsScreen), shown live below so the default is never
-              silent. */}
+          {/* Settings inheritance remains independent of the native MCP filter. */}
           <div className={styles.row}>
             {Label("settings", "settings")}
             <span className={styles.isolationRow}>
@@ -1025,6 +1037,36 @@ export function SpawnCard({ onClose, quick = false }: { onClose: () => void; qui
                   : matchedProject ? `follows project "${matchedProject.name}"` : "no registered project matches cwd"}
               </span>
             </span>
+          </div>
+          <div className={styles.row}>
+            <label className={styles.label} htmlFor="spawn-execution-mode">execution mode</label>
+            <span className={styles.inputBox}>
+              <select id="spawn-execution-mode" className={styles.input} ref={registerRef("executionMode")}
+                data-spawn-field="executionMode" value={values.executionMode}
+                onFocus={() => setFieldIndex(fields.indexOf("executionMode"))}
+                onChange={e => set("executionMode")(e.target.value)}
+                disabled={effectiveProvider !== "claude" || values.runtime === "terminal"}>
+                <option value="">Role default</option><option value="auto">Auto</option><option value="execute">Execute</option><option value="plan">Plan</option>
+              </select>
+            </span>
+          </div>
+          <div className={`${styles.fieldHint} ${styles.wrapHint}`}>Claude SDK: Auto explicitly selects automatic permission review. Role default inherits the role’s selection. Plan uses native planning; Chimera permission restrictions still apply.</div>
+          <div className={styles.row}>
+            <label className={styles.label} htmlFor="spawn-native-mcps">native MCPs</label>
+            <span className={styles.inputBox}>
+              <select id="spawn-native-mcps" aria-describedby="spawn-native-mcps-hint" className={styles.input}
+                ref={registerRef("nativeMcps")} data-spawn-field="nativeMcps" value={values.nativeMcps}
+                onFocus={() => setFieldIndex(fields.indexOf("nativeMcps"))}
+                onChange={e => set("nativeMcps")(e.target.value)}
+                disabled={effectiveProvider !== "claude" || values.runtime === "terminal"}>
+                <option value="">Auto · inherit</option><option value="on">On</option><option value="off">Off</option>
+              </select>
+            </span>
+          </div>
+          <div id="spawn-native-mcps-hint" className={`${styles.fieldHint} ${styles.wrapHint}`}>
+            {effectiveProvider === "claude" && values.runtime !== "terminal"
+              ? "On loads installed Claude MCP plugins and user/project settings. Chimera tools are controlled separately below."
+              : "Native MCP configuration is managed by this provider's CLI."}
           </div>
           {/* CROSS-PROVIDER-MCP-STORE: on = grant this agent chimera's own MCP server (every
               chimera-native tool, incl. mcp_store_tools/mcp_store_call — reaches every shared

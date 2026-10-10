@@ -128,3 +128,14 @@ it("stopped and new-launch generations clear prior effective and submitted state
   expect(st.agents.a1.permissionApplication).toEqual({ ...pending, version: 3 });
   expect(st.agents.a1.permissionAppliedToRunningProcess).toBe(false);
 });
+
+it("projects observed planning mode from events and snapshots without changing permissions", () => {
+  let st = reduce(initialState, { type: "agentRecords", records: [rec({ agentId: "a1", executionMode: "plan", spec: { permissionProfile: "full" } })] });
+  expect(st.agents.a1.executionMode).toBe("plan");
+  st = reduce(st, { type: "event", event: ev("a1", "status", { executionMode: "execute" }) });
+  expect(st.agents.a1.executionMode).toBe("execute"); expect(st.agents.a1.permissionProfile).toBe("full");
+  st = reduce(st, { type: "event", event: ev("a1", "status", { executionMode: "auto" }) });
+  expect(st.agents.a1.executionMode).toBe("auto"); expect(st.agents.a1.permissionProfile).toBe("full");
+  st = reduce(st, { type: "event", event: ev("a1", "status", { executionMode: null, requestedExecutionMode: "plan" }) });
+  expect(st.agents.a1.executionMode).toBeUndefined();
+});

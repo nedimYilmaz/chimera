@@ -23,6 +23,15 @@ function engineWithScenarios(scenarios: FakeStep[][] = []): Engine {
 }
 
 describe("agent.estimateToolSurface", () => {
+  it("discloses native settings by default while respecting a role's explicit opt-out", async () => {
+    const e = engineWithScenarios();
+    const standard = await e.handle("agent.estimateToolSurface", { cwd: "/tmp" }) as { unpriced: Array<{ kind: string }> };
+    expect(standard.unpriced.some(row => row.kind === "settings")).toBe(true);
+    await e.handle("role.create", { spec: { name: "isolated", cwd: "/tmp", loadSettings: false } });
+    const isolated = await e.handle("agent.estimateToolSurface", { cwd: "/tmp", role: "isolated" }) as { unpriced: Array<{ kind: string }> };
+    expect(isolated.unpriced.some(row => row.kind === "settings")).toBe(false);
+  });
+
   it("case 1 (load-bearing): chimera figure toEqual the toolSurface a claude spawn emits for the same grant", async () => {
     // Mirrors backends/claude.ts:416-434 exactly: computed from autonomy+conductor only
     // (toolTags omitted), wrapped with source/settingSources/note around the raw estimate.
@@ -122,7 +131,7 @@ describe("agent.estimateToolSurface", () => {
       scenario(200, ["a", "c"]),
     ]);
     for (let i = 0; i < 3; i++) {
-      await e.handle("agent.spawn", { spec: { prompt: "hello", cwd: "/tmp", isolation: "none" } });
+      await e.handle("agent.spawn", { spec: { prompt: "hello", cwd: "/tmp", isolation: "none", loadSettings: false } });
     }
     await new Promise((r) => setTimeout(r, 20));
 

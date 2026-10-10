@@ -1,3 +1,5 @@
+import { codexTransportFor } from "./backends/codex-transport.js";
+import { voiceAgentName } from "@chimera/protocol/agent-name";
 import { chimeraAccess, coordinationPermission, chimeraToolRestrictions } from "@chimera/protocol/chimera-capabilities";
 import { createMessage, deliverAgentInput, UnsupportedContentError } from "./message-delivery.js";
 import { randomUUID } from "node:crypto";
@@ -66,7 +68,7 @@ Batch independent tool calls. Keep messages focused on outcomes; do not copy the
 export const RECONFIGURABLE_KEYS = [
   "model", "effort", "account", "acknowledgeCodexFullAccessRisk",
   "maxTurns", "turnLimitPolicy", "maxBudgetUsd", "compactionThreshold", "contextWindow",
-  "instructions", "autonomy", "orchestration", "loadSettings",
+  "instructions", "autonomy", "orchestration", "loadSettings", "strictMcpConfig",
 ] as const;
 export const RECONFIGURABLE: ReadonlySet<string> = new Set(RECONFIGURABLE_KEYS);
 export type AgentSpecPatch = Partial<Pick<AgentSpec, (typeof RECONFIGURABLE_KEYS)[number]>> & Record<string, unknown>;
@@ -228,6 +230,7 @@ export type AgentRecord = {
   agentId: string; spec: AgentSpec; accountName: string; provider: string;
   // User-facing identity, separate from the execution account and shadow label. Duplicated
   // from spec at spawn so record snapshots expose it directly without overloading `name`.
+  executionMode?: "plan" | "execute" | "auto";
   permissionApplication?: PermissionApplication;
   displayLabel?: string;
   // REBIND / rename_self one-shot guard: true once displayLabel is no longer free to move —
@@ -1236,22 +1239,9 @@ export class AgentSupervisor {
     // record construction below) so SPAWN-SETTING-SOURCES can consult it too, before `spec` is
     // otherwise finalized.
     const projectId = opts.projectId !== undefined ? opts.projectId : (this.deps.projectFor?.(spec.cwd) ?? null);
-    // SPAWN-SETTING-SOURCES: loadSettings is the friendly on/off surface for
-    // inherit.settingSources (the SDK's --setting-sources flag — loads user/project
-    // CLAUDE.md, skills, and every installed plugin's MCP tools; see AgentSpecSchema's own
-    // comment, index.ts). true/false always win outright, overwriting whatever
-    // inherit.settingSources resolved to. undefined (no explicit opinion — the common case)
-    // defers to inherit.settingSources UNLESS it's still empty (the lean default — an
-    // explicit `inherit.settingSources: []` is behaviorally identical, so there's no
-    // ambiguity worth resolving) AND this spawn's cwd resolved to a REGISTERED PROJECT that
-    // already opted into loadProjectSettings (project.create/import's own toggle): mirrors the
-    // identical default engine.ts's spawnProjectConductor and syncProjectTeam already give
-    // that same project's conductor and discovered roles — a hand-spawned agent working in the
-    // project gets the same answer instead of silently missing it (the "I made a project, why
-    // didn't its agents get plugins" gap this field exists to close). Deliberately does NOT
-    // touch the global default for a spawn with no project context: only an operator who
-    // already turned the project toggle on inherits it here, so the fleet-wide lean-by-default
-    // token economy (backends/claude.ts TOKEN-EFF-2/LEAN-AGENT-MCPS) is unaffected.
+    // Explicit on/off wins over inherited sources. Retain the project opt-in fallback
+    // for older saved roles with an empty source list; loadSettings:false still opts out.
+    // New specs already default to user/project settings in AgentSpecSchema.
     if (spec.loadSettings === true) {
       spec = { ...spec, inherit: { settingSources: ["project", "user"] } };
     } else if (spec.loadSettings === false) {
@@ -1519,6 +1509,9 @@ export class AgentSupervisor {
   protected async launch(record: AgentRecord, accountName: string, recoveryPrompt?: string): Promise<void> {
     const account = this.deps.registry.get(accountName);
     record.provider = record.spec.provider ?? account.provider;   // re-stamp per attempt: follow the account across a cross-provider failover
+    if (record.spec.executionMode && (record.provider !== "claude" || record.spec.runtime === "terminal"))
+      throw new Error("executionMode requires the Claude SDK runtime");
+    record.executionMode = undefined;
     // TERMINAL-RUNTIME: the runtime picks the backend, the account still picks the provider. A
     // terminal agent is the SAME claude/codex/kimi on the same account — only the surface it runs
     // on differs — so overriding `provider` here instead would have made every provider-keyed
@@ -1761,6 +1754,10 @@ export class AgentSupervisor {
     const resolved: ResolvedAgentSpec = {
       ...record.spec, ...pluginExclusions, ...(withCapabilities !== undefined ? { instructions: withCapabilities } : {}), agentId: record.agentId, accountName,
       resolvedProvider: account.provider, env, depth: record.depth,
+      // Apply the default only to the Claude SDK. Other transports do not support this control.
+      ...(record.provider === "claude" && record.spec.runtime !== "terminal"
+        && (record.spec.executionMode !== undefined || record.spec.providerOptions.permissionMode === undefined)
+        ? { executionMode: record.spec.executionMode ?? "execute" } : {}),
       ...(!record.spec.resumeOnly ? {
         initialDelivery: { messages: [createMessage(record.spec.prompt,
           record.initialAuthor ?? this.principalFor(record.promptFrom ?? record.parentId ?? "operator"), { id: `${record.agentId}:initial`, createdAt: record.createdAt, content: record.spec.content })] },
@@ -1789,14 +1786,19 @@ export class AgentSupervisor {
     this.transferSources.set(record, resolved);
     if (record.provider === "codex") {
       resolved.permissionVersion = (record.permissionApplication?.version ?? -1) + 1;
-      // A permission change must not change transports at an ordinary resume.
-      // Explicit transport reconfiguration still wins over this session binding.
-      if (record.permissionApplication && resolved.providerOptions.codexTransport === undefined)
-        resolved.providerOptions = { ...resolved.providerOptions, codexTransport: record.permissionApplication.transport };
+      // Unpinned legacy sessions adopt the default only at a new launch boundary.
+      // Never replace their conversation with a fresh task if migration cannot resume it.
+      if (resolved.providerOptions.codexTransport === undefined) {
+        if (record.sessionId && record.permissionApplication?.transport !== "app-server") {
+          record.spec = { ...record.spec, providerOptions: { ...record.spec.providerOptions, codexRequireResume: true } };
+          resolved.providerOptions = { ...resolved.providerOptions, codexRequireResume: true };
+        }
+        resolved.providerOptions = { ...resolved.providerOptions, codexTransport: codexTransportFor(resolved) };
+      }
       record.permissionApplication = {
         version: resolved.permissionVersion, requestedProfile: record.spec.permissionProfile, requestedRouting: record.spec.on.permissionRequest,
         profileStatus: "pending", routingStatus: "unsupported", nativeApprovals: false,
-        transport: resolved.providerOptions.codexTransport === "exec" || resolved.providerOptions.codexTransport === "app-server" ? resolved.providerOptions.codexTransport : resolved.permissionProfile === "full" ? "exec" : "app-server",
+        transport: codexTransportFor(resolved),
       };
       this.deps.events.append({ agentId: record.agentId, kind: "status", data: { permissionApplication: record.permissionApplication, appliedToRunningProcess: false } });
     }
@@ -1954,6 +1956,10 @@ export class AgentSupervisor {
     if (this.killingRecords.has(record) || record.state === "killed") return;
     if (this.agents.get(record.agentId) !== record) return;
     if (this.providerTransfers.get(record.agentId)?.source === record) return;
+    if (e.kind === "status" && (e.data.executionMode === "plan" || e.data.executionMode === "execute" || e.data.executionMode === "auto")) {
+      record.executionMode = e.data.executionMode;
+      // Provider observations are not operator intent; never persist native plan as the next launch choice.
+    }
     if (e.data.permissionApplication) {
       const application = e.data.permissionApplication as PermissionApplication;
       if (application.version < (record.permissionApplication?.version ?? -1)) return;
@@ -2820,11 +2826,8 @@ export class AgentSupervisor {
     // never fails over): if this was a session limit with a parseable reset, HOLD the agent
     // until then instead of losing its work. Otherwise keep today's fail-loud behavior.
     if (d.holdForReset && reset) { this.holdUntilReset(record, reset.resetAt, message); return; }
-    // CONTEXT-OVERFLOW-RECOVERY: a resumed native thread that blew the transport's own frame/
-    // context ceiling (see failover.ts's CONTEXT_OVERFLOW signal) can never succeed by retrying
-    // the SAME resume id — every disposition boolean is false so it falls through both branches
-    // above, and this is checked before restartInPlace because context-overflow needs a DIFFERENT
-    // recovery (drop resume, fresh session) than a plain crash restart (resume the same session).
+    // Native autocompaction thrashing uses a fresh-session fallback. JSONL transport
+    // failures are provider-stream errors and retain the session in restartInPlace.
     // Capped at one consecutive recovery per record: a SECOND context-overflow while
     // contextOverflowRecoveries is still 1 (i.e. the fresh session it just launched into also
     // overflowed) proves relaunching alone can't fix it, so this falls through to markFailed
@@ -3038,6 +3041,7 @@ export class AgentSupervisor {
     const record = this.agents.get(agentId);
     if (!record || record.state !== "running") return;
     if (this.killingRecords.has(record)) return;
+    if (record.remoteControlIntent?.enabled) return; // An open remote session is operator-owned, not idle garbage.
     if (this.hasLiveDependants(agentId)) return;   // PAUSED-CONDUCTOR: see hasLiveDependants
     const handle = this.handles.get(agentId);
     this.handles.delete(agentId);
@@ -3294,7 +3298,7 @@ export class AgentSupervisor {
       // shape) instead of failing the revive outright. A non-stale throw (generic backend/network
       // error, credential failure, ...) falls through to the terminal markFailed below unchanged —
       // see supervisor-session-limit.test.ts's "resume whose re-launch throws fails terminally".
-      if (record.sessionId && !freshFallback && isStaleResumeSessionError(message)) {
+      if (record.sessionId && !freshFallback && record.spec.providerOptions.codexRequireResume !== true && isStaleResumeSessionError(message)) {
         record.spec = { ...record.spec, resume: null, resumeOnly: false };
         record.staleResumeFallback = { resumedFromPause: false, reason: message };
         this.deps.events.append({ agentId, kind: "status", data: {
@@ -4224,6 +4228,31 @@ export class AgentSupervisor {
     try { return await decision; } finally { req.signal?.removeEventListener("abort", cancel); }
   }
 
+  private modeChanges = new Map<string, AgentRecord>();
+
+  async setExecutionMode(agentId: string, mode: "plan" | "execute" | "auto"): Promise<void> {
+    const record = this.status(agentId);
+    if (mode !== "plan" && mode !== "execute" && mode !== "auto") throw new Error("Invalid execution mode");
+    if (record.provider !== "claude" || record.spec.runtime === "terminal") throw new Error("Execution mode control requires the Claude SDK runtime");
+    if (this.modeChanges.get(agentId) === record) throw new Error("An execution mode change is already pending");
+    const handle = this.handles.get(agentId);
+    const running = record.state === "running";
+    if (running && !handle?.setExecutionMode) throw new Error("This running backend cannot change execution mode; update the daemon first");
+    this.modeChanges.set(agentId, record);
+    try {
+      if (running) {
+        await handle!.setExecutionMode!(mode, record.spec.permissionProfile);
+        if (this.agents.get(agentId) !== record || this.handles.get(agentId) !== handle || record.state !== "running")
+          throw new Error("Agent session changed while applying execution mode");
+      }
+      record.spec.executionMode = mode;
+      record.executionMode = running ? mode : undefined;
+      this.deps.events.append({ agentId, kind: "status", data: {
+        executionMode: running ? mode : null, requestedExecutionMode: mode,
+      } });
+    } finally { if (this.modeChanges.get(agentId) === record) this.modeChanges.delete(agentId); }
+  }
+
   // TUI backlog 8b: live (no-restart) permission change for a RUNNING agent.
   // decidePermission() reads record.spec.on.permissionRequest / record.spec.permissionProfile
   // FRESH on every canUseTool call (claude.ts calls decidePermission per tool), so mutating
@@ -4232,7 +4261,7 @@ export class AgentSupervisor {
   // agent (via status()) and InvalidPermissionError for a value outside the protocol's enums.
   setPermission(
     agentId: string,
-    patch: { permissionRequest?: AgentSpec["on"]["permissionRequest"]; permissionProfile?: AgentSpec["permissionProfile"] },
+    patch: { permissionRequest?: AgentSpec["on"]["permissionRequest"]; permissionProfile?: AgentSpec["permissionProfile"]; acknowledgeCodexFullAccessRisk?: boolean },
   ): { appliedToRunningProcess: boolean; permissionApplication?: PermissionApplication } {
     const record = this.status(agentId);   // throws UnknownAgentError for ghosts
     if (patch.permissionRequest !== undefined && !PERMISSION_REQUEST_VALUES.has(patch.permissionRequest))
@@ -4240,13 +4269,15 @@ export class AgentSupervisor {
     if (patch.permissionProfile !== undefined && !PERMISSION_PROFILE_VALUES.has(patch.permissionProfile))
       throw new InvalidPermissionError(`invalid permissionProfile "${patch.permissionProfile}"`);
 
-    if (record.provider === "codex" && patch.permissionProfile === "full" && !record.spec.acknowledgeCodexFullAccessRisk)
+    if (record.provider === "codex" && patch.permissionProfile === "full" && !record.spec.acknowledgeCodexFullAccessRisk && patch.acknowledgeCodexFullAccessRisk !== true)
       throw new InvalidPermissionError("Full Codex access requires the existing explicit full-access risk grant");
 
     // LIVE-PERMISSION-CHANGE-NOT-TOLD-TO-AGENT: capture the PRE-mutation values so the
     // mailbox notice below can tell what actually changed vs. what merely got re-set to
     // its current value (a no-op setPermission({permissionProfile: "acceptEdits"}) on an
     // agent already at "acceptEdits" must not cost the agent a mailbox message).
+    if (this.modeChanges.get(agentId) === record) throw new Error("An execution mode change is already pending");
+    const grantRisk = record.provider === "codex" && patch.permissionProfile === "full" && patch.acknowledgeCodexFullAccessRisk === true;
     const prevPermissionRequest = record.spec.on.permissionRequest;
     const prevPermissionProfile = record.spec.permissionProfile;
 
@@ -4263,11 +4294,12 @@ export class AgentSupervisor {
     const previousApplication = record.permissionApplication;
     const cannotAttest = record.provider === "codex" && (!handle?.updatePermission || record.state !== "running");
     const version = (previousApplication?.version ?? 0) + (changedDesired || cannotAttest && (previousApplication?.profileStatus !== "pending" || previousApplication?.effectiveProfile !== undefined || previousApplication?.submittedVersion !== undefined) ? 1 : 0);
-    let permissionApplication = cannotAttest ? undefined : handle?.updatePermission?.({ version, permissionProfile: record.spec.permissionProfile, permissionRequest: record.spec.on.permissionRequest });
+    let permissionApplication = cannotAttest ? undefined : handle?.updatePermission?.({ version, permissionProfile: record.spec.permissionProfile, permissionRequest: record.spec.on.permissionRequest, ...(grantRisk ? { acknowledgeCodexFullAccessRisk: true } : {}) });
+    if (grantRisk) record.spec.acknowledgeCodexFullAccessRisk = true;
     if (cannotAttest) permissionApplication = {
       version, requestedProfile: record.spec.permissionProfile, requestedRouting: record.spec.on.permissionRequest,
       profileStatus: "pending", routingStatus: "unsupported", nativeApprovals: false,
-      transport: previousApplication?.transport ?? (record.spec.providerOptions.codexTransport === "exec" || record.spec.providerOptions.codexTransport === "app-server" ? record.spec.providerOptions.codexTransport : record.spec.permissionProfile === "full" ? "exec" : "app-server"),
+      transport: previousApplication?.transport ?? codexTransportFor(record.spec),
     };
     if (permissionApplication) record.permissionApplication = permissionApplication;
     const appliedToRunningProcess = permissionApplication
@@ -4280,6 +4312,7 @@ export class AgentSupervisor {
       agentId, kind: "status",
       data: this.scrub({
         permissionChanged: true,
+        ...(grantRisk ? { acknowledgeCodexFullAccessRisk: true } : {}),
         appliedToRunningProcess,
         ...(permissionApplication ? { permissionApplication } : {}),
         ...(patch.permissionRequest !== undefined ? { permissionRequest: patch.permissionRequest } : {}),
@@ -4482,6 +4515,7 @@ export class AgentSupervisor {
       if (why) throw new GuardrailError(`"${key}" cannot be changed on a live agent — ${why}`);
       if (!RECONFIGURABLE.has(key)) throw new GuardrailError(`"${key}" is not a reconfigurable agent setting`);
     }
+    if (patch.strictMcpConfig !== undefined) AgentSpecSchema.shape.strictMcpConfig.parse(patch.strictMcpConfig);
     // Same-provider guard, identical to setAccount's: a session id belongs to ONE provider, so
     // "resume this conversation on a different provider" is not a spec edit — it is agent_handoff.
     if (patch.account !== undefined && patch.account !== r.accountName) {
@@ -4490,6 +4524,14 @@ export class AgentSupervisor {
     }
     const { spec, treeId, depth, sessionId } = r;
     const nextSpec = { ...spec, ...patch };
+    // The legacy provider option is spread last by Claude. An explicit operator change
+    // must replace it too, otherwise the saved setting and actual native MCP access differ.
+    const replacesStrictOverride = patch.strictMcpConfig !== undefined
+      && Object.hasOwn(spec.providerOptions, "strictMcpConfig");
+    if (replacesStrictOverride) {
+      nextSpec.providerOptions = { ...nextSpec.providerOptions };
+      delete nextSpec.providerOptions.strictMcpConfig;
+    }
     if (patch.model !== undefined) {
       nextSpec.providerOptions = { ...nextSpec.providerOptions };
       delete nextSpec.providerOptions.model;
@@ -4497,7 +4539,7 @@ export class AgentSupervisor {
     if (patch.effort !== undefined) nextSpec.providerOptions = { ...nextSpec.providerOptions, effort: undefined };
     // A patch that changes nothing must not restart a running turn for no reason — the panel
     // sends the whole form, so most fields in most saves are unchanged.
-    if (RECONFIGURABLE_KEYS.every((k) => JSON.stringify(nextSpec[k]) === JSON.stringify(spec[k]))) return r;
+    if (!replacesStrictOverride && RECONFIGURABLE_KEYS.every((k) => JSON.stringify(nextSpec[k]) === JSON.stringify(spec[k]))) return r;
     await this.kill(agentId);
     try {
       return await this.spawn(
@@ -5077,29 +5119,83 @@ export class AgentSupervisor {
     catch { return false; }
   }
 
-  // REMOTE-CONTROL: toggle a provider's native remote-control bridge on a RUNNING
-  // agent's live session — unlike setModel above, no kill/respawn: the backend handle's
-  // remoteControl() (when present) is a live control-request round trip, so the
-  // session's transcript/identity is never interrupted. A provider with no live control
-  // surface for it (such as Codex exec) has no
-  // handle.remoteControl at all; that surfaces as a clean RemoteControlUnsupportedError
-  // rather than a silent no-op. `name` defaults to `chimera-<agentId prefix>` so the
-  // attached session is identifiable without the caller inventing one.
-  async remoteControl(agentId: string, enable: boolean, name?: string): Promise<RemoteControlStatus> {
+  // Serialize bridge operations so an hourly renewal cannot overtake an explicit off.
+  private remoteControlOperations = new Map<string, Promise<unknown>>();
+
+  private queueRemoteControl<T>(agentId: string, operation: () => Promise<T>): Promise<T> {
+    const pending = (this.remoteControlOperations.get(agentId) ?? Promise.resolve()).catch(() => {}).then(operation);
+    this.remoteControlOperations.set(agentId, pending);
+    void pending.finally(() => {
+      if (this.remoteControlOperations.get(agentId) === pending) this.remoteControlOperations.delete(agentId);
+    }).catch(() => {});
+    return pending;
+  }
+
+  async maintainRemoteControl(agentId: string): Promise<void> {
+    await this.queueRemoteControl(agentId, async () => {
+      const r = this.agents.get(agentId);
+      if (!r?.remoteControlIntent?.enabled || this.killingRecords.has(r)) return;
+      // Restore only infrastructure/idle pauses, never an operator hold or quota/backoff pause.
+      if (r.state === "paused" && REVIVABLE_PAUSE_REASONS.has(r.pauseReason ?? "")) {
+        await this.resumePaused(agentId); // reissueRemoteControlIntent owns the new handle's enable.
+        return;
+      }
+      if (r.state !== "running") return;
+      const name = r.remoteControlIntent.name;
+      try {
+        await this.applyRemoteControl(agentId, true, name === `chimera-${agentId.slice(0, 8)}` ? undefined : name);
+      } catch {
+        // No raw provider error (may contain credentials); keep intent and retry next hour.
+        if (this.agents.get(agentId) === r && r.state === "running" && r.remoteControlIntent?.enabled)
+          this.deps.events.append({ agentId, kind: "status", data: { remoteControlCheck: { ok: false, reason: "provider-check-failed" } } });
+      }
+    });
+  }
+
+  async remoteControl(agentId: string, enable: boolean, name?: string, acknowledgeTransition = false): Promise<RemoteControlStatus> {
+    return this.queueRemoteControl(agentId, async () => {
+      const r = this.status(agentId);
+      const handle = this.handles.get(agentId);
+      if (enable && r.provider === "codex" && r.spec.runtime !== "terminal" && !handle?.remoteControl) {
+        if (r.state !== "running") throw new AgentNotRunningError(`Agent is ${r.state}; resume it before enabling remote control`);
+        if (!acknowledgeTransition) throw new RemoteControlUnsupportedError("Remote control needs an app-server connection. Confirm switch and enable to continue in the same Codex session.");
+        if (this.providerTransfers.has(agentId) || this.nativeVoiceChanges.has(agentId)) throw new GuardrailError("An agent connection change is in progress");
+        if (handle?.isTurnActive?.() || this.promptAck.isMidTurn(agentId) || this.deps.mailboxes.pending(agentId).length || this.inFlight.get(agentId)?.length)
+          throw new GuardrailError("Wait for the current turn and queued messages to finish, then switch and enable remote control. Nothing was interrupted.");
+        if (!r.sessionId) throw new GuardrailError("Wait for Codex to establish its session before enabling remote control");
+        if (r.spec.providerOptions.codexTransport === "app-server") throw new RemoteControlUnsupportedError("This app-server connection does not expose remote control; update the Codex CLI/backend.");
+        this.nativeVoiceChanges.add(agentId);
+        try {
+          // Same identity/session/account/workspace and permissions. Hold avoids the
+          // terminal kill event that disables pinned scheduled jobs. No task replay.
+          if (!await this.hold(agentId) || this.agents.get(agentId) !== r || this.status(agentId).state !== "paused") throw new GuardrailError("Agent changed while enabling remote control; retry");
+          r.spec = { ...r.spec, persistent: true, providerOptions: { ...r.spec.providerOptions, codexTransport: "app-server", codexRequireResume: true } };
+          await this.resumePaused(agentId);
+        } finally { this.nativeVoiceChanges.delete(agentId); }
+        if (this.agents.get(agentId) !== r || r.state !== "running") throw new AgentNotRunningError("Agent changed while reconnecting for remote control");
+      }
+      return this.applyRemoteControl(agentId, enable, name);
+    });
+  }
+
+  private async applyRemoteControl(agentId: string, enable: boolean, name?: string): Promise<RemoteControlStatus> {
     const r = this.status(agentId);                            // throws UnknownAgentError for ghosts
     if (r.state !== "running")
       throw new AgentNotRunningError(`agent ${agentId} is ${r.state}; cannot toggle remote control`);
-    const fn = this.handles.get(agentId)?.remoteControl;
+    const handle = this.handles.get(agentId);
+    const fn = handle?.remoteControl;
     if (!fn) throw new RemoteControlUnsupportedError(`remote control is not supported by this agent's transport (provider "${r.provider}", agentId ${agentId})${r.provider === "codex" ? "; Codex requires codexTransport: app-server and a compatible CLI" : ""}`);
 
-    const effectiveName = enable ? (name ?? `chimera-${agentId.slice(0, 8)}`) : undefined;
+    const effectiveName = enable ? (name ?? voiceAgentName(agentId, r.displayLabel, r.spec.conductor, r.projectId ?? undefined)) : undefined;
     let result: Awaited<ReturnType<typeof fn>>;
     try {
-      result = await fn(enable, effectiveName);
+      result = await fn.call(handle, enable, effectiveName);
     } catch (err) {
       if (r.provider === "codex") throw err;
       throw this.explainRemoteControlDenial(agentId, err as Error);
     }
+    if (this.agents.get(agentId) !== r || r.state !== "running" || this.handles.get(agentId) !== handle || this.killingRecords.has(r))
+      throw new AgentNotRunningError("Agent session changed while configuring remote control");
     const status: RemoteControlStatus = {
       agentId, provider: r.provider, enabled: enable,
       ...(enable ? { name: effectiveName, sessionUrl: result?.sessionUrl, connectUrl: result?.connectUrl } : {}),
@@ -5113,12 +5209,12 @@ export class AgentSupervisor {
     // own comment for why an explicit off must leave nothing for a later resume to re-apply.
     const record = this.agents.get(agentId);
     if (record) {
-      if (enable) record.remoteControlIntent = { enabled: true, ...(effectiveName ? { name: effectiveName } : {}) };
+      if (enable) record.remoteControlIntent = { enabled: true, ...(name ? { name } : {}) };
       else delete record.remoteControlIntent;
     }
     // observability: same "status" event kind setPermission uses above, so a TUI/app
     // watching this agent's stream can render the attach URL the moment it's live.
-    this.deps.events.append({ agentId, kind: "status", data: this.scrub({ remoteControl: status }) });
+    this.deps.events.append({ agentId, kind: "status", data: this.scrub({ remoteControl: status, remoteControlIntent: record?.remoteControlIntent ?? null }) });
     return status;
   }
 
@@ -5170,23 +5266,11 @@ export class AgentSupervisor {
     return handle;
   }
 
-  // REMOTE-CONTROL-SURVIVES-PAUSE: re-apply a previously-granted remote-control intent to a
-  // FRESH process/session after resumePaused relaunches one — every pause path (idle-reap,
-  // operator-hold, session-limit, crash-loop, the freshFallback/stale-session sub-paths) kills
-  // the OS process, and a new CLI process always starts with the bridge off, so without this
-  // "resume" silently drops remote control the operator explicitly turned on.
-  //
-  // Deliberately swallows every failure via remoteControl()'s own event-emitting/denial-
-  // explaining path rather than surfacing one: RemoteControlUnsupportedError is the CLEAN
-  // no-op codex (no control surface at all) must produce on every single resume, not a defect;
-  // any other rejection (denied credential, transient CLI hiccup) is a nice-to-have attach
-  // convenience failing, never a reason to fail a resume the operator is waiting on. A denial
-  // still reaches the operator via explainRemoteControlDenial's own status/error path on the
-  // NEXT explicit agent.remoteControl call, so nothing is silently lost — just not retried here.
+  // Re-check intent inside the serialized operation: an explicit off may already be queued.
+  // A fresh provider process needs renewal, but it must never undo the operator's off.
   private reissueRemoteControlIntent(agentId: string): void {
-    const intent = this.agents.get(agentId)?.remoteControlIntent;
-    if (!intent?.enabled) return;
-    void this.remoteControl(agentId, true, intent.name).catch(() => {});
+    if (!this.agents.get(agentId)?.remoteControlIntent?.enabled) return;
+    void this.maintainRemoteControl(agentId).catch(() => {});
   }
 
   // COMPACTION-OBSERVABILITY: manually trigger context compaction NOW instead of waiting for a

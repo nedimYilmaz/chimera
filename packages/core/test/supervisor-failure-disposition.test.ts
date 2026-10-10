@@ -145,11 +145,31 @@ describe("F08 disposition on the wire", () => {
   });
 });
 
+describe("JSONL transport recovery preserves native history", () => {
+  it.each(["", " (outbound)"])("reconnects to the same saved session after a frame failure%s", async suffix => {
+    const failure: FakeStep[] = [{ fail: { message: `Codex app-server JSONL frame exceeded 16 MiB${suffix}` } }];
+    const { sup, fake, dir } = makeSupervisor([failure, HAPPY], CFG, { crashLoopPolicy: { maxRestarts: 1, baseDelayMs: 1, maxDelayMs: 1, jitter: 0 } });
+    const rec = await sup.spawn({ prompt: "x", cwd: "/tmp", account: "second", resume: "saved-thread", isolation: "none", providerOptions: { codexRequireResume: true } });
+    await until(() => sup.status(rec.agentId).state === "done");
+    expect(sup.status(rec.agentId).state).toBe("done");
+    expect(fake.spawns).toHaveLength(2);
+    expect(fake.spawns[1]).toMatchObject({ resume: "saved-thread", accountName: "second" });
+    expect(events(dir).some(e => e.data.resumeFallback === "context-overflow")).toBe(false);
+  });
+
+  it("opens the circuit after repeated frame failures without dropping the session", async () => {
+    const failure: FakeStep[] = [{ fail: { message: "Codex app-server JSONL frame exceeded 16 MiB" } }];
+    const { sup, fake, dir } = makeSupervisor([failure, failure], CFG, { crashLoopPolicy: { maxRestarts: 1, baseDelayMs: 1, maxDelayMs: 1, jitter: 0 } });
+    const rec = await sup.spawn({ prompt: "x", cwd: "/tmp", account: "second", resume: "saved-thread", isolation: "none" });
+    await until(() => sup.status(rec.agentId).state === "failed");
+    expect(sup.status(rec.agentId)).toMatchObject({ state: "failed", sessionId: "saved-thread", circuitOpen: true, failure: { cause: "provider-stream" } });
+    expect(fake.spawns.map(s => s.resume)).toEqual(["saved-thread", "saved-thread"]);
+    expect(events(dir).some(e => e.data.resumeFallback === "context-overflow")).toBe(false);
+  });
+});
+
 describe("CONTEXT-OVERFLOW-RECOVERY: a poisoned resume relaunches fresh, once, same account", () => {
-  // Matches codex-rpc.ts's outbound frame-guard phrase exactly; contains none of the earlier-
-  // precedence CAP/THROTTLE/CRED/BAD_REQUEST substrings (see failover.test.ts's fixture discipline
-  // note), so it classifies as context-overflow every time it's used below.
-  const OVERFLOW: FakeStep[] = [{ fail: { message: "Codex app-server JSONL frame exceeded 16 MiB (outbound)" } }];
+  const OVERFLOW: FakeStep[] = [{ fail: { message: "Autocompact is thrashing: the context refilled to the limit" } }];
 
   it("a single context-overflow drops resume and relaunches once on the SAME account, mailbox intact", async () => {
     const { sup, fake, dir } = makeSupervisor([OVERFLOW, HAPPY]);

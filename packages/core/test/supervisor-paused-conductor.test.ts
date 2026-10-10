@@ -131,8 +131,8 @@ describe("AgentSupervisor.resumePaused — wake observability and the resumeOnly
 // bridge off, regardless of what the prior (now-killed) process had toggled — the operator's
 // DESIRED state has to be persisted on the record and re-applied after every relaunch.
 describe("AgentSupervisor.resumePaused — remote control survives the pause/resume cycle", () => {
-  it("re-issues remote control on the FRESH-LAUNCH resume path (no sessionId) and reports a new status event", async () => {
-    const { sup, events } = makeSupervisor([LIVE(), LIVE()]);
+  it("preserves remote control through idle reaping and re-issues it after an explicit hold/resume without a sessionId", async () => {
+    const { sup, fake, events } = makeSupervisor([LIVE(), LIVE()]);
     await sup.spawn(SPAWN_A, { agentId: "rc1" });
     await waitUntil(() => sup.status("rc1").state === "running");
 
@@ -140,6 +140,10 @@ describe("AgentSupervisor.resumePaused — remote control survives the pause/res
     expect(before.enabled).toBe(true);
 
     await sup.parkIdle("rc1", 99_999);
+    expect(sup.status("rc1").state).toBe("running");
+    expect(fake.spawns).toHaveLength(1);
+    await sup.hold("rc1");
+    expect(sup.status("rc1").state).toBe("paused");
     await sup.resumePaused("rc1", { resumedBy: "mailbox", from: "worker-1" });
     await waitUntil(() => events.tail("rc1", 100).filter((e) => e.kind === "status" && e.data["remoteControl"] !== undefined).length > 1);
 

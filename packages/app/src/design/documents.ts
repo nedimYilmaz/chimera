@@ -31,8 +31,8 @@ export const DESIGN_CSP = "default-src 'none'; script-src 'none'; style-src 'uns
 const tags = new Set("a abbr address article aside b bdi bdo blockquote br button caption cite code col colgroup data datalist dd del details dfn dialog div dl dt em fieldset figcaption figure footer form h1 h2 h3 h4 h5 h6 header hgroup hr i img input ins kbd label legend li main mark menu meter nav ol optgroup option output p picture pre progress q rp rt ruby s samp section select small source span strong style sub summary sup table tbody td textarea tfoot th thead time tr u ul var wbr".split(" "));
 const attrs = new Set("id class style title lang dir role alt width height type value placeholder disabled checked selected multiple readonly required min max step rows cols colspan rowspan scope open for name datetime start reversed span size wrap loading decoding".split(" "));
 
-export function staticDesignDocument(source: string): { html: string; removed: number } {
-  if (new TextEncoder().encode(source).byteLength > DESIGN_MAX_BYTES) throw new Error("Design preview is limited to 1 MiB. Register a smaller self-contained HTML file.");
+export function staticDesignDocument(source: string, maxBytes = DESIGN_MAX_BYTES): { html: string; removed: number } {
+  if (new TextEncoder().encode(source).byteLength > maxBytes) throw new Error(`HTML preview is limited to ${maxBytes / (1024 * 1024)} MiB. Use a smaller document or view its source.`);
   // Template contents are inert: unlike a detached DOMParser document, images
   // must not start requests during parsing, before the preview CSP takes effect.
   const template = document.createElement("template");

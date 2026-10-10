@@ -142,7 +142,7 @@ export function buildRemoveTeamRolePatch(spec: Record<string, unknown>, roleKey:
 // default. Keep this list in lockstep with that schema.
 export const ROLE_SPEC_PATCH_FIELDS = [
   "cwd", "displayLabel", "account", "provider", "isolation", "workdirKey", "model", "effort",
-  "instructions", "resultSchema", "permissionProfile", "autonomy", "acknowledgeCodexFullAccessRisk",
+  "instructions", "resultSchema", "executionMode", "permissionProfile", "autonomy", "acknowledgeCodexFullAccessRisk",
   "maxTurns", "turnLimitPolicy", "idleTimeoutMs", "maxTurnDurationMs", "inherit", "mcpServers",
   "mcpToolAllowlist", "strictMcpConfig", "plugins", "orchestration", "crossProviderFailover", "deliverTo",
   "deliverWake", "maxBudgetUsd", "conductor", "session", "persistent", "poolSize", "on",

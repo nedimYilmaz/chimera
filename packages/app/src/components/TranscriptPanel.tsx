@@ -733,6 +733,7 @@ export function TranscriptPanel({ agent: liveAgent, workflow }: { agent: AgentVi
         account={currentAgent?.account}
         permissionProfile={currentAgent?.permissionProfile}
         permissionRequest={currentAgent?.permissionRequest}
+        executionMode={currentAgent?.executionMode}
         permissionAppliedToRunningProcess={currentAgent?.permissionAppliedToRunningProcess}
         permissionApplication={currentAgent?.permissionApplication}
         toolPolicyDenied={currentAgent?.toolPolicyDenied}

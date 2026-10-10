@@ -19,6 +19,67 @@ const spawn = async (e: Engine, spec: Record<string, unknown> = {}) =>
   (await e.handle("agent.spawn", { spec: { prompt: "p", cwd: "/tmp", isolation: "none", ...spec } })) as { agentId: string };
 
 describe("changing settings on a live agent", () => {
+  it.each(["running", "paused", "failed"] as const)("explicit Codex full-risk grant applies to %s settings without a respawn", async state => {
+    const fake = new FakeAgentBackend([[{ awaitSend: true }]], "codex");
+    const e = new Engine({ home: makeEngineHome(), backends: new Map([["codex", fake]]) });
+    await e.handle("config.patch", { patch: { accounts: [{ name: "codex", provider: "codex", auth: { type: "subscription" } }], autoOrder: ["codex"] } });
+    const a = await spawn(e, { provider: "codex", account: "codex", permissionProfile: "acceptEdits" });
+    try {
+      const record = e.supervisor.status(a.agentId);
+      record.state = state;
+      for (const grant of [undefined, false, "true"]) {
+        await expect(e.handle("agent.reconfigure", { agentId: a.agentId, live: { permissionProfile: "full" }, patch: grant === undefined ? {} : { acknowledgeCodexFullAccessRisk: grant } })).rejects.toThrow("risk grant");
+        expect(record.spec.permissionProfile).toBe("acceptEdits");
+        expect(record.spec.acknowledgeCodexFullAccessRisk).toBe(false);
+      }
+      const result = await e.handle("agent.reconfigure", { agentId: a.agentId, live: { permissionProfile: "full", permissionRequest: "auto" }, patch: { acknowledgeCodexFullAccessRisk: true } });
+      expect(result).toMatchObject({ respawned: false, applied: ["permission"], state });
+      expect(fake.spawns).toHaveLength(1);
+      expect(record.spec).toMatchObject({ permissionProfile: "full", acknowledgeCodexFullAccessRisk: true });
+      expect(e.events.tail(a.agentId, 30).some(event => event.data.permissionChanged && event.data.acknowledgeCodexFullAccessRisk === true)).toBe(true);
+    } finally { await e.supervisor.kill(a.agentId); }
+  });
+
+  it("enables native MCP settings for one agent without losing its session or changing fleet defaults", async () => {
+    const fake = new FakeAgentBackend(Array.from({ length: 6 }, () => [
+      { emit: { kind: "agent_started" as const, data: { sessionId: "native-plugin-session" } } },
+      { awaitSend: true as const },
+    ]));
+    const e = new Engine({ home: makeEngineHome(), backends: new Map([["claude", fake]]) });
+    await e.handle("config.patch", { patch: { leanAgentContext: true } });
+    const a = await spawn(e, { loadSettings: false });
+    await flush();
+    expect(fake.spawns[0]!.providerOptions.strictMcpConfig).toBe(true);
+    expect(fake.spawns[0]!.inherit.settingSources).toEqual([]);
+    expect(e.supervisor.status(a.agentId).sessionId).toBe("native-plugin-session");
+    const patch = { loadSettings: true, strictMcpConfig: false };
+    await e.handle("agent.reconfigure", { agentId: a.agentId, patch });
+    expect(fake.spawns).toHaveLength(2);
+    expect(fake.spawns[1]).toMatchObject({ agentId: a.agentId, resume: "native-plugin-session", strictMcpConfig: false });
+    expect(fake.spawns[1]!.providerOptions.strictMcpConfig).toBeUndefined();
+    expect(fake.spawns[1]!.inherit.settingSources).toEqual(["project", "user"]);
+    expect(await e.handle("agent.reconfigure", { agentId: a.agentId, patch })).toMatchObject({ respawned: false });
+    expect(fake.spawns).toHaveLength(2);
+    await spawn(e);
+    expect(fake.spawns[2]!.providerOptions.strictMcpConfig).toBe(true);
+    await e.handle("agent.reconfigure", { agentId: a.agentId, patch: { strictMcpConfig: true } });
+    expect(fake.spawns[3]!.strictMcpConfig).toBe(true);
+  });
+
+  it("validates native MCP configuration before stopping the existing process and replaces a legacy override", async () => {
+    const fake = new FakeAgentBackend(Array.from({ length: 4 }, () => [{ awaitSend: true as const }]));
+    const e = new Engine({ home: makeEngineHome(), backends: new Map([["claude", fake]]) });
+    const a = await spawn(e, { strictMcpConfig: false, providerOptions: { strictMcpConfig: true, unrelated: "preserved" } });
+    const before = e.supervisor.status(a.agentId);
+    await expect(e.handle("agent.reconfigure", { agentId: a.agentId, patch: { strictMcpConfig: "false" } })).rejects.toThrow(/boolean/);
+    expect(e.supervisor.status(a.agentId)).toBe(before);
+    expect(fake.spawns).toHaveLength(1);
+    await e.handle("agent.reconfigure", { agentId: a.agentId, patch: { strictMcpConfig: false } });
+    expect(fake.spawns[1]!.strictMcpConfig).toBe(false);
+    expect(fake.spawns[1]!.providerOptions.strictMcpConfig).toBeUndefined();
+    expect(fake.spawns[1]!.providerOptions.unrelated).toBe("preserved");
+  });
+
   it("applies several at once and keeps the SESSION — the whole point of respawn-with-resume", async () => {
     const e = new Engine({ home: makeEngineHome(), backends: backends() });
     const a = await spawn(e, { maxTurns: 40 });

@@ -97,6 +97,7 @@ export const AgentReconfigureParamsSchema = z.object({
   patch: z.record(z.string(), z.unknown()).default({}),
   // The no-respawn half, each already served by its own live setter.
   live: z.object({
+    executionMode: z.enum(["plan", "execute", "auto"]).optional(),
     permissionProfile: z.enum(["readOnly", "acceptEdits", "full"]).optional(),
     permissionRequest: z.enum(["auto", "poke:caller", "tui"]).optional(),
     groups: z.array(z.string()).optional(),
@@ -1422,14 +1423,9 @@ export const ChimeraConfigSchema = z.object({
   // Wins over the account/provider default the same way any per-spawn value does
   // (supervisor.resolveCompactionThreshold: "the right window is a property of the workload").
   projectConductorCompactionThreshold: z.number().int().positive().default(500_000),
-  // LEAN-AGENT-CONTEXT (token economy): default ON. When true, a fresh NON-conductor claude
-  // spawn is given strictMcpConfig — the SDK loads ONLY chimera's own injected MCP server, not
-  // the machine's foreign MCP catalog (claude.ai connectors, EKB, atlassian, etc.), which
-  // otherwise embeds hundreds of tool definitions in every spawn's context. Agents reach a
-  // foreign MCP tool on demand via chimera's mcp_store_tools/mcp_store_call proxy instead. The
-  // discovery-pointer instruction (supervisor capabilityBlock) names the lazy-load paths.
-  // Escape hatch: set false to restore the old full-catalog behavior. Read fresh per launch.
-  leanAgentContext: z.boolean().default(true),
+  // Native MCP/plugins are available by default alongside Chimera's own grant.
+  // Explicit lean mode remains an opt-in catalog/skills filter, read fresh per launch.
+  leanAgentContext: z.boolean().default(false),
   // LEAN-AGENT-SKILLS: the skills a lean spawn may still use. Empty = none.
   //
   // An allowlist rather than an off switch, because the SDK's `skills` is "a context filter, not a
@@ -1659,6 +1655,9 @@ export const AgentSpecSchema = z.object({
   // dependency anywhere in this repo — out of scope here). Omitted ⇒ today's free-text result,
   // byte-identical.
   resultSchema: z.record(z.string(), z.unknown()).optional(),
+  // Claude SDK planning is independent of tool permissions and autonomy. Omitted resolves
+  // to execute at launch; only an explicit plan request persists as a startup choice.
+  executionMode: z.enum(["plan", "execute", "auto"]).optional(),
   permissionProfile: z.enum(["readOnly", "acceptEdits", "full"]).default("acceptEdits"),
   // AGENT-AUTONOMY: "full" means the agent gets no human to ask, ever — it silences the
   // ask_human/ask_agent/ask_team MCP tools (not just registered-but-refusing: absent, so the
@@ -1702,14 +1701,14 @@ export const AgentSpecSchema = z.object({
   idleTimeoutMs: z.number().int().positive().optional(),
   maxTurnDurationMs: z.number().int().positive().optional(),
   inherit: z.object({
-    settingSources: z.array(z.enum(["user", "project", "local"])).default([]),
+    settingSources: z.array(z.enum(["user", "project", "local"])).default(["project", "user"]),
     // WS-E: the old `plugins: boolean` here was parsed-but-never-read dead weight.
     // Removed in favor of the first-class, explicit `plugins` field below (the SDK's
     // SdkPluginConfig[] shape) — one obvious source of truth. A meaningful
     // "child inherits the parent's resolved plugins" flag would need supervisor
     // spawn-resolution plumbing, which is out of this workstream's protocol+backend
     // scope; revisit there if/when parent→child capability inheritance is added.
-  }).default({ settingSources: [] }),
+  }).default({ settingSources: ["project", "user"] }),
   // SPAWN-SETTING-SOURCES: the friendly on/off surface for `inherit.settingSources` above —
   // that raw array is faithful to the SDK's own --setting-sources vocabulary but was
   // reachable ONLY by hand-authoring a role (no agent_spawn field, no app/TUI control), which
@@ -1717,13 +1716,8 @@ export const AgentSpecSchema = z.object({
   // tools. true/false here always win outright, overwriting `inherit.settingSources` with
   // ["project","user"] / [] respectively — a caller who wants a CUSTOM source list (e.g. just
   // "user", or "local") still sets `inherit.settingSources` directly and leaves this unset.
-  // Tri-state via plain `.optional()` (no `.default()`): undefined reliably means "no opinion"
-  // post-parse, the same trick resolveAgentSpec's own isolation/readOnly resolution already
-  // relies on — supervisor.spawn() reads that absence as license to fall back to a spawn's
-  // resolved PROJECT's own loadProjectSettings toggle (see supervisor.ts SPAWN-SETTING-SOURCES)
-  // rather than silently defaulting every agent everywhere, which would inflate the token cost
-  // of the entire fleet (see backends/claude.ts's TOKEN-EFF-2/LEAN-AGENT-MCPS). Omitted ⇒
-  // byte-identical to every spec/role that predates this field.
+  // Omitted uses the native-enabled inherit default; explicit false or an explicit
+  // inherit.settingSources list still expresses the caller's isolation choice.
   loadSettings: z.boolean().optional(),
   mcpServers: z.record(z.string(), z.unknown()).default({}),
   // W2-4 PER-AGENT-TOOL-ALLOWLIST: a CLOSED-WORLD MCP grant keyed by server name, with
@@ -2505,10 +2499,11 @@ export type AgentRebindParams = z.infer<typeof AgentRebindParams>;
 // back a claude.ai/code session_url with no respawn needed. Provider-specific: a
 // backend with no live control surface for it (Codex exec) rejects with a protocol
 // error rather than silently no-opping. `name` only applies when enable:true; omitted
-// it defaults to `chimera-<agentId prefix>` (see AgentSupervisor.remoteControl).
+// it defaults to the same display name used by the desktop (including unnamed agents).
 export const RemoteControlParams = z.object({
   agentId: z.string().min(1),
   enable: z.boolean(),
+  acknowledgeTransition: z.boolean().optional(),
   name: z.string().min(1).optional(),
 }).strict();
 export type RemoteControlParams = z.infer<typeof RemoteControlParams>;
@@ -5443,6 +5438,8 @@ export type FsReadEncoding = z.infer<typeof FsReadEncodingSchema>;
 
 export const FsReadResult = z.object({
   path: z.string(),
+  // Canonical, root-checked local path for native media/open actions. Older daemons omit it.
+  absolutePath: z.string().optional(),
   encoding: FsReadEncodingSchema,
   content: z.string(),
   sizeBytes: z.number().int().min(0),

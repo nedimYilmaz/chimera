@@ -415,8 +415,8 @@ const FIXTURES: Array<{ msg: string; cause: string; errorClass: string }> = [
   { msg: "structured output validation failed against resultSchema (missing field \"foo\")", cause: "bad-request", errorClass: "protocol" },
   // CONTEXT-OVERFLOW: codex-rpc.ts's inbound (stdout) and outbound (stdin) JSONL frame guards emit
   // the same core phrase, the outbound one with a " (outbound)" suffix — both must classify alike.
-  { msg: "Codex app-server JSONL frame exceeded 16 MiB", cause: "context-overflow", errorClass: "backend-crash" },
-  { msg: "Codex app-server JSONL frame exceeded 16 MiB (outbound)", cause: "context-overflow", errorClass: "backend-crash" },
+  { msg: "Codex app-server JSONL frame exceeded 16 MiB", cause: "provider-stream", errorClass: "backend-crash" },
+  { msg: "Codex app-server JSONL frame exceeded 16 MiB (outbound)", cause: "provider-stream", errorClass: "backend-crash" },
   { msg: "Claude Code returned an error result: Autocompact is thrashing: the context refilled to the limit within 3 turns", cause: "context-overflow", errorClass: "backend-crash" },
 ];
 
@@ -515,7 +515,7 @@ describe("classifyFailure (single classifier + disposition table)", () => {
     // branches (failoverAccount/holdForReset/restartInPlace must all stay false so they skip this
     // cause) -- supervisor.onError instead branches on `d.cause === "context-overflow"` directly to
     // drop resume and relaunch fresh, which is what `retryable: true` describes here.
-    const d = classifyFailure("Codex app-server JSONL frame exceeded 16 MiB (outbound)");
+    const d = classifyFailure("Autocompact is thrashing: context refilled to the limit");
     expect(d.cause).toBe("context-overflow");
     expect([d.retryable, d.failoverAccount, d.holdForReset, d.restartInPlace]).toEqual([true, false, false, false]);
   });

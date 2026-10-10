@@ -89,6 +89,7 @@ describe("quick-spawn session defaults", () => {
       autonomy: "full", compactionThreshold: 500_000, maxTurns: 120,
       session: true, isolation: "none", resume: null, resumeOnly: true,
       orchestration: { allow: true },
+      loadSettings: true, strictMcpConfig: false,
       on: { permissionRequest: permissionMode === "bypass" ? "auto" : "tui" },
     });
     expect(spec.permissionProfile).toBe(permissionMode === "bypass" ? "full" : undefined);
@@ -547,6 +548,18 @@ describe("surface label — the app tags agent.send with from:'app', never 'tui'
   // so a hardcoded "tui" made agents believe the human was in the terminal (and
   // e.g. warn that excalidraw diagrams show only a placeholder — false in the app,
   // which renders them inline). Every app-side USER-message send must say "app".
+  it("an unknown explicit target is removed and fails without redirecting the message", async () => {
+    const store = makeStore({ agents: { gone: { ...emptyAgent("gone"), state: "running" } }, agentOrder: ["gone"], selectedAgentId: "gone", mainConductorId: "gone" });
+    const calls: string[] = [];
+    const rpc: RpcFn = async method => { calls.push(method); throw { code: "protocol", message: "unknown agent: gone" }; };
+    await createAgentCommands(store, rpc).sendToAgent("gone", "keep this in my original conversation");
+    expect(calls).toEqual(["agent.send"]);
+    expect(store.state.lastError).toContain("unknown agent");
+    expect(store.state.agents.gone).toBeUndefined();
+    expect(store.state.selectedAgentId).toBeNull();
+    expect(store.state.mainConductorId).toBeNull();
+  });
+
   it("sendToAgent direct-send passes from:'app'", async () => {
     const store = makeStore({ agents: { a: running("a") }, agentOrder: ["a"] });
     const { rpc, calls } = makeRpc();
@@ -1029,7 +1042,7 @@ describe("fleet bulk commands", () => {
     const rpc: RpcFn = async <T,>(method: string, params?: unknown): Promise<T> => {
       rpcCalls.push({ method, params: (params ?? {}) as Record<string, unknown> });
       if (method === "agent.hold") return { held: ["a"], skipped: [] } as T;
-      return (method === "agent.list" ? [] : {}) as T;
+      return (method === "agent.list" ? [{ agentId: "a", state: "paused", accountName: "main", provider: "claude", costUsd: 0, createdAt: 1 }] : {}) as T;
     };
     await createAgentCommands(store, rpc).bulkPause(["a"]);
     expect(store.state.liveboardLanes[0]!.follow).toBe(false);

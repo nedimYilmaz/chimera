@@ -122,7 +122,22 @@ disabledPluginIds?: Array<string> | null, clientUserMessageId?: string | null, i
  * Optional source classification for the caller that starts this turn.
  * Ignored when this request steers an already-active turn.
  */
-turnTrigger?: string | null, toolOutput?: TurnToolOutput | null, /**
+turnTrigger?: string | null, /**
+ * ID of the turn that caused this new turn to start.
+ *
+ * Set this when starting work on behalf of another turn, such as delegated
+ * work in a different thread. Leave unset for work started directly by the
+ * user. Ignored when this request adds input to an active turn.
+ */
+parentTurnId?: string | null, /**
+ * ID of the first turn in the chain of work that led to this new turn.
+ *
+ * When setting `parentTurnId`, set this to the parent turn's `rootTurnId`
+ * when known. This keeps descendant work attributed to the original turn.
+ * If omitted, the new turn becomes its own root. Ignored when this request
+ * adds input to an active turn.
+ */
+rootTurnId?: string | null, toolOutput?: TurnToolOutput | null, /**
  * Override the working directory for this turn and subsequent turns.
  */
 cwd?: string | null, /**
@@ -162,6 +177,44 @@ personality?: Personality | null, /**
  */
 outputSchema?: JsonValue | null};
 
+export type SandboxMode = "read-only" | "workspace-write" | "danger-full-access";
+
+/**
+ * There are three ways to resume a thread:
+ * 1. By thread_id: load the thread from disk by thread_id and resume it.
+ * 2. By history: instantiate the thread from memory and resume it.
+ * 3. By path: load the thread from disk by path and resume it.
+ *
+ * For non-running threads, the precedence is: history > non-empty path > thread_id.
+ * If using history or a non-empty path for a non-running thread, the thread_id
+ * param will be ignored.
+ *
+ * If thread_id identifies a running thread, app-server rejoins that thread and
+ * treats a non-empty path as a consistency check against the active rollout path.
+ * Empty string path values are treated as absent.
+ *
+ * Prefer using thread_id whenever possible.
+ */
+export type ThreadResumeParams = {threadId: string, /**
+ * Configuration overrides for the resumed thread, if any.
+ */
+model?: string | null, modelProvider?: string | null, serviceTier?: string | null | null, cwd?: string | null, approvalPolicy?: AskForApproval | null, /**
+ * Override where approval requests are routed for review on this thread
+ * and subsequent turns.
+ */
+approvalsReviewer?: ApprovalsReviewer | null, sandbox?: SandboxMode | null, config?: { [key in string]?: JsonValue } | null, baseInstructions?: string | null, developerInstructions?: string | null, /**
+ * @deprecated `friendly` and `pragmatic` no longer select a style.
+ * Changing this does not rewrite the thread's existing instructions.
+ */
+personality?: Personality | null, /**
+ * When true, return only thread metadata and live-resume state without
+ * populating `thread.turns`. This is useful when the client plans to call
+ * `thread/turns/list` immediately after resuming. Full-history hydration
+ * is deprecated for paginated threads; use this with `thread/turns/list`
+ * and `thread/items/list` instead.
+ */
+excludeTurns?: boolean};
+
 /**
  * EXPERIMENTAL. Captures a user's answer to a request_user_input question.
  */
@@ -172,12 +225,23 @@ export type ToolRequestUserInputAnswer = { answers: Array<string>, };
  */
 export type ToolRequestUserInputResponse = { answers: { [key in string]?: ToolRequestUserInputAnswer }, };
 
+export type ThreadSetNameParams = { threadId: string, name: string, };
+
 export type ThreadGoalStatus = "active" | "paused" | "blocked" | "usageLimited" | "budgetLimited" | "complete";
 
 export type ThreadGoal = { threadId: string, objective: string, status: ThreadGoalStatus, tokenBudget: number | null, tokensUsed: number, timeUsedSeconds: number, createdAt: number, updatedAt: number, };
 
 export type ThreadGoalGetResponse = { goal: ThreadGoal | null, };
 
-export type ThreadGoalSetParams = { threadId: string, objective?: string | null, status?: ThreadGoalStatus | null, tokenBudget?: number | null, };
+/**
+ * Distinguishes explicit user actions from automatic goal lifecycle mutations.
+ */
+export type ThreadGoalMutationOrigin = "user" | "automatic";
+
+export type ThreadGoalSetParams = { threadId: string,
+/**
+ * Missing provenance does not supply user authorization.
+ */
+origin?: ThreadGoalMutationOrigin | null, objective?: string | null, status?: ThreadGoalStatus | null, tokenBudget?: number | null, };
 
 export type ThreadGoalSetResponse = { goal: ThreadGoal, };

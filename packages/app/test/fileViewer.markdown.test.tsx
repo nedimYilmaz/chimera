@@ -47,6 +47,13 @@ const has = (t: ReturnType<typeof create>, props: Record<string, unknown>): bool
 };
 
 describe("a markdown file is RENDERED, not listed as source", () => {
+  it("keeps incomplete HTML in source instead of rendering broken markup", () => {
+    const selected = file("/p/page.html", "<h1>incomplete");
+    if (selected.status === "ok") selected.result.truncated = true;
+    const t = render(<FileViewer selected={selected} onClose={() => {}} />);
+    expect(has(t, { "data-html-preview": true })).toBe(false);
+    expect(t.root.findByProps({ "data-file-viewer-raw-toggle": true }).props.disabled).toBe(true);
+  });
   it("renders the document for a .md file", () => {
     const t = render(<FileViewer selected={file("/p/notes.md", MD)} onClose={() => {}} />);
     expect(has(t, { "data-file-viewer-markdown": true })).toBe(true);

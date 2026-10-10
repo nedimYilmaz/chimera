@@ -45,6 +45,26 @@ function rpcClient(socketPath: string) {
 }
 
 describe("chimerad RPC server", () => {
+  it("rejects an oversized history response without disconnecting or changing its events", async () => {
+    const { socketPath, engine } = makeEngine();
+    // UTF-8 bytes, not JS character count, determine whether the reader can accept a frame.
+    const text = "ğ".repeat(9 * 1024 * 1024);
+    engine.events.append({ agentId: "large-history", kind: "message_complete", data: { text } });
+    engine.events.append({ agentId: "large-history", kind: "message_complete", data: { text } });
+    const server = await startRpcServer({ socketPath, engine });
+    const c = rpcClient(socketPath);
+    try {
+      expect(await c.request("events.replay", { agentId: "large-history", limit: 500 })).toMatchObject({
+        ok: false, error: { code: "response-too-large" },
+      });
+      expect(await c.request("daemon.hello", { protocolVersion: 1 })).toMatchObject({ ok: true });
+      expect(await c.request("events.replay", { agentId: "large-history", limit: 1 })).toMatchObject({
+        ok: true, result: [{ seq: 2, data: { text } }],
+      });
+      expect(engine.events.replay({ agentId: "large-history", limit: 500 }).map(e => e.data.text)).toEqual([text, text]);
+    } finally { c.end(); await server.close(); }
+  }, 30_000);
+
   it("refuses to unlink a listening daemon and leaves it usable", async () => {
     const { socketPath, engine } = makeEngine();
     const server = await startRpcServer({ socketPath, engine });

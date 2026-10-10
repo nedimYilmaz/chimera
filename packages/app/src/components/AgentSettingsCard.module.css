@@ -30,3 +30,16 @@
   background: var(--panel);
   color: var(--fg);
 }
+
+/* Keep paired settings usable on a narrow desktop window. */
+@media (max-width: 640px) {
+  .pair { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* RPC errors can include long provider explanations; keep them out of the title row. */
+.error {
+  color: var(--danger);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}

@@ -20,6 +20,48 @@ function mockChild() {
 }
 
 describe("CodexRpc JSONL frame guard", () => {
+  it("accepts multiple bounded frames in a stdout chunk larger than the ceiling", () => {
+    const mock = mockChild();
+    const rpc = new CodexRpc("codex", [], {}, mock.factory);
+    const failure = vi.fn();
+    const notification = vi.fn();
+    rpc.onFailure = failure;
+    rpc.onNotification = notification;
+    const frame = JSON.stringify({ method: "padding", params: { pad: "x".repeat(MAX_FRAME_BYTES / 2) } }) + "\n";
+    try {
+      mock.child.stdout.write(frame + frame);
+      expect(failure).not.toHaveBeenCalled();
+      expect(notification).toHaveBeenCalledTimes(2);
+    } finally { rpc.close(); }
+  });
+
+  it.each([true, false])("measures inbound UTF-8 bytes with a completed frame: %s", complete => {
+    const mock = mockChild();
+    const rpc = new CodexRpc("codex", [], {}, mock.factory);
+    const failure = vi.fn();
+    rpc.onFailure = failure;
+    try {
+      const frame = JSON.stringify({ method: "padding", params: { pad: "界".repeat(Math.ceil(MAX_FRAME_BYTES / 3)) } });
+      mock.child.stdout.write(frame + (complete ? "\n" : ""));
+      expect(failure).toHaveBeenCalledTimes(1);
+      expect(failure.mock.calls[0][0].message).toContain("JSONL frame exceeded");
+    } finally { rpc.close(); }
+  });
+
+  it("retains a split frame across chunks and reads the following frame", async () => {
+    const mock = mockChild();
+    const rpc = new CodexRpc("codex", [], {}, mock.factory);
+    const failure = vi.fn();
+    rpc.onFailure = failure;
+    try {
+      const pending = rpc.request("thread/resume", { threadId: "saved" });
+      const response = JSON.stringify({ id: 1, result: { thread: { id: "saved", preview: "x".repeat(MAX_FRAME_BYTES - 1024) } } }) + "\n";
+      mock.child.stdout.write(response.slice(0, -100));
+      mock.child.stdout.write(response.slice(-100) + JSON.stringify({ method: "ready", params: {} }) + "\n");
+      expect((await pending).thread.id).toBe("saved");
+      expect(failure).not.toHaveBeenCalled();
+    } finally { rpc.close(); }
+  });
   it("exposes only the exact owned live child PID and clears it on exit", () => {
     const mock = mockChild();
     Object.assign(mock.child, { pid: 123 });
@@ -28,8 +70,6 @@ describe("CodexRpc JSONL frame guard", () => {
     mock.child.emit("exit", 0, null);
     expect(rpc.processPid).toBeNull();
   });
-  // CONTEXT-OVERFLOW: both directions share MAX_FRAME_BYTES so classifyFailure's CONTEXT_OVERFLOW
-  // signal in failover.ts matches either failure the same way.
   it("fails an inbound frame over the ceiling with the exact classifiable phrase, no outbound suffix", async () => {
     const mock = mockChild();
     const rpc = new CodexRpc("codex", [], {}, mock.factory);

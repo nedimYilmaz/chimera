@@ -24,14 +24,8 @@ const DISPOSITION: Record<FailureCause, Omit<FailureDisposition, "cause" | "evid
   // retryableClasses config) rather than adding a new ErrorClassSchema value, since the two
   // disposition-boolean axes (FailureCause vs ErrorClass) are independent by design here.
   "output-truncated":    { errorClass: "backend-crash", retryable: true,  failoverAccount: false, holdForReset: false, restartInPlace: false },
-  // CONTEXT-OVERFLOW: a resumed native thread that blew the transport's own frame/context ceiling
-  // (e.g. Codex app-server's 16 MiB JSONL frame guard) can never succeed by retrying the SAME
-  // resume id, so failoverAccount/holdForReset/restartInPlace all stay false on purpose — onError's
-  // generic branches for those three all skip this cause; supervisor.onError instead branches on
-  // `d.cause === "context-overflow"` directly and drops resume for a fresh same-account,
-  // same-provider relaunch (see CONTEXT-OVERFLOW-RECOVERY in supervisor.ts). retryable IS true: a
-  // fresh session genuinely can succeed where the poisoned resume couldn't, which is what the
-  // custom branch acts on (nothing generic reads this boolean for this cause).
+  // Native autocompaction thrashing has a separate, bounded fresh-session fallback.
+  // Transport frame limits must never enter it: they do not invalidate history.
   "context-overflow":    { errorClass: "backend-crash", retryable: true,  failoverAccount: false, holdForReset: false, restartInPlace: false },
   "unclassified":        { errorClass: "unknown",       retryable: false, failoverAccount: false, holdForReset: false, restartInPlace: false },
 };
@@ -134,12 +128,7 @@ const CRASH: Signal[] = [
   { name: "turn timed out", re: /turn timed out/i },
 ];
 
-// CONTEXT-OVERFLOW: checked BEFORE CRASH — codex-rpc.ts's own "Codex app-server exited (...)"
-// wrapper (see its `exit` handler) can end up concatenating this phrase into a message that also
-// matches CRASH's generic "exited with code", and only the frame-size cause tells the supervisor
-// to drop `resume` rather than restart in place against the same poisoned thread.
 const CONTEXT_OVERFLOW: Signal[] = [
-  { name: "JSONL frame exceeded", re: /JSONL frame exceeded \d+ MiB/i },
   { name: "autocompact thrashing", re: /Autocompact is thrashing\b/i },
 ];
 
@@ -206,6 +195,9 @@ export function classifyFailure(message: string, errData?: Record<string, unknow
   // matches if a transport ever wraps the truncation message in crash-sounding text.
   for (const s of TRUNCATION) if (s.re.test(message)) return dispositionFor("output-truncated", s.name, now);
   for (const s of BAD_REQUEST) if (s.re.test(message)) return dispositionFor("bad-request", s.name, now);
+  // A failed transport can reconnect to the same thread (with history excluded
+  // from the resume response). The crash-loop cap bounds repeated oversized frames.
+  if (/JSONL frame exceeded \d+ MiB/i.test(message)) return dispositionFor("provider-stream", "JSONL frame exceeded", now);
   for (const s of CONTEXT_OVERFLOW) if (s.re.test(message)) return dispositionFor("context-overflow", s.name, now);
   for (const s of CRASH) if (s.re.test(message)) return dispositionFor("transient-network", s.name, now);
   return dispositionFor("unclassified", "no pattern matched", now);

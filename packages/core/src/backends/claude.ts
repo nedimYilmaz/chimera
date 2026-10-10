@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn as spawnChildProcess } from "node:child_process";
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import type { SpawnOptions as ClaudeCliSpawnOptions, SpawnedProcess as ClaudeCliSpawnedProcess } from "@anthropic-ai/claude-agent-sdk";
+import type { PermissionMode, SpawnOptions as ClaudeCliSpawnOptions, SpawnedProcess as ClaudeCliSpawnedProcess } from "@anthropic-ai/claude-agent-sdk";
 import type {
   AgentBackend, AgentHandle, BackendCapabilities, ContentBlock, DialogDecider, EventSink, Image, PermissionDecider,
   RemoteControlHandleResult, ResolvedAgentSpec,
@@ -127,8 +127,10 @@ function userMessage(text: string, images?: Image[], content?: ContentBlock[], p
   return { type: "user" as const, message: { role: "user" as const, content: blocks }, parent_tool_use_id: null };
 }
 
-function mapPermission(profile: ResolvedAgentSpec["permissionProfile"]): "default" | "acceptEdits" | "bypassPermissions" {
-  return profile === "full" ? "bypassPermissions" : profile === "acceptEdits" ? "acceptEdits" : "default";
+function mapPermission(profile: ResolvedAgentSpec["permissionProfile"]): "default" | "auto" {
+  // Full is Chimera's policy, not consent to disable Claude's classifier. Read-only
+  // keeps its prompting native mode and is still enforced by Chimera's tool policy.
+  return profile === "readOnly" ? "default" : "auto";
 }
 
 // CAN_USE_TOOL_SHADOWED / toolPolicy-shadow FIX: the single tool-gate decision, shared
@@ -494,25 +496,42 @@ export class ClaudeAgentBackend implements AgentBackend {
       return { behavior: "deny", message: typeof decision === "string" ? decision : "denied by chimera permission policy" };
     };
 
-    const permissionMode = mapPermission(spec.permissionProfile);
-    // Split by mode. Default/acceptEdits consult canUseTool NATIVELY, so keep it wired there
-    // (adding a hook would risk double-gating). bypassPermissions SHADOWS canUseTool, so on
-    // that path DROP canUseTool entirely (kills the CLAUDE_SDK_CAN_USE_TOOL_SHADOWED warning)
-    // and gate via a PreToolUse hook — the SDK's own documented remedy — which fires and denies
-    // in bypass. allowDangerouslySkipPermissions:true is REQUIRED by the SDK for bypass mode.
+    const explicitPermissionMode = spec.providerOptions.permissionMode;
+    const executionPermissionMode = (profile: ResolvedAgentSpec["permissionProfile"]): PermissionMode =>
+      typeof explicitPermissionMode === "string" && explicitPermissionMode !== "plan"
+        ? explicitPermissionMode as PermissionMode : mapPermission(profile);
+    const permissionMode = spec.executionMode === "auto" ? "auto" : executionPermissionMode(spec.permissionProfile);
+    let activePermissionMode: string = spec.executionMode === "plan" ? "plan" : permissionMode;
+    // Explicit bypass shadows canUseTool and requires the skip-permissions opt-in.
+    // Auto uses a deny-only hook so native classifier approval cannot skip Chimera's
+    // policy and Chimera approval cannot skip the classifier.
     const permissionWiring: Record<string, unknown> = permissionMode === "bypassPermissions"
       ? {
           allowDangerouslySkipPermissions: true,
           hooks: {
             PreToolUse: [{
               hooks: [
-                async (input: { tool_name: string; tool_input: unknown; tool_use_id?: string }) =>
-                  adaptHookDecision(await decideToolUse(input.tool_name, input.tool_input, input.tool_use_id)),
+                async (input: { tool_name: string; tool_input: unknown; tool_use_id?: string }) => {
+                  const decision = await decideToolUse(input.tool_name, input.tool_input, input.tool_use_id);
+                  return decision.behavior === "deny" || activePermissionMode === "bypassPermissions" || input.tool_name === "AskUserQuestion"
+                    ? adaptHookDecision(decision) : {};
+                },
               ],
             }],
           },
         }
       : {
+          // Auto can approve tools without canUseTool. Keep Chimera's denials in a
+          // hook, but NEVER turn its allow into a native allow: the classifier must
+          // still evaluate it. Explicit bypass retains its separate wiring above.
+          // Install for every non-bypass launch: a read-only/plan session can
+          // later enter auto through the supported live mode control.
+          hooks: { PreToolUse: [{ hooks: [async (input: { tool_name: string; tool_input: unknown; tool_use_id?: string }) => {
+              // Questions must be completed once via canUseTool's updatedInput channel.
+              if (input.tool_name === "AskUserQuestion") return {};
+              const decision = await decideToolUse(input.tool_name, input.tool_input, input.tool_use_id);
+              return decision.behavior === "deny" ? adaptHookDecision(decision) : {};
+          }] }] },
           // Use the SDK-provided toolUseID as the permission requestId when present.
           canUseTool: async (toolName: string, toolInput: unknown, opts?: { toolUseID?: string }) =>
             decideToolUse(toolName, toolInput, opts?.toolUseID),
@@ -547,7 +566,7 @@ export class ClaudeAgentBackend implements AgentBackend {
       // the nominal spec.maxTurns is instead tracked chimera-side, below.
       maxTurns: spec.turnLimitPolicy === "soft" ? SOFT_TURN_CAP : spec.maxTurns,
       ...(spec.resume ? { resume: spec.resume } : {}),   // Task RS1: forward a non-null resume sessionId to the SDK
-      permissionMode,
+      permissionMode: spec.executionMode === "plan" ? "plan" : permissionMode,
       // CAN_USE_TOOL_SHADOWED / toolPolicy-shadow FIX: canUseTool (non-bypass) OR the
       // PreToolUse hook + allowDangerouslySkipPermissions (bypass). See permissionWiring above.
       ...permissionWiring,
@@ -699,6 +718,8 @@ export class ClaudeAgentBackend implements AgentBackend {
       );
     }
 
+    // The explicit mode is a first-class choice, not a providerOptions escape hatch.
+    if (spec.executionMode) options.permissionMode = spec.executionMode === "plan" ? "plan" : permissionMode;
     const stream = q({ prompt: input as never, options: options as never });
     let killed = false;
     let costUsd = 0;
@@ -787,6 +808,11 @@ export class ClaudeAgentBackend implements AgentBackend {
           if (killed) break;
           turnCtl.heartbeat();
           const msg = raw as { type: string; subtype?: string; [k: string]: unknown };
+          if (msg.type === "system" && (msg.subtype === "init" || msg.subtype === "status")
+            && ["plan", "default", "acceptEdits", "bypassPermissions", "dontAsk", "auto"].includes(String(msg["permissionMode"]))) {
+            activePermissionMode = String(msg["permissionMode"]);
+            sink({ kind: "status", data: { executionMode: activePermissionMode === "plan" ? "plan" : activePermissionMode === "auto" ? "auto" : "execute", nativePermissionMode: msg["permissionMode"] } });
+          }
           if (msg.type === "system" && msg.subtype === "init") {
             if (typeof msg["model"] === "string") resolvedModel = msg["model"];   // R2: pricing-table fallback chain
             // native-CLI-parity Phase 3 (Task SC1): additive — surface the SDK's slash-command
@@ -1266,6 +1292,13 @@ export class ClaudeAgentBackend implements AgentBackend {
       send: async (text: string, images?: Image[], content?: ContentBlock[], delivery?: AgentDelivery) => {
         input.push(userMessage(text, images, delivery ? deliveryContent(text, images, content, delivery) : content));
         armTurn();   // R2-TURN-LIFECYCLE: a fresh prompt is now in flight — (re)arm the watchdog
+      },
+      setExecutionMode: async (mode, profile) => {
+        if (killed) throw new Error("Claude session is no longer running");
+        if (typeof stream.setPermissionMode !== "function") throw new Error("This Claude SDK cannot change planning mode live");
+        const nativeMode = mode === "execute" ? executionPermissionMode(profile) : mode;
+        await stream.setPermissionMode(nativeMode);
+        activePermissionMode = nativeMode;
       },
       validateSlash: async (text: string) => {
         const name = /^\/(\S+)/.exec(text.trim())?.[1];

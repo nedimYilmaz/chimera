@@ -976,6 +976,8 @@ export type SpawnInput = {
   // SpawnCard "auto" chip) defers to the spawn's resolved project's own loadProjectSettings
   // toggle, or the picked role's own value — see AgentSpecSchema's own comment, index.ts.
   loadSettings?: boolean;
+  executionMode?: "plan" | "execute" | "auto";
+  strictMcpConfig?: boolean;
   // CROSS-PROVIDER-MCP-STORE: the spawn form's own control for AgentSpec.orchestration.allow —
   // previously reachable ONLY via agent_spawn's raw `orchestrationAllow` MCP param or a role
   // template, never from either UI's spawn form (SpawnCard.tsx had zero references to
@@ -1126,8 +1128,8 @@ export class AgentCommands {
   }
 
   /** Direct send to one agent: hold-while-busy (outbox) or agent.send + echo.
-   * Self-heals an unknown MAIN agent by falling back to a fresh lazy spawn
-   * (the TUI's isUnknownAgent branch).
+   * An explicit target that no longer exists fails visibly; its message must
+   * never be redirected to a different conversation.
    * FORCE-SEND-MIDTURN: `force` (opt+enter) skips the busy-hold and delivers
    * NOW via `agent.send` with explicit force intent. App-server steers the
    * running turn; exec interrupts and resumes the saved session with queued input.
@@ -1173,14 +1175,8 @@ export class AgentCommands {
       try {
         await this.rpc("agent.send", { agentId, text: trimmed, from: "app", messageId, ...(force ? { force: true } : {}), ...(imgs ? { images: imgs } : {}), ...(blocks ? { content: blocks } : {}), ...(slash ? { slash: true } : {}) });
       } catch (err) {
-        if (slash || !isUnknownAgent(err)) throw err;
-        // Dead conductor self-heal: drop the stale id and respawn fresh with
-        // this same message (resuming its session when we captured one).
-        const sessionId = this.store.getState().agents[agentId]?.sessionId;
-        if (agentId === this.store.getState().mainConductorId) {
-          this.store.dispatch({ type: "mainConductorId", agentId: null });
-        }
-        await this.sendToMain(trimmed, images, { resumeSessionId: sessionId, force }, content);
+        if (isUnknownAgent(err)) this.store.dispatch({ type: "agentsRemoved", agentIds: [agentId] });
+        throw err;
       }
     });
   }
@@ -1549,6 +1545,8 @@ export class AgentCommands {
         ...(input.deliverTo ? { deliverTo: input.deliverTo } : {}),
         ...(input.maxBudgetUsd != null ? { maxBudgetUsd: input.maxBudgetUsd } : {}),
         ...(input.loadSettings !== undefined ? { loadSettings: input.loadSettings } : {}),
+        ...(input.executionMode ? { executionMode: input.executionMode } : {}),
+        ...(input.strictMcpConfig !== undefined ? { strictMcpConfig: input.strictMcpConfig } : {}),
         ...(input.orchestration !== undefined ? { orchestration: { allow: input.orchestration } } : {}),
         // AGENT-GROUPS Phase 1: a spawn triggered while a group box is focused silently
         // inherits it — no mandatory picker on the spawn form (that would defeat the
@@ -1584,6 +1582,10 @@ export class AgentCommands {
         compactionThreshold: 500_000,
         maxTurns: 120,
         orchestration: { allow: true },
+        // Interactive sessions need the operator's native plugins alongside our
+        // injected Chimera server; settings alone would still be masked by lean MCP mode.
+        loadSettings: true,
+        strictMcpConfig: false,
         instructions: DEFAULT_SESSION_INSTRUCTIONS,
         on: { permissionRequest: bypass ? "auto" : "tui" },
         ...(bypass ? { permissionProfile: "full", acknowledgeCodexFullAccessRisk: true } : {}),
@@ -1754,8 +1756,9 @@ export class AgentCommands {
       await this.rpc("agent.kill", { agentId });
       // Reconcile from the daemon after kill, even if the event stream is delayed.
       // Keep history; the active-list filter hides killed records.
+      const sinceSeq = this.store.getState().lastSeq;
       const records = await this.rpc<unknown[]>("agent.list", { lite: true });
-      if (Array.isArray(records)) this.store.dispatch({ type: "agentRecords", records: records as never });
+      if (Array.isArray(records)) this.store.dispatch({ type: "agentRecords", records: records as never, sinceSeq });
       if (this.store.getState().selectedAgentId === agentId) this.store.dispatch({ type: "selectAgent", agentId: null });
       return;
     }
@@ -1771,8 +1774,9 @@ export class AgentCommands {
       }
       throw err;
     }
+    const sinceSeq = this.store.getState().lastSeq;
     const records = await this.rpc<unknown[]>("agent.list", { lite: true });
-    this.store.dispatch({ type: "agentRecords", records: records as never });
+    this.store.dispatch({ type: "agentRecords", records: records as never, sinceSeq });
   }
 
   /** Ad-hoc sessions design §6 "close all sessions" — leaves project conductors untouched
@@ -1798,8 +1802,9 @@ export class AgentCommands {
         }
         throw err;
       }
+      const sinceSeq = this.store.getState().lastSeq;
       const records = await this.rpc<unknown[]>("agent.list", { lite: true });
-      this.store.dispatch({ type: "agentRecords", records: records as never });
+      this.store.dispatch({ type: "agentRecords", records: records as never, sinceSeq });
     });
   }
 
@@ -1976,8 +1981,9 @@ export class AgentCommands {
   /** Shared by the hold pair: re-read the roster so the held/released state lands immediately
    * rather than at the next poll. */
   private async refreshAgents(): Promise<void> {
+    const sinceSeq = this.store.getState().lastSeq;
     const records = await this.rpc<unknown[]>("agent.list", { lite: true });
-    this.store.dispatch({ type: "agentRecords", records: records as never });
+    this.store.dispatch({ type: "agentRecords", records: records as never, sinceSeq });
   }
 
   /** mod+p (A3-5, FC-1 port): flip the NEXT-spawn ◇/◆ flag AND live-apply the

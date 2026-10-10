@@ -61,6 +61,44 @@ const records = [
 ];
 
 describe("installHistoryBackfill — TRANSCRIPT-TAIL-FIRST", () => {
+  it("shrinks oversized pages at the same cursor and loads every older message without false exhaustion", async () => {
+    const rows = Array.from({ length: 650 }, (_, i) => historyEvent("a1", i + 1, `turn ${i + 1}`));
+    const calls: Array<{ limit: number; toSeq?: number }> = [];
+    const request = async <T = unknown>(_method: string, params?: unknown): Promise<T> => {
+      const p = params as { limit: number; toSeq?: number };
+      calls.push(p);
+      if (p.limit > 125) throw { code: "response-too-large", message: "Response exceeds 32 MiB" };
+      return rows.filter(e => p.toSeq === undefined || e.seq <= p.toSeq).slice(-p.limit) as T;
+    };
+    const store = createStore({ request, subscribe: () => Promise.resolve(() => {}) });
+    installHistoryBackfill(store, request);
+    store.dispatch({ type: "agentRecords", records });
+    await flush();
+    expect(calls.map(p => p.limit)).toEqual([500, 250, 125]);
+    expect(store.getState().agents.a1).toMatchObject({ historyLoaded: true, historyMinSeq: 526, historyOlderExhausted: false });
+    store.dispatch({ type: "transcriptAtBottom", agentId: "a1", atBottom: false });
+    await requestOlderHistoryPage(store, "a1", request);
+    expect(calls.slice(3).map(p => [p.limit, p.toSeq])).toEqual([[500, 525], [250, 525], [125, 525]]);
+    expect(store.getState().agents.a1!.historyOlderExhausted).toBe(false);
+    for (let i = 0; i < 4; i++) await requestOlderHistoryPage(store, "a1", request);
+    expect(store.getState().agents.a1!.historyOlderExhausted).toBe(true);
+    expect(store.getState().agents.a1!.transcript.map(row => "text" in row ? row.text : "")).toEqual(rows.map(e => e.data.text));
+  });
+
+  it("surfaces a single oversized event without an infinite retry or marking history loaded", async () => {
+    const limits: number[] = [];
+    const request = async <T = unknown>(_method: string, params?: unknown): Promise<T> => {
+      limits.push((params as { limit: number }).limit);
+      throw { code: "response-too-large", message: "Response exceeds 32 MiB" };
+    };
+    const store = createStore({ request, subscribe: () => Promise.resolve(() => {}) });
+    installHistoryBackfill(store, request);
+    store.dispatch({ type: "agentRecords", records });
+    await flush();
+    expect(limits).toEqual([500, 250, 125, 62, 31, 15, 7, 3, 1]);
+    expect(store.getState().agents.a1).toMatchObject({ historyLoaded: false, historyLoadState: "failed" });
+  });
+
   it("fires the NEWEST page first (no fromSeq/toSeq) when selection lands on an empty done agent", async () => {
     const { store, replays } = harness({ a1: [historyEvent("a1", 1, "old turn")] });
     store.dispatch({ type: "agentRecords", records }); // reducer auto-selects a1

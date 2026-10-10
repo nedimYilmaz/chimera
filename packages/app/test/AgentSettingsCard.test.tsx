@@ -32,7 +32,7 @@ vi.mock("../src/rpc/bridge", () => ({
 }));
 
 import { rpcCall as rpcCallRaw } from "../src/rpc/bridge";
-import { AgentSettingsCard } from "../src/components/AgentSettingsCard";
+import { AgentSettingsCard, settingsErrorMessage } from "../src/components/AgentSettingsCard";
 import { appStore } from "../src/state/store";
 
 const rpcCall = rpcCallRaw as unknown as ReturnType<typeof vi.fn>;
@@ -62,6 +62,114 @@ const fieldNames = (): string[] =>
   mounted!.root.findAll((n) => n.props["data-settings-field"] !== undefined).map((n) => String(n.props["data-settings-field"]));
 
 describe("the settings card's structure", () => {
+  it("requires a fresh acknowledgment when an existing Codex agent is promoted to full", async () => {
+    withSpec({ ...DEFAULT_SPEC, permissionProfile: "acceptEdits", acknowledgeCodexFullAccessRisk: false });
+    await mount("codex");
+    const profile = () => mounted!.root.findByProps({ "data-settings-field": "permissionProfile" });
+    const apply = () => mounted!.root.findByProps({ "data-settings-apply": true });
+    await act(async () => profile().props.onChange({ target: { value: "full" } }));
+    expect(apply().props.disabled).toBe(true);
+    await act(async () => apply().props.onClick());
+    expect(rpcCall.mock.calls.filter(([method]) => method === "agent.reconfigure")).toHaveLength(0);
+    await act(async () => mounted!.root.findByProps({ "data-settings-full-risk": true }).props.onChange({ target: { checked: true } }));
+    expect(apply().props.disabled).toBe(false);
+    await act(async () => profile().props.onChange({ target: { value: "readOnly" } }));
+    await act(async () => profile().props.onChange({ target: { value: "full" } }));
+    expect(apply().props.disabled).toBe(true);
+    await act(async () => mounted!.root.findByProps({ "data-settings-full-risk": true }).props.onChange({ target: { checked: true } }));
+    await act(async () => apply().props.onClick());
+    expect(rpcCall).toHaveBeenCalledWith("agent.reconfigure", { agentId: "a1", patch: { acknowledgeCodexFullAccessRisk: true }, live: { permissionProfile: "full" } });
+  });
+
+  it("reuses an existing Codex grant and reads the authoritative permission profile", async () => {
+    withSpec({ ...DEFAULT_SPEC, permissionProfile: "acceptEdits", acknowledgeCodexFullAccessRisk: true });
+    await mount("codex");
+    const profile = mounted!.root.findByProps({ "data-settings-field": "permissionProfile" });
+    expect(profile.props.value).toBe("acceptEdits");
+    await act(async () => profile.props.onChange({ target: { value: "full" } }));
+    expect(mounted!.root.findAllByProps({ "data-settings-full-risk": true })).toHaveLength(0);
+    await act(async () => mounted!.root.findByProps({ "data-settings-apply": true }).props.onClick());
+    expect(rpcCall).toHaveBeenCalledWith("agent.reconfigure", { agentId: "a1", live: { permissionProfile: "full" } });
+  });
+
+  it.each([
+    [{ strictMcpConfig: true }, "off", "on", { strictMcpConfig: false, loadSettings: true }],
+    [{ strictMcpConfig: false, loadSettings: true }, "on", "off", { strictMcpConfig: true }],
+    [{}, "", "on", { strictMcpConfig: false, loadSettings: true }],
+    [{ strictMcpConfig: false, loadSettings: true, providerOptions: { strictMcpConfig: true } }, "off", "on", { strictMcpConfig: false, loadSettings: true }],
+  ])("reads native MCP policy and sends only the requested change (%j)", async (nativeSpec, before, after, expected) => {
+    withSpec({ ...DEFAULT_SPEC, ...nativeSpec });
+    await mount();
+    const control = mounted!.root.findByProps({ "data-settings-field": "nativeMcps" });
+    expect(control.props.value).toBe(before);
+    await act(async () => control.props.onChange({ target: { value: after } }));
+    await act(async () => mounted!.root.findByProps({ "data-settings-apply": true }).props.onClick());
+    expect(rpcCall).toHaveBeenCalledWith("agent.reconfigure", { agentId: "a1", patch: expected });
+  });
+
+  it("changes native planning mode using only the live patch", async () => {
+    rpcCall.mockImplementation(async (method: string) => method === "agent.status"
+      ? { spec: { ...DEFAULT_SPEC, executionMode: "execute" }, executionMode: "plan" } : { applied: ["executionMode"] });
+    await mount();
+    const control = mounted!.root.findByProps({ "data-settings-field": "executionMode" });
+    expect(control.props.value).toBe("plan");
+    await act(async () => control.props.onChange({ target: { value: "execute" } }));
+    await act(async () => mounted!.root.findByProps({ "data-settings-apply": true }).props.onClick());
+    expect(rpcCall).toHaveBeenCalledWith("agent.reconfigure", { agentId: "a1", live: { executionMode: "execute" } });
+  });
+  it("refuses an old daemon success response that silently dropped the mode field", async () => {
+    rpcCall.mockImplementation(async (method: string) => method === "agent.status" ? { spec: DEFAULT_SPEC } : { ok: true, applied: [] });
+    await mount();
+    await act(async () => mounted!.root.findByProps({ "data-settings-field": "executionMode" }).props.onChange({ target: { value: "execute" } }));
+    await act(async () => mounted!.root.findByProps({ "data-settings-apply": true }).props.onClick());
+    expect(JSON.stringify(mounted!.toJSON())).toContain("did not acknowledge execution mode");
+  });
+  it("keeps a refused mode selection visible and never treats a blank unknown mode as execute", async () => {
+    rpcCall.mockImplementation(async (method: string) => {
+      if (method === "agent.reconfigure") throw new Error("Native mode refused");
+      return method === "agent.status" ? { spec: DEFAULT_SPEC } : {};
+    });
+    await mount();
+    const control = mounted!.root.findByProps({ "data-settings-field": "executionMode" });
+    expect(control.props.value).toBe("");
+    await act(async () => control.props.onChange({ target: { value: "execute" } }));
+    await act(async () => mounted!.root.findByProps({ "data-settings-apply": true }).props.onClick());
+    expect(JSON.stringify(mounted!.toJSON())).toContain("Native mode refused");
+    expect(mounted!.root.findByProps({ "data-settings-field": "executionMode" }).props.value).toBe("execute");
+  });
+
+  it("keeps the native MCP selection and error visible when reconfiguration fails", async () => {
+    rpcCall.mockImplementation(async (method: string) => {
+      if (method === "agent.reconfigure") throw new Error("synthetic reconfigure refusal");
+      return method === "agent.status" ? { spec: DEFAULT_SPEC } : {};
+    });
+    await mount();
+    await act(async () => mounted!.root.findByProps({ "data-settings-field": "nativeMcps" }).props.onChange({ target: { value: "on" } }));
+    await act(async () => mounted!.root.findByProps({ "data-settings-apply": true }).props.onClick());
+    expect(JSON.stringify(mounted!.toJSON())).toContain("synthetic reconfigure refusal");
+    expect(mounted!.root.findByProps({ "data-settings-field": "nativeMcps" }).props.value).toBe("on");
+  });
+
+  it("does not advertise Claude native MCP switches on Codex", async () => {
+    await mount("codex");
+    expect(fieldNames()).not.toContain("nativeMcps");
+    expect(fieldNames()).not.toContain("executionMode");
+  });
+  it("does not advertise SDK native MCP switches for terminal sessions", async () => {
+    withSpec({ ...DEFAULT_SPEC, runtime: "terminal" });
+    await mount();
+    expect(fieldNames()).not.toContain("nativeMcps");
+    expect(fieldNames()).not.toContain("executionMode");
+  });
+  it("reverting a native MCP edit does not restart the agent", async () => {
+    withSpec({ ...DEFAULT_SPEC, strictMcpConfig: false, loadSettings: true });
+    await mount();
+    const control = mounted!.root.findByProps({ "data-settings-field": "nativeMcps" });
+    await act(async () => control.props.onChange({ target: { value: "off" } }));
+    await act(async () => control.props.onChange({ target: { value: "on" } }));
+    await act(async () => mounted!.root.findByProps({ "data-settings-apply": true }).props.onClick());
+    expect(rpcCall.mock.calls.some(([method]) => method === "agent.reconfigure")).toBe(false);
+  });
   it("shows realtime only for Codex and applies on/off to that agent without a general reconfigure", async () => {
     const spec = { ...DEFAULT_SPEC, model: "gpt-6-astra", providerOptions: { codexRealtime: false } };
     rpcCall.mockImplementation(async (method: string, p: { enabled?: boolean }) => method === "agent.status" ? { spec } : method === "voice.native.configure" ? { enabled: p.enabled } : {});
@@ -118,8 +226,8 @@ describe("the settings card's structure", () => {
     await mount();
     expect(fieldNames()).toEqual([
       "model", "effort", "account", "maxTurns", "turnLimitPolicy",
-      "maxBudgetUsd", "autonomy", "compactionThreshold", "cwd", "instructions",
-      "displayLabel", "permissionProfile", "permissionRequest",
+      "maxBudgetUsd", "autonomy", "compactionThreshold", "cwd", "instructions", "nativeMcps",
+      "displayLabel", "executionMode", "permissionProfile", "permissionRequest",
     ]);
   });
 
@@ -187,5 +295,31 @@ describe("the settings card's structure", () => {
     const params = call[1] as { patch?: unknown; live?: Record<string, unknown> };
     expect(params.patch).toBeUndefined();
     expect(params.live).toEqual({ displayLabel: "renamed" });
+  });
+});
+
+
+describe("settings RPC errors", () => {
+  it("explains a blocked full-mode exit without hiding the native refusal", async () => {
+    withSpec({ ...DEFAULT_SPEC, executionMode: "plan", permissionProfile: "full" });
+    await mount();
+    rpcCall.mockRejectedValueOnce({ code: "unknown", message: "Cannot set permission mode to bypassPermissions because it is disabled by settings or configuration" });
+    await act(async () => mounted!.root.findByProps({ "data-settings-field": "executionMode" }).props.onChange({ target: { value: "execute" } }));
+    await act(async () => mounted!.root.findByProps({ "data-settings-apply": true }).props.onClick());
+    const error = mounted!.root.findByProps({ "data-settings-error": true });
+    expect(error.props.role).toBe("alert");
+    expect(error.children.join("")).toContain("disabled by settings or configuration");
+    expect(error.children.join("")).toContain("policy owner");
+    expect(error.children.join("")).not.toContain("[object Object]");
+    expect(mounted!.root.findByProps({ "data-settings-field": "executionMode" }).props.value).toBe("execute");
+    const saves = rpcCall.mock.calls.filter(([m]) => m === "agent.reconfigure");
+    expect(saves).toHaveLength(1);
+    expect(saves[0][1]).toEqual({ agentId: "a1", live: { executionMode: "execute" } });
+  });
+  it("preserves Error/string messages and does not dump arbitrary RPC objects", () => {
+    expect(settingsErrorMessage(new Error("reason"))).toBe("reason");
+    expect(settingsErrorMessage("reason")).toBe("reason");
+    expect(settingsErrorMessage({ data: "private" })).not.toContain("private");
+    expect(settingsErrorMessage(null)).toContain("unrecognized error");
   });
 });

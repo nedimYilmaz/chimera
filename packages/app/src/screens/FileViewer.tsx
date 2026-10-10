@@ -9,9 +9,36 @@ import { classifyFileView, truncationBannerText } from "../state/selectors.filev
 import { formatArtifactSize } from "../state/selectors.artifacts";
 import { HIGHLIGHT_LINE_CLASS } from "./fileHighlightClass";
 import styles from "./FileViewer.module.css";
+import { openLocalFile, prepareLocalMedia } from "../rpc/bridge";
+import { HtmlPreview } from "./HtmlPreview";
 
 function baseName(path: string): string {
-  return path.split("/").pop() || path;
+  return path.split(/[\\/]/).pop() || path;
+}
+
+function MediaPreview({ path, media }: { path: string; media: "video" | "audio" }) {
+  const playerRef = useRef<HTMLVideoElement & HTMLAudioElement>(null);
+  const [source, setSource] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    void prepareLocalMedia(path).then(url => { if (!cancelled) setSource(url); })
+      .catch(() => { if (!cancelled) setFailed(true); });
+    return () => { cancelled = true; };
+  }, [path]);
+  useEffect(() => {
+    const player = playerRef.current;
+    return () => { player?.pause(); player?.removeAttribute("src"); player?.load(); };
+  }, [source]);
+  if (failed) return <div className={styles.placeholder} role="status" data-media-fallback>
+    This file could not be played here. Use Open in default app or Show in folder above.
+  </div>;
+  if (!source) return <div className={styles.placeholder} role="status">Loading preview…</div>;
+  const Player = media;
+  return <div className={styles.mediaWrap}>
+    <Player ref={playerRef} src={source} controls preload="metadata" playsInline className={styles.media}
+      aria-label={`${media} preview`} onError={() => setFailed(true)} data-file-media />
+  </div>;
 }
 
 // FILE-PATH-LINKS — the no-shiki-available fallback (unmapped extension, or
@@ -92,7 +119,18 @@ export function FileViewer({ selected, onClose, highlightLine, worktree }: { sel
   // Reset per FILE, not per open: flipping to source on one document should not follow you into
   // the next one you click.
   const [showSource, setShowSource] = useState(false);
-  useEffect(() => { setShowSource(false); }, [selected.path]);
+  const [openError, setOpenError] = useState<string | null>(null);
+  const [opening, setOpening] = useState(false);
+  const localPath = selected.status === "ok" ? selected.result.absolutePath : undefined;
+  const forceSource = highlightLine != null || (view.kind === "text" && view.lang === "html" && view.truncated);
+  useEffect(() => { setShowSource(false); setOpenError(null); }, [selected.path]);
+  const open = async (reveal: boolean) => {
+    if (!localPath || opening) return;
+    setOpening(true); setOpenError(null);
+    try { await openLocalFile(localPath, reveal); }
+    catch { setOpenError(reveal ? "Could not show this file. It may have moved or become unavailable." : "Could not open this file. Use Show in folder to choose an application."); }
+    finally { setOpening(false); }
+  };
 
   // Portal to <body> (ImageChip.tsx:39 precedent): a fixed overlay mounted
   // inside the project detail pane would be clipped to whatever
@@ -110,21 +148,26 @@ export function FileViewer({ selected, onClose, highlightLine, worktree }: { sel
           <span className={styles.name}>{name}</span>
           <span className={styles.path}>{selected.path}</span>
           <span className={styles.spacer} />
+          {localPath ? <>
+            <button type="button" className={styles.rawToggle} disabled={opening} onClick={() => void open(false)} data-file-open>Open in default app</button>
+            <button type="button" className={styles.rawToggle} disabled={opening} onClick={() => void open(true)} data-file-reveal>Show in folder</button>
+          </> : null}
           {/* MD-FILE-VIEWER: only offered for a file that HAS two views. Shown for a line-anchored
               open too, disabled, so the reason the document is not rendered is visible rather than
               leaving someone to wonder why this file looks different from the last one. */}
-          {isMarkdown(view.kind === "text" ? view.lang : null) ? (
+          {view.kind === "text" && (isMarkdown(view.lang) || view.lang === "html") ? (
             <button
               type="button"
               className={styles.rawToggle}
               onClick={() => setShowSource((v) => !v)}
-              disabled={highlightLine !== undefined}
-              title={highlightLine !== undefined
+              disabled={forceSource}
+              title={view.kind === "text" && view.lang === "html" && view.truncated ? "incomplete HTML is shown as source"
+                : highlightLine != null
                 ? "opened at a line — the source is shown so the line can be pointed at"
                 : "toggle rendered / source"}
               data-file-viewer-raw-toggle
             >
-              {showSource || highlightLine !== undefined ? "rendered" : "source"}
+              {showSource || forceSource ? (view.lang === "html" ? "preview" : "rendered") : "source"}
             </button>
           ) : null}
           <button type="button" className={styles.close} onClick={onClose} title="close (esc)">
@@ -132,6 +175,7 @@ export function FileViewer({ selected, onClose, highlightLine, worktree }: { sel
           </button>
         </div>
         <div className={styles.body}>
+          {openError ? <div className={styles.banner} role="alert">{openError}</div> : null}
           {worktree && <WorkingTreeDisclosure target={worktree.target} initialPath={worktree.path} />}
           {view.kind === "error" ? (
             <div className={styles.placeholder}>{view.message}</div>
@@ -139,9 +183,12 @@ export function FileViewer({ selected, onClose, highlightLine, worktree }: { sel
             <div className={styles.imageWrap}>
               <ImageChip image={{ mediaType: view.mediaType, data: view.data }} name={name} />
             </div>
+          ) : view.kind === "media" ? (
+            <MediaPreview key={view.path} path={view.path} media={view.media} />
           ) : view.kind === "binary" ? (
             <div className={styles.placeholder}>
-              {name} · {formatArtifactSize(view.sizeBytes)} · binary file — not shown
+              {name} · {formatArtifactSize(view.sizeBytes)} · No built-in preview for this format.
+              {localPath ? " Use Open in default app or Show in folder above." : " Reopen after updating the daemon to enable opening local files."}
             </div>
           ) : (
             <>
@@ -154,7 +201,9 @@ export function FileViewer({ selected, onClose, highlightLine, worktree }: { sel
                   A `path:line` open forces source: a rendered document has no line 42 to scroll
                   to, so honouring the line and rendering are mutually exclusive — the line wins,
                   since it is the more specific request. */}
-              {isMarkdown(view.lang) && !highlightLine && !showSource ? (
+              {view.lang === "html" && !highlightLine && !showSource && !view.truncated ? (
+                <HtmlPreview key={selected.path} source={view.content} path={localPath} />
+              ) : isMarkdown(view.lang) && !highlightLine && !showSource ? (
                 <div className={styles.mdArea} data-file-viewer-markdown>
                   {/* done: a file on disk is never mid-stream, so every block is closed and formatted
                       immediately — the streaming contract's "raw until it terminates" rule would

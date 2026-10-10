@@ -228,7 +228,7 @@ it("a Codex full-profile request cannot create its own explicit risk grant", asy
 });
 
 
-it.each(["exec", "app-server"] as const)("ordinary resume retains the established %s transport across profile changes", async transport => {
+it.each(["exec", "app-server"] as const)("ordinary resume adopts app-server from unpinned %s across profile changes", async transport => {
   const { sup, codex } = makeMultiProviderSupervisor([], [[{ end: { resultText: "done" } }], [{ end: { resultText: "resumed" } }]]);
   const rec = await sup.spawn({ prompt: "x", cwd: "/tmp", account: "cx-main", isolation: "none", permissionProfile: "readOnly" });
   await sup.waitFor(rec.agentId, 1000);
@@ -236,10 +236,10 @@ it.each(["exec", "app-server"] as const)("ordinary resume retains the establishe
   let resolved: any; const original = codex.spawn.bind(codex);
   codex.spawn = (...args) => { resolved = args[0]; return original(...args); };
   await (sup as any).launch(rec, rec.accountName);
-  expect(resolved.providerOptions.codexTransport).toBe(transport);
+  expect(resolved.providerOptions.codexTransport).toBe("app-server");
   expect(resolved.permissionVersion).toBe(4);
   expect(rec.spec.providerOptions.codexTransport).toBeUndefined();
-  expect((sup as any).transferSources.get(rec).providerOptions.codexTransport).toBe(transport);
+  expect((sup as any).transferSources.get(rec).providerOptions.codexTransport).toBe("app-server");
   expect(rec.permissionApplication).toMatchObject({ version: 4, profileStatus: "pending", nativeApprovals: false });
   expect(rec.permissionApplication?.effectiveProfile).toBeUndefined();
 });
@@ -271,4 +271,25 @@ it.each(["done", "paused"] as const)("%s permission changes invalidate old proce
   expect(rec.permissionApplication?.effectiveProfile).toBeUndefined();
   (sup as any).onEvent(rec, { kind: "status", data: { permissionApplication: { ...rec.permissionApplication, effectiveProfile: "readOnly", profileStatus: "applied", routingStatus: "applied", nativeApprovals: true } } });
   expect(rec.permissionApplication?.effectiveProfile).toBe("readOnly");
+});
+
+it.each([undefined, "exec"] as const)("next resume honors %s transport override while retaining the native conversation", async override => {
+  const idle: FakeStep[] = [{ emit: { kind: "agent_started", data: { sessionId: "saved-codex-session" } } }, { awaitSend: true }];
+  const { sup, codex } = makeMultiProviderSupervisor([], [idle, idle]);
+  const rec = await sup.spawn({ prompt: "original task", cwd: "/tmp", account: "cx-main", isolation: "none", permissionProfile: "full", acknowledgeCodexFullAccessRisk: true, session: true, providerOptions: { ...(override ? { codexTransport: override } : {}), modelReasoningEffort: "high" } });
+  try {
+    await vi.waitFor(() => expect(rec.sessionId).toBe("saved-codex-session"));
+    // Persisted evidence from a pre-default exec launch, before the next resume.
+    rec.permissionApplication = { version: 2, requestedProfile: "full", profileStatus: "unverified", requestedRouting: "auto", routingStatus: "unsupported", transport: "exec", nativeApprovals: false };
+    sup.setPermission(rec.agentId, { permissionProfile: "readOnly" });
+    expect(codex.spawns).toHaveLength(1);
+    expect(rec.permissionApplication?.transport).toBe("exec");
+    await sup.hold(rec.agentId);
+    await sup.release(rec.agentId);
+    expect(codex.spawns).toHaveLength(2);
+    expect(codex.spawns[1]).toMatchObject({ agentId: rec.agentId, accountName: "cx-main", cwd: "/tmp", resume: "saved-codex-session", resumeOnly: true, permissionProfile: "readOnly", providerOptions: { codexTransport: override ?? "app-server", modelReasoningEffort: "high" } });
+    expect(codex.spawns[1]!.providerOptions.codexRequireResume).toBe(override ? undefined : true);
+    expect(rec.spec.providerOptions.codexTransport).toBe(override);
+    expect(rec.permissionApplication?.transport).toBe(override ?? "app-server");
+  } finally { await sup.kill(rec.agentId); }
 });

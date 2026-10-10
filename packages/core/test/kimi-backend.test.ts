@@ -15,9 +15,10 @@ import {
   type KimiFactory, type KimiAcpUpdate, type KimiMapCtx, type KimiTextBlock,
 } from "@chimera/core/backends/kimi";
 
+// Most event/wire fixtures opt out of Claude-specific settings; capability notices are tested separately.
 function kmSpec(over: Record<string, unknown> = {}): ResolvedAgentSpec {
   return {
-    ...AgentSpecSchema.parse({ prompt: "task", cwd: "/tmp/repo", isolation: "none", provider: "kimi", ...over }),
+    ...AgentSpecSchema.parse({ prompt: "task", cwd: "/tmp/repo", isolation: "none", provider: "kimi", inherit: { settingSources: [] }, ...over }),
     agentId: "km-1", accountName: "km-main", resolvedProvider: "kimi",
     env: { CHIMERA_AGENT_ID: "km-1", CHIMERA_DEPTH: "0" },
     depth: 0,
@@ -358,7 +359,7 @@ describe("buildKimiMcpServers — CROSS-PROVIDER-MCP-STORE ACP mcpServers wiring
   });
 
   it("settingSourcesUnsupported reflects a non-empty inherit.settingSources (loadSettings resolved by supervisor.ts before reaching this backend)", () => {
-    const spec = kmSpec({ inherit: { settingSources: ["project", "user"] } });
+    const spec = kmSpec({ inherit: AgentSpecSchema.parse({ prompt: "p", cwd: "/tmp" }).inherit });
     const { notice } = buildKimiMcpServers(spec);
     expect(notice.settingSourcesUnsupported).toBe(true);
   });

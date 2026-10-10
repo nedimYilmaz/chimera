@@ -32,6 +32,7 @@ export function TranscriptHeader({
   model,
   effort,
   account,
+  executionMode,
   permissionProfile,
   permissionRequest,
   permissionAppliedToRunningProcess,
@@ -72,6 +73,7 @@ export function TranscriptHeader({
   // projected onto AgentView from agent.list's spec + the live permissionChanged event. Shown as
   // a header chip so a conductor's "full" access is visible at a glance; changed live via the
   // agent_set_permission command-palette form (commands.system.ts) or mod+p's coupled toggle.
+  executionMode?: "plan" | "execute" | "auto";
   permissionProfile?: string;
   permissionRequest?: string;
   permissionApplication?: PermissionApplication;
@@ -244,6 +246,10 @@ export function TranscriptHeader({
           </button>
         ) : null}
 
+        {executionMode && <button type="button" className={`${styles.chip} ${styles.actionChip}`}
+          data-execution-mode={executionMode} disabled={!chipsInteractive}
+          title="Native Claude execution mode — change in agent settings"
+          onClick={() => onAction("system.agentSettings")}>{executionMode === "plan" ? "plan mode" : executionMode === "auto" ? "auto mode" : "execute mode"}</button>}
         {/* CONDUCTOR-FULL-ACCESS: the live permission chip. Warn-toned when a full-access agent
             runs unattended ("auto" routing), else neutral — a full conductor is intentional, so
             not danger. Hidden until a snapshot/event carries the profile (older daemon renders as

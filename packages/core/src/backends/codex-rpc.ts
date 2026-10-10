@@ -3,9 +3,8 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 export type RpcMessage = { id?: string | number; method?: string; params?: Record<string, unknown>; result?: unknown; error?: { code: number; message: string } };
 export type RpcProcessFactory = (command: string, args: string[], env: Record<string, string>) => ChildProcessWithoutNullStreams;
 
-// CONTEXT-OVERFLOW-OUTBOUND-GUARD: the app-server's own JSONL transport rejects any single frame
-// over this ceiling — shared by both directions so the inbound buffer check (stdout) and the
-// outbound preflight (stdin, added below) can never drift to different limits.
+// Bound client memory per wire frame, not per stdout chunk or native session.
+// A transport limit says nothing about whether the model's context is full.
 const MAX_FRAME_BYTES = 16 * 1024 * 1024;
 
 // Explicit server rejection is safe to recover from; a lost/late response is
@@ -33,15 +32,20 @@ export class CodexRpc {
     this.child.stderr.setEncoding("utf8");
     this.child.stderr.on("data", (chunk: string) => { this.stderr = (this.stderr + chunk).slice(-4000); });
     this.child.stdout.on("data", (chunk: string) => {
+      if (this.closed) return;
       this.buffer += chunk;
-      if (this.buffer.length > MAX_FRAME_BYTES) return this.fail(new Error(`Codex app-server JSONL frame exceeded ${MAX_FRAME_BYTES / (1024 * 1024)} MiB`));
       let end: number;
       while ((end = this.buffer.indexOf("\n")) >= 0) {
+        if (Buffer.byteLength(this.buffer.slice(0, end + 1), "utf8") > MAX_FRAME_BYTES)
+          return this.fail(new Error(`Codex app-server JSONL frame exceeded ${MAX_FRAME_BYTES / (1024 * 1024)} MiB`));
         const line = this.buffer.slice(0, end).trim();
         this.buffer = this.buffer.slice(end + 1);
         if (!line) continue;
         try { this.receive(JSON.parse(line)); } catch { this.fail(new Error("Invalid Codex app-server JSONL message")); }
+        if (this.closed) return;
       }
+      if (Buffer.byteLength(this.buffer, "utf8") > MAX_FRAME_BYTES)
+        this.fail(new Error(`Codex app-server JSONL frame exceeded ${MAX_FRAME_BYTES / (1024 * 1024)} MiB`));
     });
     this.child.on("error", (error) => this.fail(error));
     this.child.stdin.on("error", (error) => this.fail(error));
@@ -69,12 +73,8 @@ export class CodexRpc {
   private send(message: RpcMessage): void {
     if (this.closed) return;
     const line = `${JSON.stringify(message)}\n`;
-    // CONTEXT-OVERFLOW-OUTBOUND-GUARD: the inbound check above (stdout) only ever caught a frame
-    // the app-server sent US. An oversized OUTBOUND write (e.g. a huge injected message/resume
-    // payload on a bloated native thread) had no guard at all — it would just hang or get
-    // silently truncated by the child's stdin, never surfacing as a classifiable failure. Preflight
-    // it the same way, so it fails the same way (classifyFailure's CONTEXT_OVERFLOW signal in
-    // failover.ts matches this exact phrase, letting the supervisor recover into a fresh session).
+    // Reject oversized writes before handing any bytes to the server. Recovery
+    // must retain the native session: starting fresh cannot shrink this payload.
     if (Buffer.byteLength(line, "utf8") > MAX_FRAME_BYTES) {
       this.fail(new Error(`Codex app-server JSONL frame exceeded ${MAX_FRAME_BYTES / (1024 * 1024)} MiB (outbound)`));
       return;
@@ -109,6 +109,7 @@ export class CodexRpc {
   close(reason = new Error("Codex app-server connection closed")): void {
     if (this.closed) return;
     this.closed = true;
+    this.buffer = "";
     for (const entry of this.pending.values()) { clearTimeout(entry.timer); entry.reject(reason); }
     this.pending.clear();
     this.child.stdin.end();

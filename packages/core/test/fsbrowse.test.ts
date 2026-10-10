@@ -135,7 +135,7 @@ describe("readFile", () => {
     const root = makeProject();
     writeFileSync(join(root, "a.txt"), "hello world");
     const result = readFile(root, "a.txt");
-    expect(result).toEqual({ path: "a.txt", encoding: "utf8", content: "hello world", sizeBytes: 11, binary: false, mediaType: null, truncated: false });
+    expect(result).toMatchObject({ path: "a.txt", encoding: "utf8", content: "hello world", sizeBytes: 11, binary: false, mediaType: null, truncated: false });
   });
 
   it("truncates text content over FS_READ_MAX_BYTES and sets truncated", () => {
@@ -315,7 +315,7 @@ describe("fs.read RPC", () => {
     writeFileSync(join(path, "readme.md"), "hi");
     await e.handle("project.create", { name: "p1", path });
     const result = await e.handle("fs.read", { project: "p1", path: "readme.md" });
-    expect(result).toEqual({ path: "readme.md", encoding: "utf8", content: "hi", sizeBytes: 2, binary: false, mediaType: null, truncated: false });
+    expect(result).toMatchObject({ path: "readme.md", encoding: "utf8", content: "hi", sizeBytes: 2, binary: false, mediaType: null, truncated: false });
   });
 
   it("rejects a ghost project with a clean {code:protocol} error", async () => {

@@ -65,7 +65,7 @@ it("the actual app first-send command delivers once on a fresh Codex-only home u
     expect(backend.spawns).toHaveLength(1);
     expect(record.spec.permissionProfile).toBe("full");
     expect(record.spec.acknowledgeCodexFullAccessRisk).toBe(true);
-    expect(codexTransportFor(backend.spawns[0]!)).toBe("exec");
+    expect(codexTransportFor(backend.spawns[0]!)).toBe("app-server");
     expect(buildThreadOptions(backend.spawns[0]!, record.spec.cwd)).toMatchObject({ sandboxMode: "danger-full-access", approvalPolicy: "never" });
     expect(backend.deliveries.map((d) => d.text)).toEqual(["hello"]);
     expect(existsSync(join(home, "config.json"))).toBe(false);

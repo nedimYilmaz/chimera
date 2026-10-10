@@ -98,10 +98,11 @@ describe("reducer: worktree_setup fail reasons (F26.UI)", () => {
     expect(st.agentOrder).toContain("ghost");
   });
 
-  it("an agent.list snapshot that omits the refused agent keeps its row and transcript", () => {
+  it("an agent.list snapshot removes a refused ghost but retains the diagnostic event", () => {
     const st = feed(initialState, [ev("ghost", "worktree_setup", { phase: "fail", exitCode: 1 })]);
     const after = reduce(st, { type: "agentRecords", records: [] });
-    expect(after.agentOrder).toContain("ghost");
-    expect(after.agents["ghost"]!.transcript[0]!.text).toContain("spawn refused");
+    expect(after.agentOrder).not.toContain("ghost");
+    expect(after.agents["ghost"]).toBeUndefined();
+    expect(after.events.some(e => e.agentId === "ghost" && e.kind === "worktree_setup")).toBe(true);
   });
 });

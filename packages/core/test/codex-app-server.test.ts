@@ -1,5 +1,6 @@
+import { CredentialResolver } from "../src/credentials.js";
 import type { BackendEvent } from "../src/backend.js";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { EventLog } from "@chimera/core/events";
@@ -39,6 +40,94 @@ function server(errors: Record<string, string> = {}, deferred = new Set<string>(
 }
 
 describe("Codex app-server", () => {
+  it("resumes a large saved conversation without hydrating its historical turns", async () => {
+    const mock = server({}, new Set(["thread/resume"]));
+    mock.onMessage = m => {
+      if (m.method !== "thread/resume") return;
+      mock.send({ id: m.id, result: { thread: { id: m.params.threadId,
+        turns: m.params.excludeTurns ? [] : [{ output: "x".repeat(17 * 1024 * 1024) }],
+      } } });
+    };
+    const client = new CodexAppServer({ env: {} }, async () => false, undefined, mock.factory);
+    try {
+      const thread = client.resumeThread("saved", { requireResume: true });
+      const { events } = await thread.runStreamed("continue");
+      mock.send({ method: "turn/completed", params: { threadId: "saved", turn: { id: "turn-a", status: "completed" } } });
+      const received = []; for await (const event of events) received.push(event);
+      expect(thread.id).toBe("saved");
+      expect(mock.messages.find(m => m.method === "thread/resume").params).toMatchObject({ threadId: "saved", excludeTurns: true });
+      expect(mock.messages.some(m => m.method === "thread/start")).toBe(false);
+      expect(received.some(e => e.type === "turn.completed")).toBe(true);
+    } finally { client.close(); }
+  });
+  describe.each(["subscription", "OPENAI_API_KEY", "CODEX_API_KEY", "CODEX_ACCESS_TOKEN"] as const)("default transport with %s auth", auth => {
+    it.each(["readOnly", "acceptEdits", "full"] as const)("uses app-server with %s and preserves auth, MCP and subsequent turns", async permissionProfile => {
+      const home = mkdtempSync(join(tmpdir(), "chimera-default-auth-"));
+      const savedAuth = '{"fixture":"existing-subscription-login"}';
+      writeFileSync(join(home, "auth.json"), savedAuth);
+      const secret = "synthetic-account-credential";
+      const resolver = new CredentialResolver(async () => { throw new Error("no credential process"); }, { TEST_CREDENTIAL: secret });
+      const credential = await resolver.resolve(auth === "subscription" ? { type: "subscription", homeDir: home } : { type: "env", var: "TEST_CREDENTIAL", injectAs: auth });
+      const mock = server(); const events: BackendEvent[] = [];
+      let childArgs: string[] = []; let childEnv: Record<string, string> = {};
+      const processFactory: RpcProcessFactory = (command, args, env) => { childArgs = args; childEnv = env; return mock.factory(command, args, env); };
+      const execFactory = vi.fn(() => { throw new Error("SDK exec must not be selected by default"); });
+      const spec = { ...cxSpec({ permissionProfile, acknowledgeCodexFullAccessRisk: permissionProfile === "full", persistent: true, orchestration: { allow: true }, mcpServers: { fixture: { command: "fixture-mcp" } } }),
+        providerOptions: {}, env: { CODEX_HOME: home, OPENAI_API_KEY: "", CODEX_API_KEY: "", CODEX_ACCESS_TOKEN: "", ...(credential ? { [credential.envVar]: credential.value } : {}) } };
+      const handle = new CodexAgentBackend({ appServerProcess: processFactory, codexFactory: execFactory, validateModel: async () => {} }).spawn(spec, e => events.push(e), async () => true);
+      try {
+        await vi.waitFor(() => expect(mock.messages.filter(m => m.method === "turn/start")).toHaveLength(1));
+        expect(childArgs.slice(0, 3)).toEqual(["app-server", "--listen", "stdio://"]);
+        expect(childArgs.join(" ")).not.toContain(secret);
+        expect(childArgs.join(" ")).toContain('"chimera"');
+        expect(childArgs.join(" ")).toContain('"fixture"');
+        expect(childEnv.CODEX_HOME).toBe(home);
+        expect(execFactory).not.toHaveBeenCalled();
+        const methods = mock.messages.map(m => m.method);
+        if (auth === "OPENAI_API_KEY" || auth === "CODEX_API_KEY") {
+          expect(mock.messages.find(m => m.method === "account/login/start").params).toEqual({ type: "apiKey", apiKey: secret });
+          expect(methods.indexOf("account/login/start")).toBeLessThan(methods.indexOf("thread/start"));
+          expect(childArgs).toContain('cli_auth_credentials_store="ephemeral"');
+          expect(childEnv.CODEX_ACCESS_TOKEN).toBeUndefined();
+        } else {
+          expect(methods).not.toContain("account/login/start");
+          expect(childEnv.CODEX_ACCESS_TOKEN).toBe(auth === "CODEX_ACCESS_TOKEN" ? secret : "");
+        }
+        expect(mock.messages.find(m => m.method === "thread/start").params).toMatchObject({ sandbox: permissionProfile === "full" ? "danger-full-access" : permissionProfile === "readOnly" ? "read-only" : "workspace-write", approvalPolicy: permissionProfile === "full" ? "never" : "on-request" });
+        mock.complete();
+        await vi.waitFor(() => expect(events.some(e => e.kind === "turn_complete")).toBe(true));
+        handle.send!("second turn");
+        await vi.waitFor(() => expect(mock.messages.filter(m => m.method === "turn/start")).toHaveLength(2));
+        expect(mock.messages.filter(m => m.method === "thread/start")).toHaveLength(1);
+        expect(mock.messages.filter(m => m.method === "initialize")).toHaveLength(1);
+        expect(readFileSync(join(home, "auth.json"), "utf8")).toBe(savedAuth);
+        expect(JSON.stringify(events)).not.toContain(secret);
+      } finally { await handle.kill(); rmSync(home, { recursive: true, force: true }); }
+    });
+  });
+
+  it("remote transition refuses a mismatched native session acknowledgment", async () => {
+    const mock = server();
+    const client = new CodexAppServer({ env: {} }, async () => false, undefined, mock.factory);
+    try {
+      client.resumeThread("expected-session", { requireResume: true, sandboxMode: "read-only" });
+      await expect(client.remoteControl(true)).rejects.toThrow("different session");
+      expect(mock.messages.some(m => ["thread/start", "turn/start", "remoteControl/enable"].includes(m.method))).toBe(false);
+    } finally { client.close(); }
+  });
+
+  it("remote transition refuses a missing session without fresh start or message replay", async () => {
+    const mock = server({ "thread/resume": "no rollout found for thread id missing" });
+    const handle = new CodexAgentBackend({ appServerProcess: mock.factory, validateModel: async () => {} })
+      .spawn(cxSpec({ persistent: true, resumeOnly: true, resume: "missing", providerOptions: { codexTransport: "app-server", codexRequireResume: true } }), () => {}, async () => false);
+    try {
+      await expect(handle.remoteControl!(true, "same-name")).rejects.toThrow("no rollout found");
+      expect(mock.messages.filter(m => m.method === "thread/resume")).toHaveLength(1);
+      expect(mock.messages.some(m => ["thread/start", "turn/start", "remoteControl/enable"].includes(m.method))).toBe(false);
+      expect(mock.messages.find(m => m.method === "thread/resume").params).not.toHaveProperty("requireResume");
+    } finally { await handle.kill(); }
+  });
+
   it.each(["empty", "commentary", "unfinished"])("native %s turn owns its result state when the handle closes", async kind => {
     const mock = server(); const events: any[] = [];
     const handle = new CodexAgentBackend({ appServerProcess: mock.factory, validateModel: async () => {} })
@@ -329,7 +418,7 @@ describe("Codex app-server", () => {
   it("exposes native compaction and ephemeral remote control on app-server handles", async () => {
     const mock = server(); const events: any[] = [];
     mock.onMessage = m => {
-      if (m.method === "thread/compact/start") mock.send({ id: m.id, result: {} });
+      if (m.method === "thread/compact/start" || m.method === "thread/name/set") mock.send({ id: m.id, result: {} });
       if (m.method === "remoteControl/enable" || m.method === "remoteControl/disable") mock.send({ id: m.id, result: { status: m.method.endsWith("enable") ? "connecting" : "disabled", serverName: "local-test", environmentId: "env-test" } });
     };
     const backend = new CodexAgentBackend({ appServerProcess: mock.factory, validateModel: async () => {} });
@@ -346,7 +435,8 @@ describe("Codex app-server", () => {
       mock.send({ method: "item/completed", params: { threadId: "thread-a", item: { type: "contextCompaction", id: "cmp" } } });
       mock.send({ method: "thread/compacted", params: { threadId: "thread-a" } });
       expect(events.filter(e => e.kind === "compaction").map(e => e.data.phase)).toEqual(["start", "end"]);
-      expect(await handle.remoteControl!(true)).toEqual({ connectionStatus: "connecting", serverName: "local-test", environmentId: "env-test" });
+      expect(await handle.remoteControl!(true, "review-agent")).toEqual({ connectionStatus: "connecting", serverName: "local-test", environmentId: "env-test" });
+      expect(mock.messages.find(m => m.method === "thread/name/set").params).toEqual({ threadId: "thread-a", name: "review-agent" });
       expect(mock.messages.find(m => m.method === "remoteControl/enable").params).toEqual({ ephemeral: true });
       mock.send({ method: "remoteControl/status/changed", params: { status: "connected", serverName: "local-test", environmentId: "env-test" } });
       expect(events).toContainEqual(expect.objectContaining({ kind: "status", data: { remoteControl: { agentId: "cx-1", provider: "codex", enabled: true, connectionStatus: "connected", serverName: "local-test", environmentId: "env-test" } } }));
@@ -890,6 +980,26 @@ it("separates live Codex session windows from dynamic catalog capacity and compa
 
 describe("acknowledged permission transitions", () => {
   const state = (events: any[]) => events.filter(e => e.data.permissionApplication).at(-1)?.data.permissionApplication;
+  it("a newly acknowledged full grant waits for the next native policy acknowledgment", async () => {
+    const mock = server(); const events: any[] = []; const permission = vi.fn(async () => false);
+    const handle = new CodexAgentBackend({ appServerProcess: mock.factory, validateModel: async () => {} }).spawn(cxSpec({ permissionProfile: "acceptEdits", acknowledgeCodexFullAccessRisk: false, persistent: true, providerOptions: { codexTransport: "app-server" } }), e => events.push(e), permission);
+    try {
+      await vi.waitFor(() => expect(state(events)?.profileStatus).toBe("applied"));
+      expect(() => handle.updatePermission!({ version: 1, permissionProfile: "full", permissionRequest: "auto" })).toThrow("risk grant");
+      expect(handle.updatePermission!({ version: 1, permissionProfile: "full", permissionRequest: "auto", acknowledgeCodexFullAccessRisk: true })).toMatchObject({ profileStatus: "pending", effectiveProfile: "acceptEdits", routingStatus: "applied" });
+      mock.send({ id: 901, method: "item/commandExecution/requestApproval", params: { threadId: "thread-a", turnId: "turn-a", command: "old turn" } });
+      await vi.waitFor(() => expect(permission).toHaveBeenCalledTimes(1));
+      await handle.send("next authorized turn"); mock.complete();
+      await vi.waitFor(() => expect(state(events)).toMatchObject({ effectiveProfile: "full", profileStatus: "applied", routingStatus: "bypassed" }));
+      mock.send({ id: 902, method: "item/commandExecution/requestApproval", params: { threadId: "thread-a", turnId: "turn-a", command: "new turn" } });
+      await vi.waitFor(() => expect(mock.messages.some(m => m.id === 902 && m.result)).toBe(true));
+      expect(permission).toHaveBeenCalledTimes(1);
+      expect(mock.messages.filter(m => m.method === "thread/start")).toHaveLength(1);
+      expect(mock.messages.some(m => m.method === "turn/interrupt")).toBe(false);
+      expect(mock.messages.filter(m => m.method === "turn/start")[1].params).toMatchObject({ sandboxPolicy: { type: "dangerFullAccess" }, approvalPolicy: "never" });
+    } finally { await handle.kill(); }
+  });
+
   it.each([["full", "acceptEdits"], ["acceptEdits", "full"], ["full", "readOnly"], ["readOnly", "acceptEdits"]] as const)("%s to %s preserves the current turn then applies once", async (before, after) => {
     const mock = server(); const events: any[] = []; const permission = vi.fn(async () => false);
     const handle = new CodexAgentBackend({ appServerProcess: mock.factory, validateModel: async () => {} }).spawn(cxSpec({ permissionProfile: before, acknowledgeCodexFullAccessRisk: true, persistent: true, providerOptions: { codexTransport: "app-server" } }), e => events.push(e), permission);

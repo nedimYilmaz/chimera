@@ -100,7 +100,8 @@ export interface AgentHandle {
   readonly processPid?: number | null;
   command?(text: string): Promise<string>;
   isTurnActive?(): boolean;
-  updatePermission?(request: { version: number; permissionProfile: AgentSpec["permissionProfile"]; permissionRequest: AgentSpec["on"]["permissionRequest"] }): PermissionApplication;
+  updatePermission?(request: { version: number; permissionProfile: AgentSpec["permissionProfile"]; permissionRequest: AgentSpec["on"]["permissionRequest"]; acknowledgeCodexFullAccessRisk?: boolean }): PermissionApplication;
+  setExecutionMode?(mode: "plan" | "execute" | "auto", profile: AgentSpec["permissionProfile"]): Promise<void>;
   validateSlash?(text: string): Promise<void>;
   readonly nativeVoice?: NativeVoiceHandle;
   // content: additive (D9) — ordered blocks that, when present, take over building

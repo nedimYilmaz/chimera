@@ -104,6 +104,56 @@ beforeEach(() => {
 });
 
 describe("SpawnCard — account dropdown", () => {
+  it("retains an explicit mode override on a planning role", () => {
+    expect(computeRoleSpecOverrides({ executionMode: "plan", permissionProfile: "acceptEdits" }, { executionMode: "execute" }))
+      .toEqual({ executionMode: "execute" });
+  });
+  it.each(["", "plan", "execute"])("normal spawn forwards execution mode %s without changing permissions", async (mode) => {
+    const renderer = await renderSpawnCard();
+    const control = (key: string) => renderer.root.findByProps({ "data-spawn-field": key });
+    act(() => control("prompt").props.onChange({ target: { value: "work" } }));
+    act(() => control("executionMode").props.onChange({ target: { value: mode } }));
+    await act(async () => renderer.root.findByProps({ "data-spawn-submit": true }).props.onClick());
+    const params = rpcImpl.mock.calls.find(([method]) => method === "agent.spawn")![1] as { spec: Record<string, unknown> };
+    expect(params.spec.executionMode).toBe(mode || undefined);
+    act(() => renderer.unmount());
+  });
+
+  it.each(["", "on", "off"])("normal spawn forwards native MCP choice %s independently of Chimera tools", async (choice) => {
+    const renderer = await renderSpawnCard();
+    const control = (key: string) => renderer.root.findByProps({ "data-spawn-field": key });
+    act(() => control("prompt").props.onChange({ target: { value: "native tools" } }));
+    act(() => renderer.root.findByProps({ "data-path-picker": "spawn-cwd" }).props.onChange({ target: { value: "/tmp/project" } }));
+    act(() => renderer.root.findByProps({ "data-spawn-orchestration": "on" }).props.onClick());
+    act(() => control("nativeMcps").props.onChange({ target: { value: choice } }));
+    await act(async () => renderer.root.findByProps({ "data-spawn-submit": true }).props.onClick());
+    const params = rpcImpl.mock.calls.find(([method]) => method === "agent.spawn")![1] as { spec: Record<string, unknown> };
+    expect(params.spec.orchestration).toEqual({ allow: true });
+    expect(params.spec.strictMcpConfig).toBe(choice === "" ? undefined : choice === "off");
+    expect(params.spec.loadSettings).toBe(choice === "on" ? true : undefined);
+    act(() => renderer.unmount());
+  });
+
+  it("does not send a stale Claude native MCP choice after switching to Codex", async () => {
+    const renderer = await renderSpawnCard();
+    const control = (key: string) => renderer.root.findByProps({ "data-spawn-field": key });
+    act(() => control("prompt").props.onChange({ target: { value: "native tools" } }));
+    act(() => control("nativeMcps").props.onChange({ target: { value: "off" } }));
+    act(() => control("executionMode").props.onChange({ target: { value: "plan" } }));
+    await act(async () => control("account").props.onChange({ target: { value: "codex" } }));
+    expect(control("nativeMcps").props.disabled).toBe(true);
+    await act(async () => renderer.root.findByProps({ "data-spawn-submit": true }).props.onClick());
+    const params = rpcImpl.mock.calls.find(([method]) => method === "agent.spawn")![1] as { spec: Record<string, unknown> };
+    expect(params.spec.strictMcpConfig).toBeUndefined();
+    expect(params.spec.executionMode).toBeUndefined();
+    act(() => renderer.unmount());
+  });
+
+  it("preserves native plugin settings and the explicit override when a role has a legacy strict flag", () => {
+    expect(computeRoleSpecOverrides({ strictMcpConfig: false, providerOptions: { strictMcpConfig: true } },
+      { strictMcpConfig: false, loadSettings: true })).toEqual({ strictMcpConfig: false, loadSettings: true });
+  });
+
   it.each([
     ["bypass", "", false, true],
     ["ask", "full", false, true],

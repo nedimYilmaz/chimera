@@ -7,7 +7,7 @@
 //               ("Cua AI, Inc. (YCK386LBJ7)", hardened runtime).
 //   python      astral-sh/python-build-standalone release 20261003 (PSF-2.0 + bundled licences);
 //               hashes from that release's SHA256SUMS.
-//   laya        PyPI laya 0.3.28 (Apache-2.0); wheel digest verified 2026-10-06 from the PyPI JSON API.
+//   laya        PyPI laya 0.4.1 (Apache-2.0); wheel digest verified 2026-10-09 from the PyPI JSON API.
 //   chrome      Chrome for Testing headless shell. Google publishes NO checksum for these, so the
 //               pins are our own trust-on-first-use hashes (the build fails on any later change);
 //               they are not an upstream attestation.
@@ -57,13 +57,13 @@ export const PYTHON = {
 export const LAYA = {
   // Only native dependency closures reviewed and committed for this release.
   targets: ['darwin-arm64'],
-  version: '0.3.28',
+  version: '0.4.1',
   license: 'Apache-2.0',
-  source: 'https://pypi.org/project/laya/0.3.28/',
+  source: 'https://pypi.org/project/laya/0.4.1/',
   wheel: {
-    file: 'laya-0.3.28-py3-none-any.whl',
-    url: 'https://files.pythonhosted.org/packages/f1/73/c2beaece06283911d53823f1735c7a033e07a1e690735ea02d8d57706d69/laya-0.3.28-py3-none-any.whl',
-    sha256: 'a1493cff474c0a5d84861db55c0c5c9b17f1db8561e458764da9a322dc542a88',
+    file: 'laya-0.4.1-py3-none-any.whl',
+    url: 'https://files.pythonhosted.org/packages/b8/f6/9e3f039d08319e153721210667548e2cac1679b56461c8b5e81acc93b4db/laya-0.4.1-py3-none-any.whl',
+    sha256: '5252730d8be604aecdc6c52adeb591e75d2b97ef3f52278cba9b37e403c784c7',
   },
   // The extra whose dependency closure the lock is resolved for (`laya[mcp]` = the MCP server).
   extra: 'mcp',
@@ -71,8 +71,9 @@ export const LAYA = {
   // not identify what answers a decision. This is the reviewed English checkpoint the 0.3.22 -> 0.3.27
   // evaluation ran against (scripts/eval-laya.ts); laya.revisions.PINNED_REVISIONS in BOTH releases
   // names this same revision. The 0.3.28 evaluation also reproduced every decision on it; its
-  // PINNED_REVISIONS is unchanged, and both this Hub revision and current main still name the same
-  // weight digest (verified 2026-10-06). Recomputed from the cached snapshot: the sha256 equals the
+  // PINNED_REVISIONS is unchanged; the 0.4.1 evaluation reproduced every decision and probability.
+  // Both this Hub revision and current main still name the same
+  // weight digest (verified 2026-10-09). Recomputed from the cached snapshot: the sha256 equals the
   // git-LFS blob name, so it is the Hub's own digest, not a first-use hash.
   // Enforced: buildManifest copies it into manifest.json (strict schema), laya-install.ts downloads and
   // hashes exactly this revision, and the registered entry carries it as LAYA_REVISION +

@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,6 +11,9 @@ import { FakeAgentBackend } from "@chimera/core/backends/fake";
 import { AgentSupervisor } from "@chimera/core/supervisor";
 import { Engine } from "@chimera/core/engine";
 import type { AgentBackend } from "@chimera/core/backend";
+import { ClaudeAgentBackend } from "@chimera/core/backends/claude";
+import { createAgentCommands, type RpcFn } from "../../app/src/state/commands.agents.js";
+import { initialState, reduce, type UiStore } from "../../ui-state/src/index.js";
 import { CFG, fakeExec, makeEngineHome } from "./helpers.js";
 
 // LEAN-AGENT-CONTEXT (token economy): a fresh NON-conductor claude spawn is given
@@ -36,6 +39,56 @@ function makeLeanSupervisor(leanAgentContext?: () => boolean, leanAgentSkills?: 
 }
 
 describe("AgentSupervisor: LEAN-AGENT-CONTEXT strictMcpConfig injection", () => {
+  it("an explicit spawn choice replaces only the inherited role's legacy strict option", async () => {
+    const fake = new FakeAgentBackend([]);
+    const engine = new Engine({ home: makeEngineHome(), backends: new Map<string, AgentBackend>([["claude", fake]]) });
+    await engine.handle("role.create", { spec: { name: "native-test", providerOptions: { strictMcpConfig: true, unrelated: "keep" } } });
+    await engine.handle("agent.spawn", { role: "native-test", spec: { prompt: "hi", cwd: "/tmp", isolation: "none", strictMcpConfig: false, loadSettings: true } });
+    expect(fake.spawns[0]!.strictMcpConfig).toBe(false);
+    expect(fake.spawns[0]!.providerOptions).toMatchObject({ unrelated: "keep" });
+    expect(fake.spawns[0]!.providerOptions.strictMcpConfig).toBeUndefined();
+    expect(fake.spawns[0]!.inherit.settingSources).toEqual(["project", "user"]);
+  });
+
+  it.each([undefined, { strictMcpConfig: false }])("retains legacy role policy or an explicit provider escape hatch (%j)", async (providerOptions) => {
+    const fake = new FakeAgentBackend([]);
+    const engine = new Engine({ home: makeEngineHome(), backends: new Map<string, AgentBackend>([["claude", fake]]) });
+    await engine.handle("role.create", { spec: { name: "legacy-native-test", providerOptions: { strictMcpConfig: true } } });
+    await engine.handle("agent.spawn", { role: "legacy-native-test", spec: {
+      prompt: "hi", cwd: "/tmp", isolation: "none",
+      ...(providerOptions ? { strictMcpConfig: true, providerOptions } : {}),
+    } });
+    expect(fake.spawns[0]!.providerOptions.strictMcpConfig).toBe(providerOptions ? false : true);
+  });
+
+  it("keeps native plugins and the injected Chimera server together through real quick-spawn commands and Engine", async () => {
+    const options: Record<string, unknown>[] = [];
+    const backend = new ClaudeAgentBackend({ queryFn: ((args: { options: Record<string, unknown> }) => {
+      options.push(args.options);
+      return { async *[Symbol.asyncIterator]() {}, interrupt: async () => {} };
+    }) as never });
+    const home = makeEngineHome();
+    const engine = new Engine({ home, backends: new Map([["claude", backend]]) });
+    let state = { ...initialState };
+    const store: UiStore = {
+      getState: () => state,
+      dispatch: action => { state = reduce(state, action); },
+      subscribe: () => () => {},
+      connectAndLoad: async () => {},
+    };
+    const rpc: RpcFn = async <T,>(method: string, params?: unknown): Promise<T> => {
+      return await engine.handle(method, params) as T;
+    };
+    const commands = createAgentCommands(store, rpc);
+    vi.spyOn(commands, "defaultCwd").mockResolvedValue(home);
+    await commands.spawnDefault({ provider: "claude", account: "main", model: "opus" });
+    expect(store.getState().lastError).toBeFalsy();
+    expect(options).toHaveLength(1);
+    expect(options[0]!.strictMcpConfig).toBe(false);
+    expect(options[0]!.settingSources).toEqual(["project", "user"]);
+    expect(Object.keys(options[0]!.mcpServers as object)).toContain("chimera");
+  });
+
   it("sets strictMcpConfig on a non-conductor claude spawn when lean is ON", async () => {
     const { sup, fake } = makeLeanSupervisor(() => true);
     await sup.spawn({ prompt: "hi", cwd: "/tmp", isolation: "none" });
@@ -117,11 +170,12 @@ describe("AgentSupervisor: LEAN-AGENT-CONTEXT strictMcpConfig injection", () => 
     expect(fake.spawns[1]!.providerOptions["strictMcpConfig"]).toBe(true);
   });
 
-  it("end-to-end on an Engine: leanAgentContext defaults ON, so a fresh spawn is lean", async () => {
+  it("end-to-end on an Engine: native settings are available by default", async () => {
     const fake = new FakeAgentBackend([]);
     const e = new Engine({ home: makeEngineHome(), backends: new Map<string, AgentBackend>([["claude", fake]]) });
     await e.handle("agent.spawn", { spec: { prompt: "hello", cwd: "/tmp", isolation: "none" } });
-    expect(fake.spawns[0]!.providerOptions["strictMcpConfig"]).toBe(true);
+    expect(fake.spawns[0]!.providerOptions["strictMcpConfig"]).toBeUndefined();
+    expect(fake.spawns[0]!.inherit.settingSources).toEqual(["project", "user"]);
   });
 
   // LEAN-AGENT-MCPS: the first-class `strictMcpConfig` spec field is the SAME opt-out signal as

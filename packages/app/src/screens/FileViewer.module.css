@@ -26,6 +26,7 @@
 .header {
   flex-shrink: 0;
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: 10px;
   padding: 10px 16px 8px;
@@ -33,11 +34,14 @@
 }
 
 .name {
+  overflow-wrap: anywhere;
   color: var(--accent);
   font-weight: 700;
 }
 
 .path {
+  overflow-wrap: anywhere;
+  min-width: 0;
   color: var(--muted);
   font-size: var(--fs-meta);
 }
@@ -88,6 +92,13 @@
   justify-content: center;
   padding: 24px;
 }
+
+.mediaWrap { display: flex; align-items: center; justify-content: center; min-height: 100%; }
+.media { display: block; width: 100%; max-height: 72vh; object-fit: contain; }
+audio.media { max-width: 640px; }
+.htmlWrap { display: flex; flex-direction: column; height: 100%; min-height: 280px; gap: 8px; }
+.htmlNote { color: var(--muted); font-size: var(--fs-meta); }
+.htmlFrame { flex: 1; width: 100%; min-height: 240px; border: 1px solid var(--line); background: white; }
 
 .codeArea {
   height: 100%;

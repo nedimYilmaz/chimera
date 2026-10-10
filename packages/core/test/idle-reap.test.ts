@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { HealthMonitor } from "@chimera/core/health";
 import type { AgentRecord } from "@chimera/core/supervisor";
 import type { NormalizedEvent } from "@chimera/protocol";
@@ -19,10 +19,12 @@ function rig(records: AgentRecord[], opts: { idleReapMs?: number; liveDependants
   let now = 1_000_000;
   const parked: Array<{ agentId: string; idleMs: number }> = [];
   const unresponsive: string[] = [];
+  const remoteChecks: string[] = [];
   let emit: ((e: NormalizedEvent) => void) | null = null;
   const monitor = new HealthMonitor({
     supervisor: {
       list: () => records,
+      maintainRemoteControl: async (id) => { remoteChecks.push(id); },
       reportUnresponsive: (agentId) => { unresponsive.push(agentId); },
       parkIdle: async (agentId, idleMs) => { parked.push({ agentId, idleMs }); },
       // PAUSED-CONDUCTOR: optional on the real supervisor too, so the other tests here keep the
@@ -35,7 +37,7 @@ function rig(records: AgentRecord[], opts: { idleReapMs?: number; liveDependants
   });
   monitor.start();
   return {
-    monitor, parked, unresponsive,
+    monitor, parked, unresponsive, remoteChecks,
     advance: (ms: number) => { now += ms; },
     event: (agentId: string, kind: NormalizedEvent["kind"]) =>
       emit?.({ ts: now, seq: now, agentId, kind, data: {} } as NormalizedEvent),
@@ -53,6 +55,43 @@ function agent(over: Partial<AgentRecord> = {}): AgentRecord {
 }
 
 describe("idle reaping", () => {
+  it("keeps remote sessions open and renews hourly until disabled", async () => {
+    const rec = agent({ remoteControlIntent: { enabled: true } });
+    const r = rig([rec]);
+    r.event("a1", "turn_complete"); r.monitor.tick();
+    r.advance(IDLE_MS - 1); r.monitor.tick(); await Promise.resolve();
+    expect(r.remoteChecks).toEqual([]);
+    r.advance(1); r.monitor.tick();
+    await vi.waitFor(() => expect(r.remoteChecks).toEqual(["a1"]));
+    r.monitor.tick(); expect(r.remoteChecks).toHaveLength(1);
+    r.advance(IDLE_MS); r.monitor.tick();
+    await vi.waitFor(() => expect(r.remoteChecks).toHaveLength(2));
+    expect(r.parked).toEqual([]); expect(r.unresponsive).toEqual([]);
+    delete rec.remoteControlIntent;
+    r.monitor.tick();
+    expect(r.parked).toHaveLength(1);
+    r.advance(IDLE_MS); r.monitor.tick(); await Promise.resolve();
+    expect(r.remoteChecks).toHaveLength(2);
+    r.monitor.stop();
+  });
+
+  it("recovers an open remote after daemon restart without waiting an hour", async () => {
+    const r = rig([agent({ state: "paused", pauseReason: "daemon-restart", remoteControlIntent: { enabled: true } })]);
+    r.monitor.tick();
+    await vi.waitFor(() => expect(r.remoteChecks).toEqual(["a1"]));
+    r.monitor.tick(); expect(r.remoteChecks).toHaveLength(1); r.monitor.stop();
+  });
+
+  it("never renews paused, killed or shadow agents", async () => {
+    const r = rig([
+      agent({ agentId: "paused", state: "paused", pauseReason: "operator-hold", remoteControlIntent: { enabled: true } }),
+      agent({ agentId: "killed", state: "killed", remoteControlIntent: { enabled: true } }),
+      agent({ agentId: "shadow", shadow: true, remoteControlIntent: { enabled: true } }),
+    ]);
+    r.monitor.tick(); r.advance(IDLE_MS * 3); r.monitor.tick(); await Promise.resolve();
+    expect(r.remoteChecks).toEqual([]); r.monitor.stop();
+  });
+
   it("releases the process of an agent idle past the window", () => {
     const r = rig([agent()]);
     r.event("a1", "turn_complete");        // a turn ended — nothing in flight

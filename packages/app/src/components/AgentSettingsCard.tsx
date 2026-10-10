@@ -6,6 +6,7 @@ import { OverlayCard, OverlayCardHeader } from "./OverlayCard";
 import { AgentRealtimeSetting } from "./AgentRealtimeSetting";
 import styles from "./SpawnCard.module.css";
 import own from "./AgentSettingsCard.module.css";
+import { nativeMcpPatch, nativeMcpSelection } from "../state/nativeMcpSettings";
 
 // AGENT-RECONFIGURE: every setting of a LIVE agent, in one place, applied on save.
 //
@@ -19,7 +20,7 @@ import own from "./AgentSettingsCard.module.css";
 // system prompt in place), the bottom group does not touch it at all. An operator about to fix a
 // typo in a name should be able to see that it is free.
 
-type Live = { permissionProfile?: string; permissionRequest?: string; displayLabel?: string };
+type Live = { executionMode?: string; permissionProfile?: string; permissionRequest?: string; displayLabel?: string };
 
 // DYNAMIC-MODEL-LISTS / EFFORT-ONE-SOURCE: both lists used to be written out here. The model one
 // was claude-only, so a codex or kimi agent's settings offered claude names; the effort one had
@@ -28,6 +29,16 @@ type Live = { permissionProfile?: string; permissionRequest?: string; displayLab
 // (providers.models, the same probe ModelCard uses) with effortLevelsFor() deciding what to offer.
 const PROFILES = ["readOnly", "acceptEdits", "full"];
 const REQUESTS = ["auto", "poke:caller", "tui"];
+
+// Native IPC rejects with a serialized RpcError, not an Error instance.
+export function settingsErrorMessage(error: unknown): string {
+  const message = error !== null && typeof error === "object" && "message" in error
+    && typeof error.message === "string" ? error.message
+    : typeof error === "string" ? error : "Unable to apply settings. The daemon returned an unrecognized error.";
+  if (message.includes("bypassPermissions") && message.includes("disabled by settings or configuration"))
+    return `${message}. Full permissions require bypassPermissions. Claude's configuration blocks this change; the policy owner must resolve it. Execution mode was not changed.`;
+  return message;
+}
 
 export function AgentSettingsCard({ agentId, onClose }: { agentId: string; onClose: () => void }) {
   const agent = useStore((s) => s.agents[agentId]);
@@ -78,11 +89,12 @@ export function AgentSettingsCard({ agentId, onClose }: { agentId: string; onClo
   const [baseline, setBaseline] = useState<{ patch: Record<string, string>; live: Live }>({ patch: {}, live: {} });
   useEffect(() => {
     let cancelled = false;
-    void rpcCall<{ spec?: Record<string, unknown>; displayLabel?: string }>("agent.status", { agentId })
+    void rpcCall<{ spec?: Record<string, unknown>; displayLabel?: string; executionMode?: string }>("agent.status", { agentId })
       .then((rec) => {
         if (cancelled) return;
         const sp = rec.spec ?? {};
         setSpec(sp);
+        setAcknowledgeRisk(false);
         // Seeded ONCE: re-seeding on every store tick would fight the operator's typing each time
         // the agent emitted an event.
         const seededPatch: Record<string, string> = {
@@ -92,16 +104,18 @@ export function AgentSettingsCard({ agentId, onClose }: { agentId: string; onClo
           maxBudgetUsd: str(sp["maxBudgetUsd"]), compactionThreshold: str(sp["compactionThreshold"]),
           instructions: str(sp["instructions"]),
           autonomy: str(sp["autonomy"]), cwd: str(sp["cwd"]),
+          nativeMcps: nativeMcpSelection(sp),
         };
         const seededLive: Live = {
-          permissionProfile: agent?.permissionProfile ?? "", permissionRequest: agent?.permissionRequest ?? "",
+          executionMode: rec.executionMode ?? str(sp["executionMode"]),
+          permissionProfile: str(sp["permissionProfile"] ?? agent?.permissionProfile), permissionRequest: str((sp["on"] as { permissionRequest?: string } | undefined)?.permissionRequest ?? agent?.permissionRequest),
           displayLabel: rec.displayLabel ?? agent?.displayLabel ?? "",
         };
         setPatch(seededPatch);
         setLive(seededLive);
         setBaseline({ patch: seededPatch, live: seededLive });
       })
-      .catch((e: unknown) => { if (!cancelled) setError(e instanceof Error ? e.message : String(e)); });
+      .catch((e: unknown) => { if (!cancelled) setError(settingsErrorMessage(e)); });
     return () => { cancelled = true; };
   }, [agentId]);
   const [busy, setBusy] = useState(false);
@@ -113,12 +127,16 @@ export function AgentSettingsCard({ agentId, onClose }: { agentId: string; onClo
     setPatch((p) => ({ ...p, ...(k === "account" && accounts.find((a) => a.name === v)?.provider !== targetProvider ? { model: "", effort: "" } : {}), [k]: v }));
   };
 
+  const needsRiskGrant = targetProvider === "codex" && live.permissionProfile === "full"
+    && (targetProvider !== agent?.provider || spec?.["acknowledgeCodexFullAccessRisk"] !== true);
+
   const submit = async (): Promise<void> => {
+    if (needsRiskGrant && !acknowledgeRisk) { setError("Confirm the Codex full-access acknowledgment before applying."); return; }
     setBusy(true); setError(null);
     // Only CHANGED fields go in the patch — sending the whole form would make every save a
     // respawn even when nothing moved, which is the cost this panel exists to avoid.
     const changed: Record<string, unknown> = {};
-    if (acknowledgeRisk) changed["acknowledgeCodexFullAccessRisk"] = true;
+    if (needsRiskGrant && acknowledgeRisk) changed["acknowledgeCodexFullAccessRisk"] = true;
     // Compared field by field against the SEEDED values, as strings — the same form the operator
     // edited. Parsing first and comparing parsed values would call "40" and 40 different.
     const moved = (k: string): boolean => (patch[k] ?? "") !== (baseline.patch[k] ?? "");
@@ -133,9 +151,15 @@ export function AgentSettingsCard({ agentId, onClose }: { agentId: string; onClo
     if (moved("compactionThreshold")) changed["compactionThreshold"] = patch["compactionThreshold"] ? Number(patch["compactionThreshold"]) : null;
     if (moved("instructions")) changed["instructions"] = patch["instructions"] || undefined;
     if (moved("autonomy")) changed["autonomy"] = patch["autonomy"] || undefined;
+    if (targetProvider === "claude" && agent?.provider === "claude" && spec?.runtime !== "terminal"
+      && moved("nativeMcps") && patch["nativeMcps"]) {
+      Object.assign(changed, nativeMcpPatch(patch["nativeMcps"] === "on"));
+    }
 
     const livePatch: Live = {};
     const liveMoved = (k: keyof Live): boolean => ((live[k] ?? "") as string) !== ((baseline.live[k] ?? "") as string);
+    if (targetProvider === "claude" && agent?.provider === "claude" && spec?.runtime !== "terminal"
+      && liveMoved("executionMode") && live.executionMode) livePatch.executionMode = live.executionMode;
     if (liveMoved("permissionProfile") && live.permissionProfile) livePatch.permissionProfile = live.permissionProfile;
     if (liveMoved("permissionRequest") && live.permissionRequest) livePatch.permissionRequest = live.permissionRequest;
     if (liveMoved("displayLabel") && live.displayLabel) livePatch.displayLabel = live.displayLabel;
@@ -143,18 +167,20 @@ export function AgentSettingsCard({ agentId, onClose }: { agentId: string; onClo
     const movedCwd = moved("cwd") && patch["cwd"] ? patch["cwd"] : undefined;
     if (Object.keys(changed).length === 0 && Object.keys(livePatch).length === 0 && !movedCwd) { onClose(); return; }
     try {
-      await rpcCall("agent.reconfigure", {
+      const result = await rpcCall<{ applied?: string[] }>("agent.reconfigure", {
         agentId,
         ...(Object.keys(changed).length > 0 ? { patch: changed } : {}),
         ...(Object.keys(livePatch).length > 0 ? { live: livePatch } : {}),
         ...(movedCwd ? { cwd: movedCwd } : {}),
       });
+      if (livePatch.executionMode && !result?.applied?.includes("executionMode"))
+        throw new Error("The daemon did not acknowledge execution mode. Update the daemon before changing this setting.");
       onClose();
     } catch (e) {
       // Kept OPEN on failure with the daemon's own reason inline — a refusal here names what does
       // change the field instead ("use agent_handoff"), which is unreadable from a toast that
       // closed the form holding the value it is about.
-      setError(e instanceof Error ? e.message : String(e));
+      setError(settingsErrorMessage(e));
       setBusy(false);
     }
   };
@@ -185,7 +211,7 @@ export function AgentSettingsCard({ agentId, onClose }: { agentId: string; onClo
         <select
           className={`${styles.inputBox} ${own.nativeField}`}
           value={(live[key] as string) ?? ""}
-          onChange={(e) => setLive((l) => ({ ...l, [key]: e.target.value }))}
+          onChange={(e) => { if (key === "permissionProfile") setAcknowledgeRisk(false); setLive((l) => ({ ...l, [key]: e.target.value })); }}
           data-settings-field={key}
         >
           <option value="">—</option>
@@ -195,7 +221,7 @@ export function AgentSettingsCard({ agentId, onClose }: { agentId: string; onClo
         <input
           className={`${styles.inputBox} ${own.nativeField}`}
           value={(live[key] as string) ?? ""}
-          onChange={(e) => setLive((l) => ({ ...l, [key]: e.target.value }))}
+          onChange={(e) => { if (key === "permissionProfile") setAcknowledgeRisk(false); setLive((l) => ({ ...l, [key]: e.target.value })); }}
           data-settings-field={key}
         />
       )}
@@ -207,16 +233,16 @@ export function AgentSettingsCard({ agentId, onClose }: { agentId: string; onClo
       <div data-agent-settings-card>
         <OverlayCardHeader
           title={`settings · ${agent?.displayLabel ?? agentId.slice(0, 8)}`}
-          meta={error ? <span className={styles.error}>{error}</span> : undefined}
           hint={spec === null ? "reading current settings…" : "esc cancel"}
         />
         <div className={styles.body}>
+          {error && <div role="alert" data-settings-error className={own.error}>{error}</div>}
           {/* The two groups are the honest cost split, not decoration: the SDK cannot change a
               running session's model or system prompt in place, so those restart the process (the
               conversation survives); the ones below never touch it. Someone about to fix a typo in
               a name should be able to see that it is free. */}
           <div className={styles.fieldHint}>{targetProvider !== agent?.provider ? "new provider session — source compaction + retained history transfer (up to 90s, uses source tokens)" : "restarts the process — resumes the same provider session"}</div>
-          {targetProvider === "codex" && targetProvider !== agent?.provider && live.permissionProfile === "full" && <label><input type="checkbox" checked={acknowledgeRisk} onChange={(e) => setAcknowledgeRisk(e.target.checked)} />I acknowledge Codex full access runs without its sandbox.</label>}
+          {needsRiskGrant && <label><input data-settings-full-risk type="checkbox" checked={acknowledgeRisk} onChange={(e) => setAcknowledgeRisk(e.target.checked)} />I acknowledge Codex full access runs without its sandbox.</label>}
           {field("model", "model", [...models])}
           {/* EFFORT-ONE-SOURCE: scoped to the model being SET here, not the one currently
               running — picking a model and an effort in the same edit must offer the efforts that
@@ -228,11 +254,11 @@ export function AgentSettingsCard({ agentId, onClose }: { agentId: string; onClo
             advertised: effortsByModel,
           })])}
           {field("account", "account")}
-          <div className={styles.pair}>
+          <div className={`${styles.pair} ${own.pair}`}>
             {field("maxTurns", "max turns")}
             {field("turnLimitPolicy", "turn policy", ["fail", "soft"])}
           </div>
-          <div className={styles.pair}>
+          <div className={`${styles.pair} ${own.pair}`}>
             {field("maxBudgetUsd", "budget $")}
             {field("autonomy", "autonomy", ["ask", "full"])}
           </div>
@@ -243,6 +269,17 @@ export function AgentSettingsCard({ agentId, onClose }: { agentId: string; onClo
           {field("compactionThreshold", "compact at (tokens)")}
           {field("cwd", "cwd")}
           {field("instructions", "instructions")}
+          {agent?.provider === "claude" && targetProvider === "claude" && spec !== null && spec["runtime"] !== "terminal" && <>
+            <div className={styles.row}>
+              <label className={styles.label} htmlFor="agent-native-mcps">native MCPs</label>
+              <select id="agent-native-mcps" aria-describedby="agent-native-mcps-hint" className={`${styles.inputBox} ${own.nativeField}`}
+                value={patch["nativeMcps"] ?? ""} onChange={e => set("nativeMcps", e.target.value)} data-settings-field="nativeMcps" disabled={busy}>
+                <option value="" disabled>Inherited / custom</option>
+                <option value="on">On</option><option value="off">Off</option>
+              </select>
+            </div>
+            <div id="agent-native-mcps-hint" className={`${styles.fieldHint} ${styles.wrapHint}`}>On loads installed Claude MCP plugins and user/project settings. Chimera tools stay unchanged. Apply restarts this agent in the same conversation.</div>
+          </>}
 
           {agent?.provider === "codex" && targetProvider === "codex" && spec !== null && spec["runtime"] !== "terminal" && <AgentRealtimeSetting
             key={agentId} agentId={agentId}
@@ -254,13 +291,17 @@ export function AgentSettingsCard({ agentId, onClose }: { agentId: string; onClo
 
           <div className={styles.fieldHint}>applies live — no restart, no interrupted turn</div>
           {liveField("displayLabel", "name")}
-          <div className={styles.pair}>
+          {targetProvider === "claude" && agent?.provider === "claude" && spec?.runtime !== "terminal" && <>
+            {liveField("executionMode", "execution mode", ["auto", "execute", "plan"])}
+            <div className={`${styles.fieldHint} ${styles.wrapHint}`}>Auto explicitly selects Claude’s automatic permission review, independently of the role default. Plan prevents execution. Execute uses the configured native mode. Changes apply after Claude acknowledges them; Chimera permission restrictions still apply.</div>
+          </>}
+          <div className={`${styles.pair} ${own.pair}`}>
             {liveField("permissionProfile", "permission", PROFILES)}
             {liveField("permissionRequest", "ask routing", REQUESTS)}
           </div>
         </div>
         <div className={styles.footer}>
-          <button type="button" className={styles.submitChip} disabled={busy || realtimeBusy || spec === null} onClick={() => void submit()} data-settings-apply>
+          <button type="button" className={styles.submitChip} disabled={busy || realtimeBusy || spec === null || needsRiskGrant && !acknowledgeRisk} onClick={() => void submit()} data-settings-apply>
             {busy ? "applying…" : "apply"}
           </button>
           <button type="button" className={styles.cancelChip} onClick={onClose} data-settings-cancel>cancel</button>

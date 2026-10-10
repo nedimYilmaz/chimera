@@ -70,6 +70,9 @@ describe("ClaudeAgentBackend: dialog wiring (DLG2)", () => {
     new ClaudeAgentBackend({ queryFn: fn }).spawn(spec(), () => {}, async () => true, decideDialog);
     await settle();
     const canUseTool = calls[0]!.options.canUseTool as (t: string, i: unknown, o?: { toolUseID?: string }) => Promise<unknown>;
+    const hooks = calls[0]!.options.hooks as { PreToolUse: Array<{ hooks: Array<(i: unknown) => Promise<unknown>> }> };
+    expect(await hooks.PreToolUse[0]!.hooks[0]!({ tool_name: "AskUserQuestion", tool_input: {}, tool_use_id: "tuQ" })).toEqual({});
+    expect(decideDialog).not.toHaveBeenCalled();
     const input = { questions: [{ question: "Türkiye'nin en uzun nehri?", header: "Nehir", options: [{ label: "Kızılırmak" }] }] };
     const res = await canUseTool("AskUserQuestion", input, { toolUseID: "tuQ" });
     expect(decideDialog).toHaveBeenCalledWith({
@@ -82,10 +85,10 @@ describe("ClaudeAgentBackend: dialog wiring (DLG2)", () => {
   // so AskUserQuestion must route through the PreToolUse hook instead. This asserts the hook
   // renders it as a dialog and threads the answer back via updatedInput (permissionDecision:allow),
   // identically to the non-bypass canUseTool path above.
-  it("full/bypass: AskUserQuestion routes through the PreToolUse hook → allow with answers in updatedInput", async () => {
+  it("explicit bypass: AskUserQuestion routes through the PreToolUse hook → allow with answers in updatedInput", async () => {
     const { fn, calls } = fakeQuery();
     const decideDialog = vi.fn(async (): Promise<DialogDecision> => ({ behavior: "completed", result: { answers: { Nehir: "Kızılırmak" } } }));
-    new ClaudeAgentBackend({ queryFn: fn }).spawn(spec({ permissionProfile: "full" }), () => {}, async () => true, decideDialog);
+    new ClaudeAgentBackend({ queryFn: fn }).spawn(spec({ permissionProfile: "full", providerOptions: { permissionMode: "bypassPermissions" } }), () => {}, async () => true, decideDialog);
     await settle();
     expect("canUseTool" in calls[0]!.options).toBe(false);              // shadowed → not passed
     expect(calls[0]!.options.allowDangerouslySkipPermissions).toBe(true);
@@ -103,11 +106,11 @@ describe("ClaudeAgentBackend: dialog wiring (DLG2)", () => {
     });
   });
 
-  it("full/bypass: AskUserQuestion cancelled → hook denies (permissionDecision:deny), never hits normal decide", async () => {
+  it("explicit bypass: AskUserQuestion cancelled → hook denies (permissionDecision:deny), never hits normal decide", async () => {
     const { fn, calls } = fakeQuery();
     const decideDialog = vi.fn(async (): Promise<DialogDecision> => ({ behavior: "cancelled" }));
     const decide = vi.fn(async () => true);
-    new ClaudeAgentBackend({ queryFn: fn }).spawn(spec({ permissionProfile: "full" }), () => {}, decide, decideDialog);
+    new ClaudeAgentBackend({ queryFn: fn }).spawn(spec({ permissionProfile: "full", providerOptions: { permissionMode: "bypassPermissions" } }), () => {}, decide, decideDialog);
     await settle();
     const hooks = calls[0]!.options.hooks as { PreToolUse: Array<{ hooks: Array<(i: unknown) => Promise<Record<string, unknown>>> }> };
     const gate = hooks.PreToolUse[0]!.hooks[0]!;

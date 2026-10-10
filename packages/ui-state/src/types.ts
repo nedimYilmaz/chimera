@@ -376,6 +376,7 @@ export type AgentView = {
   // `permissionProfile` is readOnly|acceptEdits|full; `permissionRequest` is auto|poke:caller|tui.
   permissionProfile?: string;
   permissionRequest?: string;
+  executionMode?: "plan" | "execute" | "auto";
   permissionApplication?: PermissionApplication;
   /** Legacy provider response; newer daemons also report independently acknowledged posture. */
   permissionAppliedToRunningProcess?: boolean;
@@ -492,6 +493,7 @@ export type AgentView = {
   sessionUsage?: TokenUsage;
   usageMeasuredAt?: number;
   lastEventTs: number;
+  registrationSeq?: number;
   pendingQuestion: AgentQuestion | null;
   // Native-CLI-parity Phase 2 (Task DLG3): see PendingDialog's own doc comment above.
   pendingDialog: PendingDialog | null;
@@ -918,6 +920,7 @@ export type ConfirmAction =
 // renders exactly as before.
 export type AgentRecordLite = {
   agentId: string; state: string; accountName: string; provider: string;
+  executionMode?: "plan" | "execute" | "auto";
   permissionApplication?: PermissionApplication;
   displayLabel?: string;
   // CONDUCTOR-FULL-ACCESS: agent.list returns the FULL AgentRecord (spec included), so the
@@ -1145,6 +1148,7 @@ export type UiState = {
   // (TUI-only client before its first refresh() tick) rather than "unavailable".
   wakeScheduling: WakeScheduling | null;
   agents: Record<string, AgentView>;
+  removedAgentIds: Record<string, number>;
   agentOrder: string[];
   pendingPermissions: PendingPermission[];
   // FEATURE-9 (attention inbox): live per-task projection, keyed by taskId — see
@@ -1369,7 +1373,8 @@ export type Action =
   | { type: "connected"; connected: boolean }
   | { type: "reconnecting"; reconnecting: boolean }         // TUI-007
   | { type: "daemonStatus"; status: { protocolVersion: number; agents: UiState["agentCounts"]; accounts?: AccountStatus[]; peers?: PeerStatus[]; mcpListener?: McpListenerStatus; wakeScheduling?: WakeScheduling } }
-  | { type: "agentRecords"; records: AgentRecordLite[] }
+  | { type: "agentRecords"; records: AgentRecordLite[]; sinceSeq?: number }
+  | { type: "agentsRemoved"; agentIds: string[] }
   | { type: "teams"; available: boolean; items: Array<Record<string, unknown>> }
   | { type: "queues"; available: boolean; items: Array<Record<string, unknown>> }
   // ROLES-TAB S4: mirrors "teams"/"queues" exactly.
@@ -1594,6 +1599,7 @@ export const initialState: UiState = {
   mcpListenerGrantAgents: null,
   wakeScheduling: null,
   agents: {},
+  removedAgentIds: {},
   agentOrder: [],
   pendingPermissions: [],
   tasks: {},

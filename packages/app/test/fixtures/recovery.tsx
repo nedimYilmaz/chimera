@@ -8,6 +8,7 @@ import { AgentsScreen } from "../../src/screens/AgentsScreen";
 import { appStore } from "../../src/state/store";
 import { useStore } from "../../src/state/useStore";
 import { composerLocal } from "../../src/state/commands.agents";
+import { agentRecords } from "./ui-browser-data.mjs";
 
 let active = false, attempts = 0;
 let release: (() => void) | null = null;
@@ -16,12 +17,13 @@ export function resetRecovery(name: string) {
   active = name === "qa-liveboard"; attempts = 0; release = null; pending.length = 0;
   if (name !== "qa-recovery" && !active) return;
   appStore.dispatch({ type: "connected", connected: true });
+  appStore.dispatch({ type: "agentRecords", records: agentRecords as never });
   appStore.dispatch({ type: "selectTab", tab: "agents" });
   appStore.dispatch({ type: "selectAgent", agentId: "ui-qa-agent" });
   composerLocal.set({ draftOwner: "ui-qa-agent", target: "selected", composeText: "QA unsent recovery draft", agentDetail: null, spawnOpen: false });
   if (active) {
     for (const lane of appStore.getState().liveboardLanes) appStore.dispatch({ type: "liveboardLaneRemove", agentId: lane.agentId });
-    appStore.dispatch({ type: "agentRecords", records: [{ agentId: "qa-recovery-lane", displayLabel: "Recovery lane", state: "done", accountName: "synthetic", provider: "codex", costUsd: 0, createdAt: 1 }] });
+    appStore.dispatch({ type: "agentRecords", records: [...agentRecords, { agentId: "qa-recovery-lane", displayLabel: "Recovery lane", state: "done", accountName: "synthetic", provider: "codex", costUsd: 0, createdAt: 1 }] as never });
     appStore.dispatch({ type: "liveboardLaneAdd", agentId: "qa-recovery-lane" });
   }
 }

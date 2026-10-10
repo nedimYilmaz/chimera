@@ -930,7 +930,7 @@ function userMessageKey(item: TranscriptItem): string | undefined {
 // the synthetic "memory" agentId (the per-record ones use "memory:<id>", which the colon
 // rule below already catches) — without it the shared store filling up would spawn a
 // phantom "memory" agent row exactly like the "config"/"clock" bugs above.
-const SYSTEM_EVENT_AGENT_IDS = new Set(["config", "network", "federation", "capability", "hooks", "notify", "eventlog", "clock", "accounts", "wake", "memory"]);
+const SYSTEM_EVENT_AGENT_IDS = new Set(["config", "network", "federation", "capability", "hooks", "notify", "eventlog", "clock", "accounts", "wake", "memory", "supervisor"]);
 
 // HOOK-6: fold a hook_fired / hook_suppressed event into the per-rule status map the
 // HooksCard reads. Pure and identity-stable — any other kind returns `prev` unchanged
@@ -1020,8 +1020,31 @@ function foldAgentIdentity(agent: AgentView, data: Record<string, unknown>): voi
   }
 }
 
+function removeAgentViews(state: UiState, ids: string[], removedAt = state.lastSeq): UiState {
+  if (!ids.length) return state;
+  const removed = new Set(ids);
+  const agents = { ...state.agents };
+  const removedAgentIds = { ...state.removedAgentIds };
+  for (const id of ids) { delete agents[id]; removedAgentIds[id] = removedAt; }
+  const agentOrder = state.agentOrder.filter(id => !removed.has(id));
+  return {
+    ...state, agents, agentOrder, removedAgentIds,
+    selectedAgentId: state.selectedAgentId && !removed.has(state.selectedAgentId) ? state.selectedAgentId : agentOrder[0] ?? null,
+    mainConductorId: state.mainConductorId && removed.has(state.mainConductorId) ? null : state.mainConductorId,
+    markedAgentIds: state.markedAgentIds.filter(id => !removed.has(id)),
+    pendingPermissions: state.pendingPermissions.filter(p => !removed.has(p.agentId)),
+    liveboardLanes: state.liveboardLanes.filter(lane => !removed.has(lane.agentId)),
+    conductorByProject: Object.fromEntries(Object.entries(state.conductorByProject).filter(([, id]) => !removed.has(id))),
+  };
+}
+
 function projectEvent(state: UiState, e: NormalizedEvent, stampTs = false): UiState {
   if (e.seq <= state.lastSeq) return state;                        // dedupe: tail replay vs live subscribe
+  if (e.kind === "status" && ((e.agentId === "supervisor" && e.data.state === "purged_terminal_sessions")
+    || (e.agentId === "eventlog" && typeof e.data.forgotten === "number")) && Array.isArray(e.data.agentIds)) {
+    state = removeAgentViews(state, e.data.agentIds.filter((id): id is string => typeof id === "string")
+      .map(agentId => qualifiedAgentId({ ...e, agentId })), e.seq);
+  }
   // W7 (coverage B1 row 3): fold the unseen badge BEFORE the per-kind projection
   // so both return paths carry it; gated off entirely while the events tab is
   // active. The permission_request case is refined below — a duplicate requestId
@@ -1162,8 +1185,13 @@ function projectEvent(state: UiState, e: NormalizedEvent, stampTs = false): UiSt
   }
   // Id rule (b): every per-agent map/selection is keyed by the qualified id (PP6).
   const key = qualifiedAgentId(e);
+  // History loads and delayed events can outlive the daemon record. Only a
+  // subsequent authoritative roster can restore an explicitly removed id.
+  if (key in state.removedAgentIds) return { ...state, lastSeq: e.seq, unseen, hooks, events: [...state.events, e].slice(-EVENT_BUFFER_MAX) };
   const prev = state.agents[key] ?? emptyAgent(key);
-  let agent: AgentView = { ...prev, transcript: [...prev.transcript], tools: [...prev.tools], backgroundTasks: prev.backgroundTasks.map(task => ({ ...task })), lastEventTs: e.ts };
+  let agent: AgentView = { ...prev, transcript: [...prev.transcript], tools: [...prev.tools], backgroundTasks: prev.backgroundTasks.map(task => ({ ...task })), lastEventTs: e.ts,
+    ...(e.kind === "agent_started" || e.kind === "status" && e.data.registered === true ? { registrationSeq: e.seq } : {}),
+  };
   // WD Stage 1 (coverage B4): spread `...at` where a transcript item is born — {} when
   // the dispatcher didn't opt in, so the un-flagged projection stays byte-identical.
   const at = { seq: e.seq, ...(stampTs ? { ts: e.ts } : {}) };
@@ -2360,6 +2388,8 @@ function projectEvent(state: UiState, e: NormalizedEvent, stampTs = false): UiSt
       // fold each authoritative-when-present (like remoteControl above) so the AgentDetail
       // permission chip reflects a live agent.setPermission the instant it lands, with no wait
       // for the next agent.list snapshot (the app polls agent.list only once at bootstrap).
+      if (e.data["executionMode"] === "plan" || e.data["executionMode"] === "execute" || e.data["executionMode"] === "auto" || e.data["executionMode"] === null)
+        agent.executionMode = e.data["executionMode"] ?? undefined;
       const permissionApplication = e.data["permissionApplication"] as AgentView["permissionApplication"];
       const permissionFieldsCurrent = permissionApplication ? typeof permissionApplication.version === "number" && permissionApplication.version >= (agent.permissionApplication?.version ?? -1) : !agent.permissionApplication;
       if (permissionApplication && permissionFieldsCurrent) {
@@ -2468,7 +2498,9 @@ export function closeTransientOverlays(state: UiState): UiState {
 }
 
 export function reduce(state: UiState, action: Action): UiState {
+  if ("agentId" in action && typeof action.agentId === "string" && action.agentId in state.removedAgentIds) return state;
   switch (action.type) {
+    case "agentsRemoved": return removeAgentViews(state, action.agentIds);
     case "event": {
       const before = state.agents[action.event.agentId]?.transcript.length ?? 0;
       const next = projectEvent(state, action.event, action.stampTs === true);
@@ -2534,12 +2566,24 @@ export function reduce(state: UiState, action: Action): UiState {
       // event-derived state (e.g. "killed" only ever arrives via this path) —
       // every AgentView is built through emptyAgent() so the required
       // pendingQuestion field can never be missing from a records-only agent.
+      // A deletion arriving after the request began wins over its stale reply.
+      const records = action.records.filter(r => action.sinceSeq === undefined
+        || !(r.agentId in state.removedAgentIds) || state.removedAgentIds[r.agentId]! <= action.sinceSeq);
+      const present = new Set(records.map(r => r.agentId));
+      // Keep only agents first observed while this particular request was in
+      // flight; ordinary old event projections are not daemon records.
+      const extras = state.agentOrder.filter(id => !present.has(id) && action.sinceSeq !== undefined
+        && (state.agents[id]?.registrationSeq ?? 0) > action.sinceSeq);
+      const retained = new Set([...present, ...extras]);
+      state = removeAgentViews(state, Object.keys(state.agents).filter(id => !retained.has(id)));
+      const removedAgentIds = { ...state.removedAgentIds };
+      for (const id of present) delete removedAgentIds[id];
       const agents = { ...state.agents };
       // Task STREE: TREE-ORDER, not a plain createdAt sort -- see treeOrder's
       // own doc comment. A flat (no-treeId) records list orders identically
       // to the old plain sort, so this is a behavior-preserving swap.
-      const order = treeOrder(action.records);
-      for (const r of action.records) {
+      const order = treeOrder(records);
+      for (const r of records) {
         const prev = agents[r.agentId] ?? emptyAgent(r.agentId);
         // Task TEAMGROUP: computed once, ahead of the object below — WORKFLOW-
         // TASK-VIEW-2 (bug B) reuses it to gate `conductor` (see there).
@@ -2691,6 +2735,7 @@ export function reduce(state: UiState, action: Action): UiState {
           // CONDUCTOR-FULL-ACCESS: authoritative-when-present, mirroring gitBranch above — a
           // snapshot carrying the spec updates the live permission scope; an absent field (older
           // daemon's summary path that drops spec) keeps the prior value so the chip never blanks.
+          executionMode: r.executionMode,
           permissionProfile: (r.permissionApplication ? r.permissionApplication.version >= (prev.permissionApplication?.version ?? -1) : !prev.permissionApplication) && typeof r.spec?.permissionProfile === "string" ? r.spec.permissionProfile : prev.permissionProfile,
           permissionRequest: (r.permissionApplication ? r.permissionApplication.version >= (prev.permissionApplication?.version ?? -1) : !prev.permissionApplication) && typeof r.spec?.on?.permissionRequest === "string" ? r.spec.on.permissionRequest : prev.permissionRequest,
           permissionApplication: r.permissionApplication && r.permissionApplication.version >= (prev.permissionApplication?.version ?? -1) ? r.permissionApplication : prev.permissionApplication,
@@ -2721,15 +2766,16 @@ export function reduce(state: UiState, action: Action): UiState {
             : null,
         };
       }
-      const extras = state.agentOrder.filter((id) => !order.includes(id));
       return {
         ...state,
-        agents,
+        agents, removedAgentIds,
         agentOrder: [...order, ...extras],
-        selectedAgentId: state.selectedAgentId ?? order[0] ?? null,
+        // removeAgentViews cleared deleted agent selections; virtual task rows
+        // remain valid selections even though they are not daemon agents.
+        selectedAgentId: state.selectedAgentId ?? order[0] ?? extras[0] ?? null,
         // P3-T2: rebuilt wholesale from this snapshot, like treeOrder above —
         // see buildConductorByProject's own doc comment.
-        conductorByProject: buildConductorByProject(action.records),
+        conductorByProject: buildConductorByProject(records),
       };
     }
     case "teams":

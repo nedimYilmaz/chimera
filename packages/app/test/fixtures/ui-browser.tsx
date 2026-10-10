@@ -1,3 +1,8 @@
+import { RemoteControlProbe, remoteFixture } from "./remote-control";
+import { HistoryRecoveryProbe } from "./history-recovery";
+import { HtmlPreviewProbe, htmlFixture } from "./html-preview";
+import { AgentSettingsCard } from "../../src/components/AgentSettingsCard";
+import { MediaPreviewProbe } from "./media-preview";
 import { MessageIdentityFixture, messageIdentityFixture } from "./message-identity";
 import { projectDeleteFixture } from "./project-delete";
 import { RecoveryProbe, resetRecovery, recoveryRpc } from "./recovery";
@@ -105,8 +110,12 @@ declare global {
       pttSnapshot(): PttSnapshot;
       pttSpeak(): void;
       renameAgent(name?: string): void;
+      rosterProbe(mode: "seed" | "prune" | "forget"): void;
       unreadAgent(unread: boolean): void;
       quickSpawns(): unknown[];
+      remote: typeof remoteFixture;
+      nativeMcpCalls(): unknown[];
+      failNativeMcp(): void;
       projectImports(): unknown[];
       finishBackground(status: string): void;
       groupRegistry: { mutate(action: "create" | "rename" | "delete" | "reconnect"): void; snapshot(): unknown };
@@ -121,6 +130,7 @@ declare global {
       bookmarkOpened(): number;
       secretWrites(): unknown[];
       designSanitize(source: string): string;
+      html: typeof htmlFixture;
       customProviderRpc(): { method: string; params: Record<string, unknown> }[];
       context: { replace(): void; select(id: string): void; competing(): void; mode(value: string): void; snapshot(): { rows: ContextLinkView[]; calls: unknown[]; selectedAgentId: string | null; escapeOwns: boolean; detail: unknown; spawn: boolean; composer: string }; changed(): void };
       resources: { pending(): number; settle(mode: string): void; cycle(): void; connected(value: boolean): void };
@@ -159,7 +169,7 @@ declare global {
 type EdgeCase = "external-focus" | "cancel-focus" | "inline-child" | "portal-child" | "no-close" | "guard-popup";
 type ActionScenario = "confirm-actions" | "team-actions" | "queue-actions";
 type MainScreen = "review" | "welcome" | "projects" | "memory" | "events" | "roles" | "inbox" | "slo" | "runs" | "help" | "agents" | "settings" | "teams" | "queues";
-type Scenario = "message-identity" | "project-delete" | "qa-recovery" | "qa-liveboard" | "project-canvas" | "inspector-registry" | "operator-settings" | "operator-read" | "operator-control" | "conversation-fork" | "context-links" | "stt" | "git-review" | "issue-board" | "resources" | "output-images" | "teams-stability" | "team-roles-stability" | "roles-stability" | "desktop-preview" | "workflow-transcript" | "computer-use" | "background-task" | "project-import" | "slash-codex" | "slash-claude" | "group-order" | "quick-spawn" | "workspace-tools" | "keyboard" | `screen-${MainScreen}` | "metrics" | "accounts" | "local-links" | "design" | "design-error" | "design-large" | "secrets" | "live-names" | EdgeCase | ActionScenario | "topbar" | "modal" | "voice" | "ptt" | "transcript" | "pane" | "queues" | "teams" | "settings" | "spawn";
+type Scenario = "codex-full-settings" | "history-recovery" | "remote-control" | "html-preview" | "media-preview" | "native-mcp-settings" | "message-identity" | "project-delete" | "qa-recovery" | "qa-liveboard" | "project-canvas" | "inspector-registry" | "operator-settings" | "operator-read" | "operator-control" | "conversation-fork" | "context-links" | "stt" | "git-review" | "issue-board" | "resources" | "output-images" | "teams-stability" | "team-roles-stability" | "roles-stability" | "desktop-preview" | "workflow-transcript" | "computer-use" | "background-task" | "project-import" | "slash-codex" | "slash-claude" | "group-order" | "quick-spawn" | "workspace-tools" | "keyboard" | `screen-${MainScreen}` | "metrics" | "accounts" | "local-links" | "design" | "design-error" | "design-large" | "secrets" | "live-names" | EdgeCase | ActionScenario | "topbar" | "modal" | "voice" | "ptt" | "transcript" | "pane" | "queues" | "teams" | "settings" | "spawn";
 
 type PttSnapshot = { starts: number; stops: number; sends: string[]; backgroundActions: number };
 let sttActive = false;
@@ -217,6 +227,7 @@ const issueLink = { taskId: "issue-task", sourceId: issueSource.id, repo: issueS
 let stabilitySeq = 0;
 const stabilityPending = new Map<number, { resolve(value: unknown): void; reject(error: unknown): void }>();
 let renameSeq = 999999;
+remoteFixture.nextSeq = () => renameSeq++;
 const secretWrites: unknown[] = [];
 const customProviderCalls: { method: string; params: Record<string, unknown> }[] = [];
 const customProviders: Record<string, Record<string, unknown>> = {};
@@ -229,6 +240,10 @@ let groupOrderSeeded = false;
 let failGroupMove = false;
 const groupMoves: unknown[] = [];
 const orderGroups = ["one", "two"].map((id, order) => ({ id, name: `Group ${id}`, order, createdAt: order }));
+let nativeMcpFixture = false;
+let nativeMcpSpec: Record<string, unknown> = {};
+let failNativeMcp = false;
+const nativeMcpCalls: unknown[] = [];
 let quickSpawnFixture = false;
 const quickSpawns: unknown[] = [];
 const projectImports: unknown[] = [];
@@ -271,6 +286,8 @@ function contextRpc(method: string, params: Record<string, unknown> = {}) {
   return row;
 }
 window.__UI_QA_RPC__ = (method, params) => {
+  if (remoteFixture.active && method === "agent.remoteControl") return remoteFixture.rpc(method, params ?? {});
+  if (method === "fs.read" && String(params?.path).startsWith("/html-fixture/")) return htmlFixture.read(String(params.path));
   if (projectDeleteFixture.active) return projectDeleteFixture.rpc(method, params ?? {});
   const recovery = recoveryRpc(method, params ?? {}); if (recovery) return recovery.value;
   if (canvasFixture.active) {
@@ -344,6 +361,15 @@ window.__UI_QA_RPC__ = (method, params) => {
       if (failGroupMove) { failGroupMove = false; throw new Error("Synthetic membership failure"); }
       appStore.dispatch({ type: "event", event: { seq: renameSeq++, ts: Date.now(), engineId: "local", agentId: String(params?.agentId), kind: "status", data: { state: "running", groups: params?.groups } } as never });
       return { ok: true };
+    }
+  }
+  if (nativeMcpFixture) {
+    if (method === "agent.status") return { spec: { ...nativeMcpSpec }, executionMode: nativeMcpSpec.executionMode, displayLabel: "Native MCP fixture" };
+    if (method === "agent.reconfigure") {
+      nativeMcpCalls.push(params);
+      if (failNativeMcp) { failNativeMcp = false; throw { code: "unknown", message: "Synthetic native MCP refusal" }; }
+      Object.assign(nativeMcpSpec, params?.patch, params?.live);
+      return { ok: true, respawned: !!params?.patch, applied: Object.keys(params?.live ?? {}) };
     }
   }
   if (quickSpawnFixture) {
@@ -822,6 +848,12 @@ function CanvasNavigationProbe() {
   return <MainScreenProbe name={review ? "review" : "projects"} />;
 }
 
+function NativeMcpSettingsProbe() {
+  const [open, setOpen] = useState(true);
+  return <Stage><button data-native-mcp-open onClick={() => setOpen(true)}>Agent settings</button>
+    {open && <AgentSettingsCard agentId={agentId} onClose={() => setOpen(false)} />}</Stage>;
+}
+
 function ScenarioView({ name }: { name: Scenario }) {
   useEffect(() => {
     let secondFrame = 0;
@@ -845,6 +877,8 @@ function ScenarioView({ name }: { name: Scenario }) {
   if (name === "workflow-transcript") return <WorkflowTranscriptProbe />;
   if (name === "background-task") return <BackgroundTaskProbe />;
   if (name === "project-import") return <Stage><ImportCard teams={["crew"]} importDirHint="/synthetic/projects" onClose={() => {}} onSubmit={async (values) => { projectImports.push(values); }} /></Stage>;
+  if (name === "remote-control") return <Stage><RemoteControlProbe /></Stage>;
+  if (name === "native-mcp-settings" || name === "codex-full-settings") return <NativeMcpSettingsProbe />;
   if (name === "quick-spawn") return <MainScreenProbe name="agents" />;
   if (name === "workspace-tools") return <WorkspaceToolsProbe/>;
   if (name === "keyboard") return <KeyboardProbe />;
@@ -864,12 +898,15 @@ function ScenarioView({ name }: { name: Scenario }) {
   if (name === "design-error") return <Stage><DesignPanel scope={{ agentId: "error" }} label="Error fixture" request={async () => { throw new Error("Synthetic list failure"); }} /></Stage>;
   if (name === "design-large") return <Stage><DesignPanel scope={{ agentId: "large" }} label="Large fixture" request={async <T,>() => [{ ...designRow("large", "large", 1), sizeBytes: 2000000 }] as T} readSnapshot={async () => { throw new Error("Oversize snapshot must not be read"); }} /></Stage>;
   if (name === "secrets") return <Stage><div style={{ padding: 16, overflow: "auto", minWidth: 0 }}><SecretsSection /></div></Stage>;
+  if (name === "history-recovery") return <HistoryRecoveryProbe />;
   if (name === "live-names") return <LiveNamesProbe />;
   if (name === "topbar") return <TopbarProbe />;
   if (name === "modal") return <ModalProbe />;
   if (name === "voice") return <VoiceProbe />;
   if (name.startsWith("operator-")) return <OperatorBrowserFixture mode={name} />;
   if (name === "ptt") return <PttProbe />;
+  if (name === "html-preview") return <HtmlPreviewProbe />;
+  if (name === "media-preview") return <MediaPreviewProbe />;
   if (name === "output-images") return <OutputImagesProbe />;
   if (name === "transcript") return <TranscriptProbe />;
   if (name === "pane") return <PaneProbe />;
@@ -1036,7 +1073,19 @@ function show(name: Scenario): void {
       groupOrderSeeded = true;
     }
   }
-  quickSpawnFixture = name === "quick-spawn" || name === "project-import";
+  remoteFixture.active = name === "remote-control";
+  if (remoteFixture.active) remoteFixture.reset(); else remoteFixture.close();
+  nativeMcpFixture = name === "native-mcp-settings" || name === "codex-full-settings";
+  if (nativeMcpFixture) {
+    nativeMcpCalls.length = 0; failNativeMcp = false;
+    nativeMcpSpec = { executionMode: "plan", account: "claude", model: "claude-opus-5-5", runtime: "sdk", strictMcpConfig: true, loadSettings: false, orchestration: { allow: true } };
+    appStore.dispatch({ type: "agentRecords", records: [{ ...agentRecords[0], provider: "claude", accountName: "claude", state: "running" }] as never });
+  }
+  if (name === "codex-full-settings") {
+    nativeMcpSpec = { account: "codex", model: "gpt-6.1-sol", runtime: "sdk", permissionProfile: "acceptEdits", acknowledgeCodexFullAccessRisk: false, on: { permissionRequest: "auto" } };
+    appStore.dispatch({ type: "agentRecords", records: [{ ...agentRecords[0], provider: "codex", accountName: "codex", state: "running" }] as never });
+  }
+  quickSpawnFixture = name === "quick-spawn" || name === "project-import" || nativeMcpFixture;
   if (name === "project-import") projectImports.length = 0;
   if (name === "slash-codex" || name === "slash-claude") {
     appStore.dispatch({ type: "agentRecords", records: [{ ...agentRecords[0], provider: name === "slash-codex" ? "codex" : "claude", state: "running" }] as never });
@@ -1203,9 +1252,13 @@ window.__UI_QA__ = {
   messageIdentity: messageIdentityFixture,
   clearComposer: () => composerLocal.set({composeText:"",pendingImages:[]}),
   secretWrites: () => secretWrites,
+  html: htmlFixture,
   designSanitize: (source) => staticDesignDocument(source).html,
   customProviderRpc: () => customProviderCalls.map((call) => ({ method: call.method, params: { ...call.params } })),
   quickSpawns: () => quickSpawns,
+  remote: remoteFixture,
+  nativeMcpCalls: () => nativeMcpCalls,
+  failNativeMcp: () => { failNativeMcp = true; },
   projectImports: () => projectImports,
   finishBackground: (status) => appStore.dispatch({ type: "event", event: { agentId, seq: renameSeq++, ts: Date.now(), kind: "agent_task", data: { taskId: "bg-browser", status, ...(status === "failed" ? { error: "exit 2" } : {}) } } }),
   groupRegistry: {
@@ -1241,6 +1294,15 @@ window.__UI_QA__ = {
     appStore.dispatch({ type: "event", event: { seq: renameSeq++, ts: Date.now(), engineId: "local", agentId, kind: phase === "busy" ? "message_delta" : "turn_complete", data: phase === "busy" ? { text: "Still working beyond the soft limit" } : {} } });
   },
   renameAgent(name = "Monitoring investigator") { appStore.dispatch({ type: "event", event: { seq: renameSeq++, engineId: "local", ts: Date.now(), agentId, kind: "status", data: { displayLabel: name } } }); },
+  rosterProbe(mode) {
+    const kept = { ...agentRecords[0], state: "paused", displayLabel: "Monitoring investigator" };
+    const ghost = { ...agentRecords[0], agentId: "roster-ghost", state: "running", displayLabel: "Gone agent fixture", treeId: "roster-ghost" };
+    if (mode === "seed") appStore.dispatch({ type: "agentRecords", records: [kept, ghost] as never });
+    else if (mode === "prune") {
+      appStore.dispatch({ type: "agentRecords", records: [kept] as never });
+      appStore.dispatch({ type: "backfillHistory", agentId: "roster-ghost", events: [{ agentId: "roster-ghost", seq: renameSeq++, ts: Date.now(), kind: "agent_started", data: {} }] });
+    } else appStore.dispatch({ type: "event", event: { agentId: "supervisor", seq: renameSeq++, ts: Date.now(), kind: "status", data: { state: "purged_terminal_sessions", count: 1, agentIds: ["roster-ghost"] } } });
+  },
   pttSnapshot: () => ({ ...ptt, sends: [...ptt.sends] }),
   pttSpeak: () => voiceLocal.dispatch({ type: "speaking", text: "synthetic reply" }),
   setVoiceActive(active) {

@@ -11,6 +11,9 @@ import { log, logError } from "./logger.js";
 // in the response encode). Measured normal peak for the desktop app: 56 MB. Dropping the
 // connection is safe: clients reconnect with backoff and re-subscribe.
 const MAX_QUEUED_BYTES = 256 * 1024 * 1024;
+// Match both desktop and SDK clients' 32 MiB frame ceiling.
+// A bounded error lets history readers ask for fewer events on the same socket.
+const MAX_RESPONSE_BYTES = 32 * 1024 * 1024;
 
 export async function startRpcServer(opts: { socketPath: string; engine: Engine; onStop?: () => void; maxQueuedBytes?: number }) {
   const maxQueuedBytes = opts.maxQueuedBytes ?? MAX_QUEUED_BYTES;
@@ -88,9 +91,18 @@ export async function startRpcServer(opts: { socketPath: string; engine: Engine;
     // socket chunk boundaries instead of emitting replacement chars per chunk.
     const decoder = new StringDecoder("utf8");
     const unsub = (): void => { subscribers.delete(sock); };
-    const respond = (id: string, ok: boolean, body: unknown) =>
-      writeBounded(sock, encodeFrame(ok ? { id, type: "response", ok, result: body }
-                                        : { id, type: "response", ok, error: body as { code: string; message: string } }));
+    const respond = (id: string, ok: boolean, body: unknown) => {
+      const frame = encodeFrame(ok ? { id, type: "response", ok, result: body }
+                                  : { id, type: "response", ok, error: body as { code: string; message: string } });
+      if (Buffer.byteLength(frame, "utf8") > MAX_RESPONSE_BYTES) {
+        writeBounded(sock, encodeFrame({ id, type: "response", ok: false, error: {
+          code: "response-too-large",
+          message: "Response exceeds 32 MiB; request a smaller page or narrower range.",
+        } }));
+        return;
+      }
+      writeBounded(sock, frame);
+    };
 
     sock.on("data", (chunk) => {
       buf += decoder.write(chunk);

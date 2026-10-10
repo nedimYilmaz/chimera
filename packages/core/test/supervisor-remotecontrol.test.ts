@@ -1,4 +1,5 @@
-import { describe, it, expect } from "vitest";
+import { voiceAgentName } from "@chimera/protocol/agent-name";
+import { describe, it, expect, vi } from "vitest";
 import type { FakeStep } from "@chimera/core/backends/fake";
 import { FakeAgentBackend } from "@chimera/core/backends/fake";
 import { UnknownAgentError, AgentNotRunningError, RemoteControlUnsupportedError, RemoteControlDeniedError } from "@chimera/core/supervisor";
@@ -11,6 +12,7 @@ import { CooldownTracker } from "@chimera/core/failover";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { reconstructAgentsFromLog } from "@chimera/core/replay";
 import { makeSupervisor, CFG, fakeExec } from "./helpers.js";
 
 // REMOTE-CONTROL: AgentSupervisor.remoteControl — a LIVE control-request round trip
@@ -47,9 +49,93 @@ describe("AgentSupervisor.remoteControl", () => {
 
     expect(status.enabled).toBe(true);
     expect(status.provider).toBe("claude");
-    expect(status.name).toBe(`chimera-${rec.agentId.slice(0, 8)}`);
+    expect(status.name).toBe(voiceAgentName(rec.agentId));
     expect(status.sessionUrl).toContain(status.name);
     expect(fake.spawns).toHaveLength(1);   // NO respawn — same query, unlike setModel
+  });
+
+  it("uses the agent name, follows later renames, and preserves explicit remote names", async () => {
+    const { sup, events } = makeSupervisor([RUNNING]);
+    const rec = await sup.spawn({ prompt: "x", cwd: "/tmp", isolation: "none", displayLabel: "daily-digest" });
+    expect((await sup.remoteControl(rec.agentId, true)).name).toBe("daily-digest");
+    await sup.parkIdle(rec.agentId, 99_999_999);
+    expect(rec.state).toBe("running");
+    await sup.renameAgent(rec.agentId, "renamed", { byOperator: true });
+    await sup.maintainRemoteControl(rec.agentId);
+    const lastRemote = () => events.tail(rec.agentId, 100).filter(e => e.data.remoteControl).at(-1)!.data.remoteControl;
+    expect(lastRemote()).toMatchObject({ enabled: true, name: "renamed" });
+    await sup.remoteControl(rec.agentId, true, "custom");
+    await sup.maintainRemoteControl(rec.agentId);
+    expect(lastRemote()).toMatchObject({ name: "custom" });
+    const replayed = structuredClone(rec); delete replayed.remoteControlIntent;
+    reconstructAgentsFromLog([replayed], events.tail(rec.agentId, 100));
+    expect(replayed.remoteControlIntent).toEqual({ enabled: true, name: "custom" });
+    await sup.remoteControl(rec.agentId, false);
+    reconstructAgentsFromLog([replayed], events.tail(rec.agentId, 100));
+    expect(replayed.remoteControlIntent).toBeUndefined();
+    await sup.maintainRemoteControl(rec.agentId);
+    expect(lastRemote()).toMatchObject({ enabled: false });
+    await sup.parkIdle(rec.agentId, 99_999_999);
+    expect(rec.state).toBe("paused");
+  });
+
+  it("serializes a slow renewal before off and does not renew after operator pause", async () => {
+    const { sup } = makeSupervisor([RUNNING]);
+    const rec = await sup.spawn({ prompt: "x", cwd: "/tmp", isolation: "none" });
+    await sup.remoteControl(rec.agentId, true);
+    const handle = (sup as any).handles.get(rec.agentId);
+    let finish!: () => void;
+    const calls: boolean[] = [];
+    handle.remoteControl = vi.fn(async (enabled: boolean) => {
+      calls.push(enabled);
+      if (enabled) await new Promise<void>(resolve => { finish = resolve; });
+    });
+    const renewal = sup.maintainRemoteControl(rec.agentId);
+    await vi.waitFor(() => expect(calls).toEqual([true]));
+    const off = sup.remoteControl(rec.agentId, false);
+    (sup as any).reissueRemoteControlIntent(rec.agentId);
+    const late = sup.maintainRemoteControl(rec.agentId);
+    finish(); await Promise.all([renewal, off, late]);
+    expect(calls).toEqual([true, false]);
+    expect(rec.remoteControlIntent).toBeUndefined();
+    rec.remoteControlIntent = { enabled: true };
+    await sup.hold(rec.agentId);
+    await sup.maintainRemoteControl(rec.agentId);
+    expect(rec.state).toBe("paused");
+    expect(calls).toEqual([true, false]);
+  });
+
+  it("restores only automatic idle/restart pauses and reports renewal failures without exposing provider text", async () => {
+    const { sup, events } = makeSupervisor([RUNNING, RUNNING]);
+    const rec = await sup.spawn({ prompt: "x", cwd: "/tmp", isolation: "none" });
+    await vi.waitFor(() => expect(rec.sessionId).toBe("sess-1"));
+    await sup.remoteControl(rec.agentId, true);
+    await sup.hold(rec.agentId);
+    // Model a legacy idle pause / restored daemon snapshot, not a fresh operator request.
+    rec.pauseReason = "daemon-restart";
+    await sup.maintainRemoteControl(rec.agentId);
+    await vi.waitFor(() => expect(rec.state).toBe("running"));
+    await vi.waitFor(() => expect(events.tail(rec.agentId, 100).filter(e => e.data.remoteControl)).toHaveLength(2));
+    (sup as any).handles.get(rec.agentId).remoteControl = async () => { throw new Error("secret-provider-token"); };
+    await sup.maintainRemoteControl(rec.agentId);
+    expect(rec.state).toBe("running"); expect(rec.remoteControlIntent?.enabled).toBe(true);
+    const check = events.tail(rec.agentId, 100).filter(e => e.data.remoteControlCheck).at(-1)!;
+    expect(check.data.remoteControlCheck).toEqual({ ok: false, reason: "provider-check-failed" });
+    expect(JSON.stringify(check)).not.toContain("secret-provider-token");
+    await sup.kill(rec.agentId);
+  });
+
+  it("does not commit a stale remote acknowledgment after the session is killed", async () => {
+    const { sup } = makeSupervisor([RUNNING]);
+    const rec = await sup.spawn({ prompt: "x", cwd: "/tmp", isolation: "none" });
+    const handle = (sup as any).handles.get(rec.agentId);
+    let finish!: () => void;
+    handle.remoteControl = () => new Promise<void>(resolve => { finish = resolve; });
+    const pending = sup.remoteControl(rec.agentId, true);
+    const rejected = expect(pending).rejects.toThrow("session changed");
+    await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
+    await sup.kill(rec.agentId); finish(); await rejected;
+    expect(rec.remoteControlIntent).toBeUndefined();
   });
 
   it("honors an explicit name override", async () => {
@@ -157,7 +243,7 @@ describe("AgentSupervisor.resumePaused — remote control on a provider with no 
     const agents = (sup as unknown as { agents: Map<string, { remoteControlIntent?: { enabled: true; name?: string } }> }).agents;
     agents.get(rec.agentId)!.remoteControlIntent = { enabled: true };
 
-    await sup.parkIdle(rec.agentId, 99_999);
+    await sup.hold(rec.agentId);
     await expect(sup.resumePaused(rec.agentId)).resolves.toBeUndefined();
     await new Promise((r) => setTimeout(r, 20));   // let the fire-and-forget reissue attempt (and swallow) settle
 

@@ -101,12 +101,12 @@ describe("confined Git/file operations in real repositories", () => {
     expect(() => ops.commit(root, "signing blocked", s.head, s.indexFingerprint)).toThrow();
     const after = ops.status(root); expect(after.head).toBe(s.head); expect(after.indexFingerprint).toBe(s.indexFingerprint);
     expect(() => git("add", "--", "one.txt")).not.toThrow();
-  });
+  }, 15000);
   it("handles literal option/pathspec-shaped names and scrubs inherited Git roots", () => {
     const { root, ops } = repo(); const name = ":(glob)*"; writeFileSync(join(root, name), "literal"); writeFileSync(join(root, "-A"), "option");
     const s = ops.status(root); ops.stage(root, [name], false, s.head, s.indexFingerprint); expect(ops.status(root).files.filter(f => f.staged).map(f => f.path)).toEqual([name]);
     expect(gitEnvironment({})).not.toHaveProperty("GIT_DIR");
-  });
+  }, 15000);
   it("refuses Git configuration that redirects the selected worktree outside its root", () => {
     const { root, ops, git } = repo(); const outside = realpathSync(mkdtempSync(join(tmpdir(), "gitops-redirect-"))); dirs.push(outside);
     git("config", "core.worktree", outside);

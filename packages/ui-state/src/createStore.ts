@@ -91,8 +91,9 @@ export function createStore(api: ChimeraApi): UiStore {
     // difference between a ~5MB and a ~1.4MB snapshot on every connect and reconnect, which is
     // what made a restarted daemon feel like it had failed to come up. An older daemon ignores
     // the param and returns the full record — a superset, so the projection is unaffected.
+    const sinceSeq = state.lastSeq;
     const records = await api.request<AgentRecordLite[]>("agent.list", { lite: true });
-    dispatch({ type: "agentRecords", records });
+    dispatch({ type: "agentRecords", records, sinceSeq });
     await tryPhase2("team.list", "teams");
     await tryPhase2("queue.list", "queues");
   };

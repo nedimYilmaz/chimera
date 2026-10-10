@@ -978,6 +978,7 @@ const PRESENTATION: Record<EngineToolName, McpPresentation> = {
   // AGENT-RECONFIGURE: `raw` because the patch is a free-shaped object over ten optional spec
   // fields — the palette's scalar form cannot express it, and the real surface is the transcript
   // header's ⚙ panel, which sends the RPC directly.
+  agent_set_mode: { description: "Change Claude auto/plan/execute mode without restart", kind: "raw", rpc: "agent.reconfigure", rawTemplate: '{"agentId":"","live":{"executionMode":"execute"}}' },
   agent_reconfigure: {
     description: "Change a live agent's settings in one respawn into its own session — context survives, the process restarts",
     kind: "raw", rpc: "agent.reconfigure", rawTemplate: '{"agentId":"","patch":{}}',
@@ -1458,9 +1459,9 @@ export class SystemCommands {
   // is what the card actually renders — this call's own await just drives the toast
   // and surfaces an unsupported-provider rejection (guarded → lastError) instead of
   // silently doing nothing.
-  applyRemoteControl(agentId: string, enable: boolean): Promise<void> {
+  applyRemoteControl(agentId: string, enable: boolean, acknowledgeTransition = false): Promise<void> {
     return this.guarded(async () => {
-      const status = await this.rpc<{ sessionUrl?: string; connectionStatus?: string }>("agent.remoteControl", { agentId, enable });
+      const status = await this.rpc<{ sessionUrl?: string; connectionStatus?: string }>("agent.remoteControl", { agentId, enable, ...(acknowledgeTransition ? { acknowledgeTransition: true } : {}) });
       this.store.dispatch({
         type: "notice",
         message: status?.connectionStatus ? `remote control: ${status.connectionStatus}` : enable ? TOASTS.remoteControlEnabled(status?.sessionUrl) : TOASTS.remoteControlDisabled,

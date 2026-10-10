@@ -55,6 +55,17 @@ function byClass(renderer: ReturnType<typeof create>, pattern: RegExp): ReactTes
 }
 
 describe("TranscriptHeader — headerTop (name/id button + state chip)", () => {
+  it("shows only observed native mode and opens settings from its chip", () => {
+    const onAction = vi.fn();
+    const r = renderHeader({ executionMode: "plan", onAction });
+    const chip = r.root.findByProps({ "data-execution-mode": "plan" });
+    expect(chip.children).toEqual(["plan mode"]);
+    act(() => chip.props.onClick());
+    expect(onAction).toHaveBeenCalledWith("system.agentSettings");
+    act(() => r.update(<TranscriptHeader {...baseProps} />));
+    expect(r.root.findAll(n => n.props["data-execution-mode"])).toHaveLength(0);
+    act(() => r.unmount());
+  });
   it("offers one voice-history toggle that reflects explicit visibility", () => {
     const onToggleVoiceHistory = vi.fn();
     const renderer = renderHeader({ onToggleVoiceHistory });

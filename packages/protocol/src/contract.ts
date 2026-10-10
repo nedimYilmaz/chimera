@@ -319,6 +319,7 @@ const RoleUpdateRequestSchema = z.object({
     effort: EffortLevelSchema.optional(),
     instructions: z.string().optional(),
     resultSchema: z.record(z.string(), z.unknown()).optional(),
+    executionMode: z.enum(["plan", "execute", "auto"]).optional(),
     permissionProfile: z.enum(["readOnly", "acceptEdits", "full"]).optional(),
     autonomy: z.enum(["ask", "full"]).optional(),
     acknowledgeCodexFullAccessRisk: z.boolean().optional(),

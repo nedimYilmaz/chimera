@@ -208,3 +208,5 @@
   cursor: pointer;
   padding: 0;
 }
+
+.wrapHint { white-space: normal; overflow-wrap: anywhere; }

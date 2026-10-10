@@ -1,3 +1,5 @@
+import { probeHtmlPreview } from "./probes/html-preview.mjs";
+import { probeMediaPreview } from "./probes/media-preview.mjs";
 import { probeMessageIdentity } from "./probes/message-identity.mjs";
 import { probeProjectDelete } from "./probes/project-delete.mjs";
 import { probeCompactHeader } from "./probes/compact-header.mjs";
@@ -65,6 +67,11 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
           export const readArtifactSnapshot = async (id) => call("artifact.read", {id});
           export const openArtifactSnapshot = async () => {};
           export const openArtifactUrl = async () => {};
+          export const prepareLocalMedia = async (path) => {
+            if (path.endsWith("broken")) throw new Error("fixture missing file");
+            return window.__MEDIA_FIXTURE_URL__;
+          };
+          export const openLocalFile = async (path, reveal) => { window.__MEDIA_OPEN_CALLS__.push({path, reveal}); };
           export const setDockBadge = async () => {};
           export const exportCsv = async (filename) => "/mock/" + filename;
           export const checkpointFilesSince = async () => 0;
@@ -101,7 +108,7 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
         server.middlewares.use("/__design-leak", (_req, res) => { designLeaks++; res.end("blocked resource"); });
         server.middlewares.use("/__ui-qa", (_req, res) => {
           res.setHeader("Content-Type", "text/html");
-          res.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'");
+          res.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'");
           res.end('<!doctype html><html lang="en"><head><meta charset="UTF-8"><title>Chimera UI QA</title></head><body><div id="root"></div><script>window.__CHIMERA_MOCK__={rpc:async()=>({})}</script><script type="module" src="/test/fixtures/ui-browser.tsx"></script></body></html>');
         });
       },
@@ -344,6 +351,7 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
     const layout = await layoutAudit('document.querySelector("[data-output-image-fixture]")');
     check(`output images ${width}px fit viewport`, layout.overflowing.length === 0 && layout.scopeScrollWidth <= layout.scopeWidth + 1, layout);
   }
+  check("output images from consecutive tools share a row", await evaluate(`(() => { const chips = [...document.querySelectorAll('[data-output-image-chip]')].map(e => e.getBoundingClientRect()); return document.querySelectorAll('[data-output-images]').length === 1 && chips.length === 2 && Math.abs(chips[0].top - chips[1].top) < 2 && chips[1].left > chips[0].left; })()`));
   check("output preview visible while tool strip is collapsed", await evaluate(`document.querySelectorAll('[data-output-image-chip]').length === 2 && !document.querySelector('[data-tool-detail]')`));
   const decoded = await evaluate(`(() => { const img = document.querySelector('[data-output-image-chip] img'); return { width: img.naturalWidth, height: img.naturalHeight, complete: img.complete }; })()`);
   check("output raster decodes actual image bytes", decoded.complete && decoded.width === expectedImageDimensions.width && decoded.height === expectedImageDimensions.height, decoded);
@@ -403,6 +411,9 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
   await evaluate(`document.querySelector('[aria-label="Local replacement"]').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
   await waitFor(`!document.querySelector('[aria-label="Local replacement"]')`);
   await screenshot("output-images");
+  await probeMediaPreview({ evaluate, show, waitFor, check, click, viewport, screenshot, key });
+  await probeHtmlPreview({ evaluate, show, waitFor, check, click, viewport, screenshot, key, call, sessionId });
+
   if (process.env.CHIMERA_BROWSER_GATE_IMAGE_ONLY === "1") return;
 
   await viewport(390, 900);
@@ -1695,11 +1706,114 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
   await click('[data-spawn-submit]');
   await waitFor(`window.__UI_QA__.quickSpawns().length === 1 && !document.querySelector('[data-quick-spawn]')`);
   const quickSpec = await evaluate(`window.__UI_QA__.quickSpawns()[0]`);
+  check("quick spawn enables native MCPs alongside Chimera", quickSpec.loadSettings === true && quickSpec.strictMcpConfig === false && quickSpec.orchestration.allow === true, quickSpec);
   check("quick spawn preserves idle session defaults and selected routing", quickSpec.provider === 'codex' && quickSpec.account === 'codex' && quickSpec.model === 'gpt-6-astra' && quickSpec.session === true && quickSpec.resumeOnly === true && quickSpec.resume === null && quickSpec.autonomy === 'full' && quickSpec.compactionThreshold === 500000 && quickSpec.maxTurns === 120 && quickSpec.orchestration.allow === true, quickSpec);
   await click('[data-agent-action="agents.spawn"]');
   await waitFor(`document.querySelector('[data-spawn-field="prompt"]')`);
   check("full spawn form remains available", await evaluate(`!document.querySelector('[data-quick-spawn]') && !!document.querySelector('[data-spawn-field="role"]')`));
-  await evaluate(`document.querySelector('[data-spawn-card] button:last-child').click()`);
+  await evaluate(`(() => {const el=document.querySelector('[data-spawn-field="account"]');el.value='claude';el.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+  await waitFor(`!document.querySelector('[data-spawn-field="nativeMcps"]')?.disabled`);
+  await input('[data-spawn-field="prompt"]', 'Check installed tools');
+  await input('[data-path-picker="spawn-cwd"]', '/synthetic/project');
+  await evaluate(`(() => {const el=document.querySelector('[data-spawn-field="nativeMcps"]');el.value='on';el.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+  check("execution mode spawn auto is distinct from role default", await evaluate(`(() => {const el=document.querySelector('[data-spawn-field="executionMode"]');return [...el.options].some(o=>o.value==='auto'&&o.textContent==='Auto')&&[...el.options].some(o=>o.value===''&&o.textContent==='Role default');})()`));
+  await evaluate(`(() => {const el=document.querySelector('[data-spawn-field="executionMode"]');el.value='plan';el.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+  await click('[data-spawn-orchestration="on"]');
+  await click('[data-spawn-submit]');
+  await waitFor(`window.__UI_QA__.quickSpawns().length === 2`);
+  check("normal spawn native MCPs coexist with Chimera", await evaluate(`(() => {const s=window.__UI_QA__.quickSpawns()[1];return s.strictMcpConfig===false && s.loadSettings===true && s.orchestration.allow===true;})()`));
+
+  check("execution mode normal spawn preserves plan choice", await evaluate(`window.__UI_QA__.quickSpawns()[1].executionMode==='plan'`));
+
+  await show("remote-control");
+  for (const width of [390, 780, 1200]) {
+    await viewport(width, 844); await settleRender();
+    check(`remote transition ${width}px fit`, await evaluate(`(() => {const b=document.querySelector('[data-remote-control-toggle]');b.focus();const r=b.getBoundingClientRect();return !b.disabled && b.textContent.includes('switch and enable') && r.left>=0 && r.right<=innerWidth && document.activeElement===b && document.body.scrollWidth<=innerWidth;})()`));
+  }
+  await evaluate(`window.__UI_QA__.remote.configure('exec',true)`); await settleRender();
+  await buttonKey('Enter','Enter');
+  check("remote transition busy preserves current turn", await evaluate(`document.querySelector('[data-remote-control-toggle]').disabled && document.querySelector('[data-remote-transition-help]').textContent.includes('Wait') && window.__UI_QA__.remote.calls.length===0`));
+  await evaluate(`window.__UI_QA__.remote.configure()`); await settleRender();
+  await click('[data-remote-control-toggle]'); await settleRender();
+  await buttonKey('Enter','Enter');
+  check("remote transition explicit acknowledgment and pending dedup", await evaluate(`document.querySelector('[data-remote-control-toggle]').disabled && window.__UI_QA__.remote.calls.length===1 && window.__UI_QA__.remote.calls[0].acknowledgeTransition===true`));
+  await evaluate(`window.__UI_QA__.remote.complete()`); await settleRender();
+  check("remote transition reflects acknowledged connection", await evaluate(`document.body.textContent.includes('connected') && document.querySelector('[data-remote-control-toggle]').textContent.includes('disable')`));
+  await click('[data-remote-control-toggle]'); await evaluate(`window.__UI_QA__.remote.complete()`); await settleRender();
+  check("remote disable avoids transition acknowledgment", await evaluate(`window.__UI_QA__.remote.calls[1].enable===false && !('acknowledgeTransition' in window.__UI_QA__.remote.calls[1])`));
+  await evaluate(`window.__UI_QA__.remote.configure('app-server')`); await settleRender();
+  await click('[data-remote-control-toggle]'); await evaluate(`window.__UI_QA__.remote.complete()`); await settleRender();
+  check("remote appserver enables without switching", await evaluate(`window.__UI_QA__.remote.calls[2].enable===true && !('acknowledgeTransition' in window.__UI_QA__.remote.calls[2])`));
+  await evaluate(`window.__UI_QA__.remote.configure('exec',false,'paused')`); await settleRender();
+  check("remote paused agent cannot restart implicitly", await evaluate(`document.querySelector('[data-remote-control-toggle]').disabled`));
+  await evaluate(`window.__UI_QA__.remote.configure('exec',false,'running','openai')`); await settleRender();
+  check("remote unsupported provider stays disabled", await evaluate(`document.querySelector('[data-remote-control-toggle]').disabled`));
+
+  await evaluate(`window.__UI_QA__.remote.snapshot()`); await settleRender();
+  check("remote restored snapshot offers explicit transition", await evaluate(`!document.querySelector('[data-remote-control-toggle]').disabled && document.querySelector('[data-remote-control-toggle]').textContent.includes('switch and enable')`));
+
+  await show("native-mcp-settings");
+  await waitFor(`document.querySelector('[data-settings-field="nativeMcps"]')?.value === 'off'`);
+  for (const width of [390, 780, 1200]) {
+    await viewport(width, 844); await settleRender();
+    check(`execution mode ${width}px fits and receives keyboard focus`, await evaluate(`(() => {const el=document.querySelector('[data-settings-field="executionMode"]');el.scrollIntoView({block:'center'});el.focus();const r=el.getBoundingClientRect();return document.activeElement===el && r.left>=0 && r.right<=innerWidth+1 && el.value==='plan';})()`));
+    check(`native MCP settings ${width}px fit and keyboard focus`, await evaluate(`(() => {const el=document.querySelector('[data-settings-field="nativeMcps"]');el.scrollIntoView({block:'center'});el.focus();const r=el.getBoundingClientRect();const card=document.querySelector('[data-agent-settings-card]');return document.activeElement===el && r.width>0 && r.left>=0 && r.right<=innerWidth+1 && card.scrollWidth<=card.clientWidth+1;})()`));
+  }
+  await click('[data-settings-apply]');
+  await waitFor(`!document.querySelector('[data-agent-settings-card]')`);
+  check("native MCP unchanged settings avoid restart", await evaluate(`window.__UI_QA__.nativeMcpCalls().length===0`));
+  await click('[data-native-mcp-open]');
+  await waitFor(`document.querySelector('[data-settings-field="nativeMcps"]')?.value === 'off'`);
+  await evaluate(`(() => {const el=document.querySelector('[data-settings-field="nativeMcps"]');el.value='on';el.dispatchEvent(new Event('change',{bubbles:true}));window.__UI_QA__.failNativeMcp();})()`);
+  await click('[data-settings-apply]');
+  await waitFor(`document.querySelector('[data-agent-settings-card]')?.textContent.includes('Synthetic native MCP refusal')`);
+  check("native MCP refusal retains selection and Chimera explanation", await evaluate(`document.querySelector('[data-settings-field="nativeMcps"]').value==='on' && document.querySelector('#agent-native-mcps-hint').textContent.includes('Chimera tools stay unchanged')`));
+  await click('[data-settings-apply]');
+  await waitFor(`!document.querySelector('[data-agent-settings-card]')`);
+  check("native MCP settings enable with one combined patch", await evaluate(`(() => {const p=window.__UI_QA__.nativeMcpCalls()[1].patch;return JSON.stringify(p)===JSON.stringify({strictMcpConfig:false,loadSettings:true});})()`));
+  await click('[data-native-mcp-open]');
+  await waitFor(`document.querySelector('[data-settings-field="nativeMcps"]')?.value === 'on'`);
+  await evaluate(`(() => {const el=document.querySelector('[data-settings-field="nativeMcps"]');el.value='off';el.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+  await click('[data-settings-apply]');
+  await waitFor(`!document.querySelector('[data-agent-settings-card]')`);
+  check("native MCP settings disable preserves settings and Chimera grant", await evaluate(`JSON.stringify(window.__UI_QA__.nativeMcpCalls()[2].patch)===JSON.stringify({strictMcpConfig:true})`));
+
+  await click('[data-native-mcp-open]');
+  await waitFor(`document.querySelector('[data-settings-field="executionMode"]')?.value==='plan'`);
+  await evaluate(`(() => {const el=document.querySelector('[data-settings-field="executionMode"]');el.value='auto';el.dispatchEvent(new Event('change',{bubbles:true}));window.__UI_QA__.failNativeMcp();})()`);
+  await click('[data-settings-apply]');
+  await waitFor(`document.querySelector('[data-agent-settings-card]')?.textContent.includes('Synthetic native MCP refusal')`);
+  check("execution mode failure retains operator selection", await evaluate(`document.querySelector('[data-settings-field="executionMode"]').value==='auto'`));
+  for (const width of [390, 780, 1200]) {
+    await viewport(width, 844); await settleRender();
+    check(`execution mode RPC error ${width}px readable`, await evaluate(`(() => {const e=document.querySelector('[data-settings-error]'); e.scrollIntoView({block:'center'}); const r=e.getBoundingClientRect(); return e.getAttribute('role')==='alert' && e.textContent.includes('Synthetic native MCP refusal') && !e.textContent.includes('[object Object]') && r.left>=0 && r.right<=innerWidth+1 && e.scrollWidth<=e.clientWidth+1;})()`));
+  }
+
+  await click('[data-settings-apply]');
+  await waitFor(`!document.querySelector('[data-agent-settings-card]')`);
+  check("execution mode saves live without restart patch", await evaluate(`(() => {const calls=window.__UI_QA__.nativeMcpCalls();const p=calls.at(-1);return !p.patch && JSON.stringify(p.live)===JSON.stringify({executionMode:'auto'});})()`));
+  await click('[data-native-mcp-open]');
+  await waitFor(`document.querySelector('[data-settings-field="executionMode"]')?.value==='auto'`);
+  check("execution mode explicit auto persists after settings reopen", await evaluate(`document.querySelector('[data-settings-field="executionMode"]').value==='auto'`));
+  await click('[data-settings-cancel]');
+
+  await show("codex-full-settings");
+  await waitFor(`document.querySelector('[data-settings-field="permissionProfile"]')?.value==='acceptEdits'`);
+  await evaluate(`(() => {const el=document.querySelector('[data-settings-field="permissionProfile"]');el.value='full';el.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+  await waitFor(`!!document.querySelector('[data-settings-full-risk]')`);
+  check("Codex full settings require explicit risk acknowledgment", await evaluate(`document.querySelector('[data-settings-apply]').disabled && window.__UI_QA__.nativeMcpCalls().length===0`));
+  for (const width of [390, 780, 1200]) {
+    await viewport(width, 900);
+    check(`Codex full settings acknowledgment fits ${width}px`, await evaluate(`(() => {const el=document.querySelector('[data-settings-full-risk]');el.scrollIntoView({block:'center'});el.focus();const r=el.parentElement.getBoundingClientRect();return document.activeElement===el && r.left>=0 && r.right<=innerWidth+1;})()`));
+  }
+  await click('[data-settings-full-risk]');
+  await click('[data-settings-apply]');
+  await waitFor(`!document.querySelector('[data-agent-settings-card]')`);
+  check("Codex full settings submit grant and profile together", await evaluate(`(() => {const p=window.__UI_QA__.nativeMcpCalls()[0];return p.live.permissionProfile==='full' && p.patch.acknowledgeCodexFullAccessRisk===true && Object.keys(p.patch).length===1;})()`));
+  await click('[data-native-mcp-open]');
+  await waitFor(`document.querySelector('[data-settings-field="permissionProfile"]')?.value==='full'`);
+  check("Codex full settings retain grant on reopen", await evaluate(`!document.querySelector('[data-settings-full-risk]')`));
+  await click('[data-settings-cancel]');
 
   await viewport(1200, 800);
   await show("live-names");
@@ -1770,6 +1884,22 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
   await evaluate(`window.__UI_QA__.softState('paused')`);
   await waitFor(`document.querySelector('[data-live-list] [role="img"][aria-label^="paused"]')`);
   check("actual pause remains paused despite prior soft limit", await evaluate(`(() => { const e=document.querySelector('[data-live-list] [role="img"][aria-label^="paused"]'); return e?.textContent === '⏸' && e.className.includes('toneWarn') && !document.querySelector('[data-soft-limit-warning]') && !document.querySelector('[data-live-list] [class*="busyPulse"]'); })()`));
+  await evaluate(`window.__UI_QA__.rosterProbe('seed')`);
+  await waitFor(`document.querySelector('[data-live-list]')?.textContent.includes('Gone agent fixture')`);
+  await evaluate(`window.__UI_QA__.rosterProbe('prune')`);
+  await waitFor(`!document.querySelector('[data-live-list]')?.textContent.includes('Gone agent fixture')`);
+  check("agent roster drops absent rows despite late history and keeps paused rows", await evaluate(`document.querySelector('[data-live-list]')?.textContent.includes('Monitoring investigator') && !!document.querySelector('[data-live-list] [role="img"][aria-label^="paused"]')`));
+  await evaluate(`window.__UI_QA__.rosterProbe('seed'); window.__UI_QA__.rosterProbe('forget')`);
+  await waitFor(`!document.querySelector('[data-live-list]')?.textContent.includes('Gone agent fixture')`);
+  check("agent roster removes daemon-deleted rows without a reload", await evaluate(`!window.__CHIMERA_STORE__.getState().agents['roster-ghost'] && !window.__CHIMERA_STORE__.getState().agents.supervisor`));
+  await show("history-recovery");
+  await waitFor(`JSON.parse(document.querySelector('[data-history-page]').textContent).count === 125`);
+  check("oversized history loads newest page without false exhaustion", await evaluate(`(() => { const p = JSON.parse(document.querySelector('[data-history-page]').textContent); return !p.exhausted && !p.error && p.calls.join(',') === '500,250,125' && document.body.textContent.includes('Retained conversation 300'); })()`));
+  await click('[data-history-older]');
+  await waitFor(`JSON.parse(document.querySelector('[data-history-page]').textContent).count === 250`);
+  await click('[data-history-older]');
+  await waitFor(`JSON.parse(document.querySelector('[data-history-page]').textContent).count === 300`);
+  check("oversized history retains every older conversation", await evaluate(`(() => { const p = JSON.parse(document.querySelector('[data-history-page]').textContent); return p.exhausted && !p.error && p.calls.length === 9; })()`));
   await show("secrets");
   await waitFor(`document.querySelectorAll('[data-secret-row]').length === 2`);
   await evaluate(`window.__UI_QA__.renameAgent()`);

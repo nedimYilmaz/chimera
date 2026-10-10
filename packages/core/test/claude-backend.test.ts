@@ -183,12 +183,12 @@ describe("ClaudeAgentBackend", () => {
     await settle();
     const o = calls[0]!.options;
     expect((o.env as Record<string, string>)["ANTHROPIC_AUTH_TOKEN"]).toBe("tok-x");
-    expect(o.permissionMode).toBe("acceptEdits");
+    expect(o.permissionMode).toBe("auto");
     expect(o.settingSources).toEqual(["project"]);
     expect(o.model).toBe("claude-x");
     expect(o.maxTurns).toBe(7);
     expect(o.cwd).toBe(REPO_BACKED_CWD);
-    expect(calls[1]!.options.permissionMode).toBe("bypassPermissions");
+    expect(calls[1]!.options.permissionMode).toBe("auto");
     expect(calls[2]!.options.permissionMode).toBe("default");
   });
 
@@ -427,7 +427,7 @@ describe("ClaudeAgentBackend", () => {
     }
   });
 
-  it("bridges canUseTool to the permission decider (non-bypass: default/acceptEdits keep canUseTool, no hook)", async () => {
+  it("bridges auto-mode permission requests to the permission decider", async () => {
     const { fn, calls } = fakeQuery(SCRIPT);
     const decide = vi.fn(async ({ toolName }: { toolName: string }) => toolName === "Edit");
     new ClaudeAgentBackend({ queryFn: fn }).spawn(spec(), () => {}, decide as never);
@@ -436,9 +436,8 @@ describe("ClaudeAgentBackend", () => {
     expect((await canUseTool("Edit", {})).behavior).toBe("allow");
     expect((await canUseTool("Bash", {})).behavior).toBe("deny");
     expect(decide).toHaveBeenCalledTimes(2);
-    // Non-bypass path must NOT wire a PreToolUse hook (that would double-gate a mode whose
-    // canUseTool is consulted natively).
-    expect("hooks" in calls[0]!.options).toBe(false);
+    // Auto also has a deny-only hook for calls approved without canUseTool.
+    expect("hooks" in calls[0]!.options).toBe(true);
     expect("allowDangerouslySkipPermissions" in calls[0]!.options).toBe(false);
   });
 
@@ -465,14 +464,14 @@ describe("ClaudeAgentBackend", () => {
   // asserts the hook gates IDENTICALLY to canUseTool (deny a policy-denied tool, allow others),
   // that canUseTool is NOT passed (killing the CLAUDE_SDK_CAN_USE_TOOL_SHADOWED trigger), and
   // that allowDangerouslySkipPermissions:true is set (the SDK requires it for bypass).
-  it("full/bypass profile: gates via a PreToolUse hook, drops canUseTool, sets allowDangerouslySkipPermissions", async () => {
+  it("explicit bypass override: gates via a PreToolUse hook, drops canUseTool, sets allowDangerouslySkipPermissions", async () => {
     const warnings: string[] = [];
     const onWarn = (w: Error & { code?: string }) => { if (w.code) warnings.push(w.code); };
     process.on("warning", onWarn);
     try {
       const { fn, calls } = fakeQuery(SCRIPT);
       const decide = vi.fn(async ({ toolName }: { toolName: string }) => toolName === "Edit");
-      new ClaudeAgentBackend({ queryFn: fn }).spawn(spec({ permissionProfile: "full" }), () => {}, decide as never);
+      new ClaudeAgentBackend({ queryFn: fn }).spawn(spec({ permissionProfile: "full", providerOptions: { permissionMode: "bypassPermissions" } }), () => {}, decide as never);
       await settle();
       const o = calls[0]!.options;
       expect(o.permissionMode).toBe("bypassPermissions");
@@ -498,6 +497,24 @@ describe("ClaudeAgentBackend", () => {
     } finally {
       process.off("warning", onWarn);
     }
+  });
+
+  it("auto keeps classifier review on allowed actions and blocks Chimera denials before it", async () => {
+    const { fn, calls } = fakeQuery(SCRIPT);
+    const decide = vi.fn(async ({ toolName }: { toolName: string }) => toolName === "Read" ? true : "blocked by Chimera");
+    new ClaudeAgentBackend({ queryFn: fn }).spawn(spec({ permissionProfile: "full" }), () => {}, decide as never);
+    const o = calls[0]!.options;
+    expect(o.permissionMode).toBe("auto");
+    expect(o.allowDangerouslySkipPermissions).toBeUndefined();
+    const hooks = o.hooks as { PreToolUse: Array<{ hooks: Array<(i: unknown) => Promise<unknown>> }> };
+    const gate = hooks.PreToolUse[0]!.hooks[0]!;
+    expect(await gate({ tool_name: "AskUserQuestion", tool_input: {}, tool_use_id: "ask" })).toEqual({});
+    expect(decide).not.toHaveBeenCalled();
+    expect(await gate({ tool_name: "Read", tool_input: {}, tool_use_id: "read" })).toEqual({});
+    expect(await gate({ tool_name: "Bash", tool_input: {}, tool_use_id: "bash" })).toMatchObject({
+      hookSpecificOutput: { permissionDecision: "deny", permissionDecisionReason: "blocked by Chimera" },
+    });
+    await settle();
   });
 
   it("uses the SDK-supplied toolUseID as the permission requestId, falling back to a uuid", async () => {
@@ -704,15 +721,16 @@ describe("ClaudeAgentBackend: additional branch/edge coverage", () => {
   // ACCEPTANCE CRITERION 2: the chimera MCP server (the agent's own orchestration tools) must
   // never be droppable by strictMcpConfig, even when the spec's own allowlist is empty — an
   // agent that can't reach ask_human/memory/etc. is broken, not "lean."
-  it("chimera is never dropped by strictMcpConfig, even with an empty allowlist", async () => {
+  it.each([true, false])("chimera remains injected with strictMcpConfig=%s and user plugins enabled", async (strictMcpConfig) => {
     const { fn, calls } = fakeQuery(SCRIPT);
     new ClaudeAgentBackend({ queryFn: fn }).spawn(
-      spec({ strictMcpConfig: true, mcpServers: {}, orchestration: { allow: true, maxDepth: 2 } }),
+      spec({ strictMcpConfig, inherit: { settingSources: ["project", "user"] }, mcpServers: {}, orchestration: { allow: true, maxDepth: 2 } }),
       () => {}, async () => true,
     );
     await settle();
     const o = calls[0]!.options;
-    expect(o.strictMcpConfig).toBe(true);
+    expect(o.strictMcpConfig).toBe(strictMcpConfig);
+    expect(o.settingSources).toEqual(["project", "user"]);
     expect(Object.keys(o.mcpServers as object)).toEqual(["chimera"]);
   });
 
@@ -930,7 +948,7 @@ describe("ClaudeAgentBackend: additional branch/edge coverage", () => {
     );
     await settle();
     const o = calls[0]!.options;
-    expect(o.permissionMode).toBe("default");     // overridden from the computed "bypassPermissions"
+    expect(o.permissionMode).toBe("default");     // explicit legacy mode preserved
     expect(o.cwd).toBe("/override");              // overridden from the computed worktree/spec.cwd
     expect(o.customFlag).toBe(true);              // arbitrary escape-hatch key passes through
   });

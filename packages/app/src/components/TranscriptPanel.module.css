@@ -380,6 +380,9 @@
 }
 
 .imageRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
   margin-top: 2px;
   font-size: var(--fs-meta);
 }
@@ -828,6 +831,7 @@
 
 .outputImages {
   display: flex;
+  align-items: flex-start;
   flex-wrap: wrap;
   gap: 8px;
   max-width: 100%;
@@ -835,6 +839,8 @@
   margin: 6px 0 12px;
   overflow-wrap: anywhere;
 }
+
+.imageWarning { flex-basis: 100%; color: var(--faint); }
 
 [data-message-actions] { min-width:0; flex-shrink:0; }
 [data-message-actions] summary { cursor:pointer; list-style:none; padding:0 6px; }

@@ -46,8 +46,9 @@ describe("latestStable against the real PyPI index", () => {
     expect(latest.uploadedAt).toMatch(/^2026-10-0\d/);
   });
   it("the wheel PyPI reports for the current pin is the digest and URL we pinned", () => {
-    const wheel = latestStable(PYPI)!.wheel!;
-    expect(LAYA.version).toBe("0.3.28");
+    const candidate = JSON.parse(readFileSync(new URL("./fixtures/pypi-laya-0.4.1.json", import.meta.url), "utf8"));
+    const wheel = latestStable({ releases: { ...PYPI.releases, ...candidate.releases } })!.wheel!;
+    expect(LAYA.version).toBe("0.4.1");
     expect(wheel.sha256).toBe(LAYA.wheel.sha256);
     expect(wheel.url).toBe(LAYA.wheel.url);
     expect(wheel.file).toBe(LAYA.wheel.file);

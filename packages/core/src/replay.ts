@@ -55,6 +55,19 @@ function applyEventToRecord(record: AgentRecord, e: NormalizedEvent): void {
     const lineage = ForkLineageSchema.safeParse(e.data["forkLineage"]);
     if (lineage.success) record.forkLineage = lineage.data;
   }
+  if (e.kind === "status") {
+    const remoteIntent = e.data["remoteControlIntent"];
+    if (remoteIntent === null) delete record.remoteControlIntent;
+    else if (remoteIntent && typeof remoteIntent === "object" && (remoteIntent as { enabled?: unknown }).enabled === true) {
+      const name = (remoteIntent as { name?: unknown }).name;
+      record.remoteControlIntent = { enabled: true, ...(typeof name === "string" ? { name } : {}) };
+    }
+
+    const mode = e.data["executionMode"];
+    if (mode === "plan" || mode === "execute" || mode === "auto" || mode === null) record.executionMode = mode ?? undefined;
+    const requested = e.data["requestedExecutionMode"];
+    if (requested === "plan" || requested === "execute" || requested === "auto") record.spec.executionMode = requested;
+  }
   switch (e.kind) {
     case "agent_started":
       record.state = "running";   // only ever fires from a live spawned/resumed handle
@@ -88,6 +101,8 @@ function applyEventToRecord(record: AgentRecord, e: NormalizedEvent): void {
       const current = application ? application.version >= (record.permissionApplication?.version ?? -1) : !record.permissionApplication;
       if (application && current) record.permissionApplication = application;
       if (e.data["permissionChanged"] === true && current) {
+        if (record.provider === "codex" && e.data["acknowledgeCodexFullAccessRisk"] === true)
+          record.spec = { ...record.spec, acknowledgeCodexFullAccessRisk: true };
         const profile = e.data["permissionProfile"];
         const routing = e.data["permissionRequest"];
         if (profile === "readOnly" || profile === "acceptEdits" || profile === "full") record.spec = { ...record.spec, permissionProfile: profile };

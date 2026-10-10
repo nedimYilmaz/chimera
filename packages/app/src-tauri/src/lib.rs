@@ -2,6 +2,7 @@
 //! the daemon client without a running Tauri app; main.rs is a thin shell.
 
 pub mod commands;
+pub mod local_files;
 pub mod computer_use;
 pub mod daemon;
 pub mod desktop_runtime;

@@ -19,7 +19,7 @@ import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   PROTOCOL_VERSION, AgentBulkParamsSchema, AgentForgetParamsSchema, type AgentForgetResult, AgentReleaseParamsSchema, AccountUncoolParamsSchema,
@@ -2637,6 +2637,12 @@ export class Engine {
             // resolveTeamRole call site there strips poolSize; this ad-hoc session-role path
             // had missed it, so a role with poolSize set would fail AgentSpecSchema's strict parse).
             const { name: _name, skills: _skills, poolSize: _poolSize, ...resolved } = resolveRole(this.roles, { role: sp.role, overrides: {} }, rawSpec);
+            // Explicit spawn controls must beat a legacy strict flag inherited from a role.
+            // A caller supplying its own providerOptions still owns that escape hatch.
+            if (typeof rawSpec.strictMcpConfig === "boolean" && rawSpec.providerOptions === undefined) {
+              resolved.providerOptions = { ...resolved.providerOptions };
+              delete resolved.providerOptions.strictMcpConfig;
+            }
             mergedSpec = resolved;
             sessionRoleOverrides = rawSpec; // §3.3: the sparse overrides actually resolved at spawn — a frozen audit record
           }
@@ -2705,11 +2711,13 @@ export class Engine {
             const roleSpec = p.role ? (() => { try { return resolveRole(this.roles, { role: p.role as string, overrides: {} }); } catch { return undefined; } })() : undefined;
             effPluginCount = roleSpec?.plugins.length ?? 0;
             effMcpServers = roleSpec ? Object.keys(roleSpec.mcpServers) : [];
-            effSettingSources = roleSpec?.inherit.settingSources ?? [];
+            effSettingSources = roleSpec?.loadSettings === false ? []
+              : roleSpec?.loadSettings === true ? ["project", "user"]
+              : roleSpec?.inherit.settingSources ?? ["project", "user"];
             // Mirrors supervisor.spawn's SPAWN-SETTING-SOURCES undefined-loadSettings branch
             // (:1254-1260) exactly: empty settingSources so far AND cwd resolves to a
             // registered project that already opted into loadProjectSettings.
-            if (effSettingSources.length === 0 && p.cwd) {
+            if (roleSpec?.loadSettings !== false && effSettingSources.length === 0 && p.cwd) {
               const projectId = this.projects.list().find((pr) => isPathUnder(p.cwd as string, pr.path))?.name ?? null;
               const projectLoadSettings = projectId !== null && (this.projects.list().find((pr) => pr.name === projectId)?.loadProjectSettings ?? false);
               if (projectLoadSettings) effSettingSources = ["project", "user"];
@@ -2998,7 +3006,7 @@ export class Engine {
           if (purged.length > 0) {
             this.events.append({
               agentId: "supervisor", kind: "status",
-              data: { state: "purged_terminal_sessions", count: purged.length },
+              data: { state: "purged_terminal_sessions", count: purged.length, agentIds: purged },
             });
           }
           return { purged: purged.length };
@@ -3054,7 +3062,7 @@ export class Engine {
           if (purged.length > 0) {
             this.events.append({
               agentId: "eventlog", kind: "status",
-              data: { forgotten: purged.length, eventsRemoved: forgotten.removed, chronicleDocsRemoved: forgottenDocs },
+              data: { forgotten: purged.length, agentIds: purged, eventsRemoved: forgotten.removed, chronicleDocsRemoved: forgottenDocs },
             });
           }
           return {
@@ -3156,6 +3164,11 @@ export class Engine {
         case "agent.reconfigure": {
           const p = AgentReconfigureParamsSchema.parse(params);
           const applied: string[] = [];
+          // The settings acknowledgment accompanies the live profile, before its guard.
+          // Consume it here so a permission-only save does not restart the agent.
+          const permissionRiskGrant = this.supervisor.status(p.agentId).provider === "codex"
+            && p.live.permissionProfile === "full" && p.patch.acknowledgeCodexFullAccessRisk === true;
+          if (permissionRiskGrant) delete p.patch.acknowledgeCodexFullAccessRisk;
           if (p.live.displayLabel !== undefined) {
             await this.supervisor.renameAgent(p.agentId, p.live.displayLabel, { byOperator: true });
             applied.push("name");
@@ -3167,9 +3180,14 @@ export class Engine {
           if (p.live.permissionProfile !== undefined || p.live.permissionRequest !== undefined) {
             await this.supervisor.setPermission(p.agentId, {
               ...(p.live.permissionProfile !== undefined ? { permissionProfile: p.live.permissionProfile } : {}),
+              ...(permissionRiskGrant ? { acknowledgeCodexFullAccessRisk: true } : {}),
               ...(p.live.permissionRequest !== undefined ? { permissionRequest: p.live.permissionRequest } : {}),
             });
             applied.push("permission");
+          }
+          if (p.live.executionMode !== undefined) {
+            await this.supervisor.setExecutionMode(p.agentId, p.live.executionMode);
+            applied.push("executionMode");
           }
           // cwd LAST among the no-respawn group and before the patch: rebind respawns too, so
           // doing both would cost two — the patch is folded into the rebind's own spec instead.
@@ -3224,7 +3242,7 @@ export class Engine {
         }
         case "agent.remoteControl": {
           const p = RemoteControlParams.parse(params);
-          return await this.supervisor.remoteControl(p.agentId, p.enable, p.name);
+          return await this.supervisor.remoteControl(p.agentId, p.enable, p.name, p.acknowledgeTransition);
         }
         // COMPACTION-OBSERVABILITY: manual context-compaction trigger. supervisor.compact
         // throws CompactionUnsupportedError (surfaced to the caller as a normal RPC error) for
@@ -3729,11 +3747,11 @@ export class Engine {
           const projects = this.projects.list();
           // ABSOLUTE: only the roots that actually contain it, most specific first, so a nested
           // project wins over its ancestor. RELATIVE: every project is a candidate, in order.
-          const candidates = raw.startsWith("/")
+          const candidates = isAbsolute(raw)
             ? projects
-                .filter((s) => raw === s.path || raw.startsWith(s.path.endsWith("/") ? s.path : `${s.path}/`))
+                .filter((s) => isPathUnder(raw, s.path))
                 .sort((a, b) => b.path.length - a.path.length)
-                .map((s) => ({ project: s.name, root: s.path, relPath: raw.slice(s.path.length).replace(/^\/+/, "") }))
+                .map((s) => ({ project: s.name, root: s.path, relPath: relative(s.path, raw) }))
             : projects.map((s) => ({ project: s.name, root: s.path, relPath: raw }));
           for (const c of candidates) {
             try {
@@ -3744,7 +3762,7 @@ export class Engine {
           }
           // The same widened-root fallback fs.read offers for `~`/absolute paths, so a path
           // outside every registered project still resolves exactly as it did before.
-          if (raw.startsWith("~") || raw.startsWith("/")) {
+          if (raw.startsWith("~") || isAbsolute(raw)) {
             const roots = [
               ...projects.map((s) => s.path),
               ...(this.cfg.projectImportDir ? [this.cfg.projectImportDir] : []),

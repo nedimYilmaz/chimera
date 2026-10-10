@@ -353,6 +353,7 @@ const MCP_TOOL_TABLE_BASE = [
       // Absent => "sdk", unchanged.
       runtime: z.enum(["sdk", "terminal"]).optional(),
       model: z.string().optional(), instructions: z.string().optional(),
+      executionMode: z.enum(["plan", "execute", "auto"]).optional().describe("Claude SDK native mode; auto explicitly selects automatic permission review, plan selects planning, execute uses the configured native mode."),
       permissionProfile: z.enum(["readOnly", "acceptEdits", "full"]).optional(),
       // CODEX-GATE-EXPOSURE: required to spawn a codex agent with permissionProfile "full" —
       // see the tool description. No effect for other providers/profiles.
@@ -406,18 +407,11 @@ const MCP_TOOL_TABLE_BASE = [
       // Native compaction target; Codex contextWindow selects capacity independently.
       compactionThreshold: z.number().int().positive().optional(),
       contextWindow: z.number().int().positive().optional(),
-      // SPAWN-SETTING-SOURCES: the friendly on/off surface for AgentSpec.loadSettings (which
-      // itself resolves to inherit.settingSources ["project","user"] / []). true/false always
-      // win; omitted defers to the spawn's resolved project's own loadProjectSettings toggle,
-      // or [] with no matching project. PRICING-SHADOW precedent (see resultSchema's own
-      // comment above): this .describe() is deliberately NOT folded into the tool-level
-      // `description` — that string is billed on every eager MCP discovery (capped, see
-      // mcp-tools.test.ts's "keeps eager discovery copy concise"), while a field-level
-      // description only costs tokens once a caller loads this tool's full inputSchema.
+      // Field-level copy is loaded with this tool's schema, not every eager discovery.
       loadSettings: z.boolean().optional().describe(
         "claude-only. true loads ~/.claude (global skills, CLAUDE.md), the project's .claude/ " +
-        "and installed plugins' MCP tools; false turns it off; omitted follows the project's " +
-        "\"load project & global skills\" toggle. Off is the lean default.",
+        "and installed plugins' MCP tools; false turns it off. New agents default on; " +
+        "explicit role settings and project conductor opt-outs remain respected.",
       ),
     },
     resolve: (a, ctx) => rpc("agent.spawn", {
@@ -435,6 +429,7 @@ const MCP_TOOL_TABLE_BASE = [
         ...(a["runtime"] ? { runtime: a["runtime"] } : {}),
         ...(a["model"] ? { model: a["model"] } : {}),
         ...(a["instructions"] ? { instructions: a["instructions"] } : {}),
+        ...(a["executionMode"] ? { executionMode: a["executionMode"] } : {}),
         ...(a["permissionProfile"] ? { permissionProfile: a["permissionProfile"] } : {}),
         ...(a["acknowledgeCodexFullAccessRisk"] !== undefined ? { acknowledgeCodexFullAccessRisk: a["acknowledgeCodexFullAccessRisk"] } : {}),
         ...(a["deliverTo"] ? { deliverTo: a["deliverTo"] } : {}),
@@ -607,9 +602,11 @@ const MCP_TOOL_TABLE_BASE = [
   { name: "agent_add_groups", description: "Atomically add Inspector group memberships, preserving other memberships without respawning (maximum 8 total).", inputSchema: AgentChangeGroupsParamsSchema.shape, resolve: (a) => rpc("agent.addGroups", a) },
   { name: "agent_remove_groups", description: "Atomically remove Inspector group memberships, preserving other memberships without respawning.", inputSchema: AgentChangeGroupsParamsSchema.shape, resolve: (a) => rpc("agent.removeGroups", a) },
 
+  { name: "agent_set_mode", description: "Set Claude SDK planning mode on a live agent without restarting or replaying input. auto explicitly selects native auto permission review independent of role defaults; plan selects native planning; execute uses the configured native mode. Chimera permission restrictions remain enforced. Stopped agents save the selection for their next launch. Unsupported providers/transports fail explicitly.", inputSchema: { agentId: z.string().min(1), mode: z.enum(["plan", "execute", "auto"]) }, resolve: (a) => rpc("agent.reconfigure", { agentId: a.agentId, live: { executionMode: a.mode } }) },
+
   {
     name: "agent_reconfigure",
-    description: "Change a live agent's settings in ONE respawn into its own session — conversation survives, process restarts, next turn behaves the new way. `patch`: model, effort, account, maxTurns, turnLimitPolicy, maxBudgetUsd, contextWindow (Codex nominal window, distinct from usable session capacity; null clears), compactionThreshold (native compaction target; null clears it back to the account default), instructions, autonomy, orchestration, loadSettings. `live`: permissionProfile, permissionRequest, groups, displayLabel — applied with NO respawn, so a save touching only these never interrupts a running turn. `cwd` routes through rebind. Refuses provider (agent_handoff), isolation (agent_rebind) and the identity flags. A patch that changes nothing is a no-op.",
+    description: "Change a live agent's settings in ONE respawn into its own session — conversation survives, process restarts, next turn behaves the new way. `patch`: model, effort, account, maxTurns, turnLimitPolicy, maxBudgetUsd, contextWindow (Codex nominal window, distinct from usable session capacity; null clears), compactionThreshold (native compaction target; null clears it back to the account default), instructions, autonomy, orchestration, loadSettings, strictMcpConfig (false permits ambient native MCPs; use loadSettings:true to load user/project plugins). `live`: executionMode (Claude SDK auto/plan/execute, acknowledged in the same process; auto explicitly selects native automatic review), permissionProfile, permissionRequest, groups, displayLabel — applied with NO respawn, so a save touching only these never interrupts a running turn. `cwd` routes through rebind. Refuses provider (agent_handoff), isolation (agent_rebind) and the identity flags. A patch that changes nothing is a no-op.",
     inputSchema: {
       agentId: z.string(),
       patch: z.record(z.string(), z.unknown()).optional(),
@@ -703,9 +700,9 @@ const MCP_TOOL_TABLE_BASE = [
 
   {
     name: "agent_remote_control",
-    description: "Enable/disable provider-native Remote Control on a running agent's live session. Claude returns an attach URL; Codex app-server returns connection status and server identity, not an attach URL. Requires a compatible CLI/account. This is NOT voice: use voice_conversation_start/stop for audio.",
-    inputSchema: { agentId: z.string(), enable: z.boolean(), name: z.string().optional() },
-    resolve: (a) => rpc("agent.remoteControl", { agentId: a["agentId"], enable: a["enable"], ...(a["name"] ? { name: a["name"] } : {}) }),
+    description: "Enable/disable provider-native Remote Control on a running agent's live session. Claude returns an attach URL; Codex app-server returns connection status and server identity, not an attach URL. Requires a compatible CLI/account. Idle Codex exec sessions can switch to app-server in the same session with acknowledgeTransition:true; busy sessions refuse without interruption. This is NOT voice: use voice_conversation_start/stop for audio.",
+    inputSchema: { agentId: z.string(), enable: z.boolean(), acknowledgeTransition: z.boolean().optional(), name: z.string().optional() },
+    resolve: (a) => rpc("agent.remoteControl", { agentId: a["agentId"], enable: a["enable"], ...(a["acknowledgeTransition"] !== undefined ? { acknowledgeTransition: a["acknowledgeTransition"] } : {}), ...(a["name"] ? { name: a["name"] } : {}) }),
   },
 
   {

@@ -4,13 +4,13 @@ import type { CodexInput } from "./codex-input.js";
 import type { DialogDecider, PermissionDecider, NativeVoiceHandle } from "../backend.js";
 import { CodexRpcError, CodexRpc, codexConfigArgs, type RpcProcessFactory } from "./codex-rpc.js";
 import { resolveCodexBinary } from "../providers/codex-cli-models.js";
-import type { InitializeParams, UserInput, TurnStartParams, SandboxPolicy, ToolRequestUserInputResponse } from "./codex-wire.generated.js";
+import type { InitializeParams, UserInput, TurnStartParams, ThreadResumeParams, SandboxPolicy, ToolRequestUserInputResponse } from "./codex-wire.generated.js";
 import type { CompactResult } from "@chimera/protocol";
 import type { RemoteControlHandleResult } from "../backend.js";
 import { codexVoicePersona } from "./codex-voice-persona.js";
 import { isStaleResumeSessionError } from "../failover.js";
 import { parseCodexCommand } from "./codex-commands.js";
-import type { ThreadGoalGetResponse, ThreadGoalSetParams, ThreadGoalSetResponse } from "./codex-wire.generated.js";
+import type { ThreadSetNameParams, ThreadGoalGetResponse, ThreadGoalSetParams, ThreadGoalSetResponse } from "./codex-wire.generated.js";
 
 type Row = Record<string, any>;
 function remoteControlResult(row: Row): Exclude<RemoteControlHandleResult, undefined> {
@@ -55,6 +55,9 @@ export class CodexAppServer implements CodexLike {
   private startingPosture?: Promise<boolean>;
   onPermissionApplied?: (options: Row) => void;
   onPermissionFailed?: (error: unknown) => void;
+
+  // Grant alone never changes the acknowledged posture of an in-flight turn.
+  grantFullAccessRisk(): void { this.fullRiskGranted = true; }
 
   private acknowledgePermission(options: Row): boolean {
     this.fullAccess = this.fullRiskGranted && options.sandboxMode === "danger-full-access" && options.approvalPolicy === "never";
@@ -108,9 +111,13 @@ export class CodexAppServer implements CodexLike {
     return { ok: true, via: "provider-command", command: "thread/compact/start", message: "Codex accepted the compaction request; completion is reported by its context-compaction event." };
   }
 
-  async remoteControl(enable: boolean): Promise<RemoteControlHandleResult> {
+  async remoteControl(enable: boolean, name?: string): Promise<RemoteControlHandleResult> {
     await this.ensureThread?.();
     if (!this.threadId || this.closed) throw new Error("Codex thread is not connected");
+    if (enable && name) {
+      const params: ThreadSetNameParams = { threadId: this.threadId, name };
+      await this.rpc.request("thread/name/set", params);
+    }
     // Each agent owns its app-server. Never persist a shared CODEX_HOME setting
     // or launch a separate bridge that cannot attach to this agent's thread.
     const response = await this.rpc.request(`remoteControl/${enable ? "enable" : "disable"}`, { ephemeral: true });
@@ -253,12 +260,16 @@ export class CodexAppServer implements CodexLike {
       };
       let result;
       try {
-        result = await this.rpc.request(resume ? "thread/resume" : "thread/start", params);
+        // The native session keeps its history. We already persist the transcript and
+        // never consume result.thread.turns; hydrating it can exceed the JSONL limit.
+        result = await this.rpc.request(resume ? "thread/resume" : "thread/start", {
+          ...params, ...(resume ? { excludeTurns: true } satisfies Pick<ThreadResumeParams, "excludeTurns"> : {}),
+        });
       } catch (error) {
         // Resume fails asynchronously, after backend.spawn() has returned; the
         // supervisor's synchronous stale-session catch cannot recover this path.
         const reason = error instanceof Error ? error.message : String(error);
-        if (!resume || !isStaleResumeSessionError(reason)) throw error;
+        if (!resume || launchOptions.requireResume === true || !isStaleResumeSessionError(reason)) throw error;
         const { threadId: _missingThread, ...freshParams } = params;
         result = await this.rpc.request("thread/start", {
           ...freshParams,
@@ -271,6 +282,7 @@ export class CodexAppServer implements CodexLike {
         this.cumulativeBaseline = undefined;
         this.push({ type: "thread.resume_fallback", previousThreadId: resume, reason });
       }
+      if (resume && launchOptions.requireResume === true && result.thread.id !== resume) throw new Error("Codex resumed a different session; remote connection was not enabled");
       this.threadId = result.thread.id;
       // Preserve the CLI's authoritative workspace roots/network/tmp settings
       // when changing only the profile, rather than replacing ambient restrictions.

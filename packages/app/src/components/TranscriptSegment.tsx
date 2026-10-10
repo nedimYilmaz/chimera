@@ -413,12 +413,14 @@ function Block({
     });
     return <>
       <ToolStrip block={block} blockKey={blockKey} hint={firstToolStrip} onOpen={() => onOpenDetail(block.startIndex)} spawnLines={spawnLines} />
-      {block.items.map((item, index) => item.role === "tool" && (item.images?.length || item.imageOutputWarnings?.length) ? (
-        <div key={`${item.toolId ?? index}-images`} className={styles.outputImages} data-output-images>
-          {item.images?.map((image, i) => <ImageChip key={i} image={image} name={`${item.toolName} image ${i + 1}`} outputPreview />)}
-          {item.imageOutputWarnings?.length ? <span className={styles.faint} data-image-output-warning>Some image output was omitted ({item.imageOutputWarnings.join(", ")}).</span> : null}
+      {block.items.some(item => item.role === "tool" && (item.images?.length || item.imageOutputWarnings?.length)) ? (
+        <div className={styles.outputImages} data-output-images>
+          {block.items.flatMap((item, index) => item.role === "tool" ? [
+            ...(item.images?.map((image, i) => <ImageChip key={`${index}-${i}`} image={image} name={`${item.toolName} image ${i + 1}`} outputPreview />) ?? []),
+            ...(item.imageOutputWarnings?.length ? [<span key={`${index}-warning`} className={styles.imageWarning} data-image-output-warning>Some image output was omitted ({item.imageOutputWarnings.join(", ")}).</span>] : []),
+          ] : [])}
         </div>
-      ) : null)}
+      ) : null}
     </>;
   }
   const item = block.item;

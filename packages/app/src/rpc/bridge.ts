@@ -3,7 +3,7 @@
 // the socket, framing, hello handshake, reconnect backoff and subscribe
 // re-apply; this module is a thin typed veneer over Tauri invoke/listen.
 // Wire types come from @chimera/protocol — never re-declared.
-import { invoke } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { NormalizedEvent } from "@chimera/protocol";
 
@@ -133,6 +133,16 @@ export function daemonStatus(): Promise<ConnState> {
 export function readArtifactSnapshot(id: string): Promise<string> {
   if (mock) return Promise.reject(new Error("artifact preview is unavailable in the mock bridge"));
   return invoke<string>("read_artifact", { id });
+}
+
+export async function prepareLocalMedia(path: string): Promise<string> {
+  if (mock) return mock.rpc("native.prepareLocalMedia", { path }) as Promise<string>;
+  return convertFileSrc(await invoke<string>("prepare_local_media", { path }));
+}
+
+export async function openLocalFile(path: string, reveal = false): Promise<void> {
+  if (mock) { await mock.rpc("native.openLocalFile", { path, reveal }); return; }
+  await invoke("open_local_file", { path, reveal });
 }
 
 /** `o` OS-open for a report/diff/chart/file-kind artifact's snapshot. */

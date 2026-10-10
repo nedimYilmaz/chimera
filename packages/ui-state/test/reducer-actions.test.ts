@@ -163,7 +163,7 @@ describe("reducer: UI actions", () => {
 // ---------------------------------------------------------------------------
 
 describe("reducer: agentRecords — additional branch/edge coverage", () => {
-  it("keeps agents NOT present in the new records (extras) appended after the authoritative order", () => {
+  it("removes agents absent from the authoritative daemon roster", () => {
     const withEvents = feed(initialState, [
       { type: "event", event: { ts: 1, seq: 1, agentId: "old", kind: "agent_started", data: {} } },
     ]);
@@ -171,18 +171,18 @@ describe("reducer: agentRecords — additional branch/edge coverage", () => {
       type: "agentRecords",
       records: [{ agentId: "new", state: "running", accountName: "main", provider: "claude", costUsd: 0, createdAt: 5 }],
     });
-    expect(st.agentOrder).toEqual(["new", "old"]);      // authoritative records first, event-only extras after
-    expect(st.agents["old"]!.state).toBe("running");     // untouched, still event-derived
+    expect(st.agentOrder).toEqual(["new"]);
+    expect(st.agents["old"]).toBeUndefined();
   });
 
-  it("an empty records array leaves agentOrder as pure extras and does not clear an existing selection", () => {
+  it("an empty daemon roster clears stale rows and selection", () => {
     const withEvents = feed(initialState, [
       { type: "event", event: { ts: 1, seq: 1, agentId: "x", kind: "agent_started", data: {} } },
     ]);
     expect(withEvents.selectedAgentId).toBe("x");
     const st = reduce(withEvents, { type: "agentRecords", records: [] });
-    expect(st.agentOrder).toEqual(["x"]);
-    expect(st.selectedAgentId).toBe("x");               // state.selectedAgentId ?? order[0] ?? null keeps prior pick
+    expect(st.agentOrder).toEqual([]);
+    expect(st.selectedAgentId).toBeNull();
   });
 
   it("an empty records array on a fully empty state leaves selectedAgentId null (order[0] undefined branch)", () => {
