@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import * as React from "react";
 import { act, create } from "react-test-renderer";
 
@@ -99,9 +99,12 @@ async function renderSpawnCard(quick = false): Promise<ReturnType<typeof create>
 }
 
 beforeEach(() => {
+  // The node renderer has no Tauri homeDir; avoid racing its lazy import/fallback.
+  vi.stubGlobal("__CHIMERA_CWD__", "/tmp/chimera-spawn-test");
   rpcImpl.mockReset();
   mockRpc([CLAUDE, CODEX, XAI, NVIDIA]);
 });
+afterEach(() => vi.unstubAllGlobals());
 
 describe("SpawnCard — account dropdown", () => {
   it("retains an explicit mode override on a planning role", () => {
