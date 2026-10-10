@@ -106,10 +106,11 @@ describe("sudo command snapshots", () => {
 // No sudo invocation, system policy write or scheduled command execution occurs here.
 describe("sudo setup transaction in an unprivileged sandbox", () => {
   const q = (s: string) => "'" + s.replaceAll("'", "'\\''") + "'";
-  it.skipIf(process.platform === "win32").each(["success", "policy-failure", "symlink", "writable", "owner", "existing-different"])("%s preserves transaction and ownership boundaries", mode => {
+  it.skipIf(process.platform === "win32").each(
+    ["darwin", "linux"].flatMap(platform => ["success", "policy-failure", "symlink", "writable", "owner", "existing-different"].map(mode => ({ platform, mode }))),
+  )("$platform $mode preserves transaction and ownership boundaries", ({ platform, mode }) => {
     const dir = mkdtempSync(join(tmpdir(), "chimera-sudo-install-test-"));
     try {
-      const platform = process.platform === "darwin" ? "darwin" : "linux";
       const p = planJobSudo({ ...target, command: "touch " + q(join(dir, "must-not-run")), cwd: dir }, { ...host, platform });
       const etc = platform === "darwin" ? "/private/etc" : "/etc";
       const root = join(dir, "etc"); mkdirSync(root);
@@ -119,7 +120,17 @@ describe("sudo setup transaction in an unprivileged sandbox", () => {
       writeFileSync(stat, `const s=require('fs').lstatSync(process.argv.at(-1));console.log('${mode === "owner" ? 501 : 0} '+(s.mode&4095).toString(8));`);
       const noCheck = join(dir, "visudo");
       writeFileSync(noCheck, `#!/bin/sh\n${mode === "policy-failure" ? 'case "$*" in *sudoers) echo synthetic-policy-failure >&2; exit 1;; esac' : ':'}\nexit 0\n`, { mode: 0o755 });
-      const adapt = (s: string) => s.replaceAll(etc + "/", root + "/").replaceAll(q(etc), q(root)).replaceAll("/usr/bin/id -u", "printf 0").replaceAll("/usr/bin/stat", `${q(process.execPath)} ${q(stat)}`).replaceAll("/usr/sbin/visudo", q(noCheck));
+      // Rewrite filesystem operands, not the /etc/sudoers[.]d include-matching regex.
+      // A broad /etc/ replacement made the Linux fixture reject its valid include.
+      const adapt = (s: string) => s
+        .replaceAll(etc + "/chimera-scheduled-commands", join(root, "chimera-scheduled-commands"))
+        .replaceAll(etc + "/sudoers.d", included)
+        .replaceAll(q(etc + "/sudoers"), q(join(root, "sudoers")))
+        .replaceAll(q(etc), q(root))
+        .replaceAll(q("/private"), q(dir))
+        .replaceAll("/usr/bin/id -u", "printf 0")
+        .replaceAll("/usr/bin/stat", `${q(process.execPath)} ${q(stat)}`)
+        .replaceAll("/usr/sbin/visudo", q(noCheck));
       const wrapper = p.wrapperPath.replace(etc, root);
       const policy = p.policyPath.replace(etc, root);
       const outside = join(dir, "outside"); mkdirSync(outside);
