@@ -40,6 +40,26 @@ function makeUnsupportedSupervisor(scenarios: FakeStep[][]) {
 }
 
 describe("AgentSupervisor.remoteControl", () => {
+  it("only pairs a running enabled bridge and never records pairing credentials", async () => {
+    const { sup, fake, events } = makeSupervisor([RUNNING]);
+    const original = fake.spawn.bind(fake);
+    const result = { manualPairingCode: "PRIVATE-CODE", environmentId: "env-fixture", expiresAt: 1900000000 };
+    const pair = vi.fn(async () => result);
+    vi.spyOn(fake, "spawn").mockImplementation((...args) => ({ ...original(...args), remotePair: pair }));
+    const rec = await sup.spawn({ prompt: "x", cwd: "/tmp", isolation: "none" });
+    try {
+      await expect(sup.remotePair(rec.agentId)).rejects.toThrow("Enable remote control");
+      expect(pair).not.toHaveBeenCalled();
+      await sup.remoteControl(rec.agentId, true);
+      expect(await sup.remotePair(rec.agentId)).toEqual(result);
+      expect(JSON.stringify(events.tail(rec.agentId, 100))).not.toContain("PRIVATE-CODE");
+      expect(JSON.stringify(sup.status(rec.agentId))).not.toContain("PRIVATE-CODE");
+      await sup.remoteControl(rec.agentId, false);
+      await expect(sup.remotePair(rec.agentId)).rejects.toThrow("Enable remote control");
+      expect(pair).toHaveBeenCalledTimes(1);
+    } finally { await sup.kill(rec.agentId); }
+  });
+
   it("enables live (no respawn) and returns the attach URL", async () => {
     const { sup, fake } = makeSupervisor([RUNNING]);
     const rec = await sup.spawn({ prompt: "x", cwd: "/tmp", isolation: "none" });

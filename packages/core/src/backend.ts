@@ -118,6 +118,7 @@ export interface AgentHandle {
   // Optional and transport-specific: Codex app-server uses its own ephemeral
   // bridge; exec cannot attach a separate `codex remote-control` to its process.
   // `name` is only meaningful when enable:true.
+  remotePair?(): Promise<import("@chimera/protocol").RemotePairResult>;
   remoteControl?(enable: boolean, name?: string): Promise<RemoteControlHandleResult>;
   // COMPACTION-OBSERVABILITY: manually trigger context compaction NOW. Optional and
   // transport-specific. Generic providers compact directly; Codex app-server

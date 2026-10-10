@@ -14,6 +14,13 @@ function engineWithScenarios(scenarios: FakeStep[][], remoteControlSupported = t
 }
 
 describe("Engine.handle agent.remoteControl", () => {
+  it("validates and routes desktop pairing without exposing it as a model tool", async () => {
+    const e = engineWithScenarios([]);
+    await expect(e.handle("agent.remotePair", {})).rejects.toMatchObject({ code: "protocol" });
+    await expect(e.handle("agent.remotePair", { agentId: "ghost" })).rejects.toMatchObject({ code: "protocol" });
+    const { MCP_TOOL_NAMES } = await import("@chimera/protocol/mcp-tools");
+    expect(MCP_TOOL_NAMES).not.toContain("agent_remote_pair");
+  });
   it("enables and returns the RemoteControlStatus", async () => {
     const e = engineWithScenarios([
       [{ emit: { kind: "agent_started", data: { sessionId: "sess-1" } } }, { awaitSend: true }],

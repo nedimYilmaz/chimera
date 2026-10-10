@@ -3,9 +3,12 @@ import { appStore } from "../../src/state/store";
 import { systemLocal } from "../../src/state/commands.system";
 
 const agentId = "remote-fixture";
+let finishPair: ((expired?: boolean, fail?: boolean) => void) | undefined;
 let finish: (() => void) | undefined;
 export const remoteFixture = {
   active: false,
+  pairCalls: 0,
+  completePair(expired = false, fail = false) { finishPair?.(expired, fail); finishPair = undefined; },
   nextSeq: () => appStore.getState().lastSeq + 1,
   calls: [] as Record<string, unknown>[],
   configure(transport = "exec", busy = false, state = "running", provider = "codex") {
@@ -25,6 +28,12 @@ export const remoteFixture = {
   reset() { this.calls.length = 0; finish = undefined; this.configure(); },
   complete() { finish?.(); finish = undefined; },
   rpc(method: string, params: Record<string, unknown>) {
+    if (method === "agent.remotePair") {
+      this.pairCalls++;
+      return new Promise((resolve, reject) => {
+        finishPair = (expired, fail) => fail ? reject(new Error("SECRET-ERROR-TOKEN")) : resolve({ manualPairingCode: "SYNTHETIC-CODE", environmentId: "env-fixture", expiresAt: Math.floor(Date.now() / 1000) + (expired ? -1 : 300) });
+      });
+    }
     if (method !== "agent.remoteControl") return undefined;
     this.calls.push(params);
     return new Promise(resolve => {

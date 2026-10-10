@@ -1,3 +1,4 @@
+import { ScheduleCommandProbe, scheduleCommandFixture } from "./schedule-command";
 import { RemoteControlProbe, remoteFixture } from "./remote-control";
 import { HistoryRecoveryProbe } from "./history-recovery";
 import { HtmlPreviewProbe, htmlFixture } from "./html-preview";
@@ -113,6 +114,7 @@ declare global {
       rosterProbe(mode: "seed" | "prune" | "forget"): void;
       unreadAgent(unread: boolean): void;
       quickSpawns(): unknown[];
+      scheduleCommand: typeof scheduleCommandFixture;
       remote: typeof remoteFixture;
       nativeMcpCalls(): unknown[];
       failNativeMcp(): void;
@@ -169,7 +171,7 @@ declare global {
 type EdgeCase = "external-focus" | "cancel-focus" | "inline-child" | "portal-child" | "no-close" | "guard-popup";
 type ActionScenario = "confirm-actions" | "team-actions" | "queue-actions";
 type MainScreen = "review" | "welcome" | "projects" | "memory" | "events" | "roles" | "inbox" | "slo" | "runs" | "help" | "agents" | "settings" | "teams" | "queues";
-type Scenario = "codex-full-settings" | "history-recovery" | "remote-control" | "html-preview" | "media-preview" | "native-mcp-settings" | "message-identity" | "project-delete" | "qa-recovery" | "qa-liveboard" | "project-canvas" | "inspector-registry" | "operator-settings" | "operator-read" | "operator-control" | "conversation-fork" | "context-links" | "stt" | "git-review" | "issue-board" | "resources" | "output-images" | "teams-stability" | "team-roles-stability" | "roles-stability" | "desktop-preview" | "workflow-transcript" | "computer-use" | "background-task" | "project-import" | "slash-codex" | "slash-claude" | "group-order" | "quick-spawn" | "workspace-tools" | "keyboard" | `screen-${MainScreen}` | "metrics" | "accounts" | "local-links" | "design" | "design-error" | "design-large" | "secrets" | "live-names" | EdgeCase | ActionScenario | "topbar" | "modal" | "voice" | "ptt" | "transcript" | "pane" | "queues" | "teams" | "settings" | "spawn";
+type Scenario = "schedule-command" | "codex-full-settings" | "history-recovery" | "remote-control" | "html-preview" | "media-preview" | "native-mcp-settings" | "message-identity" | "project-delete" | "qa-recovery" | "qa-liveboard" | "project-canvas" | "inspector-registry" | "operator-settings" | "operator-read" | "operator-control" | "conversation-fork" | "context-links" | "stt" | "git-review" | "issue-board" | "resources" | "output-images" | "teams-stability" | "team-roles-stability" | "roles-stability" | "desktop-preview" | "workflow-transcript" | "computer-use" | "background-task" | "project-import" | "slash-codex" | "slash-claude" | "group-order" | "quick-spawn" | "workspace-tools" | "keyboard" | `screen-${MainScreen}` | "metrics" | "accounts" | "local-links" | "design" | "design-error" | "design-large" | "secrets" | "live-names" | EdgeCase | ActionScenario | "topbar" | "modal" | "voice" | "ptt" | "transcript" | "pane" | "queues" | "teams" | "settings" | "spawn";
 
 type PttSnapshot = { starts: number; stops: number; sends: string[]; backgroundActions: number };
 let sttActive = false;
@@ -286,7 +288,11 @@ function contextRpc(method: string, params: Record<string, unknown> = {}) {
   return row;
 }
 window.__UI_QA_RPC__ = (method, params) => {
-  if (remoteFixture.active && method === "agent.remoteControl") return remoteFixture.rpc(method, params ?? {});
+  if (method === "job.sudoPlan") {
+    scheduleCommandFixture.plans.push(params as Record<string, unknown>);
+    return { fingerprint: "synthetic", authorizeScript: "SYNTHETIC-AUTHORIZATION-PREVIEW", revokeScript: "SYNTHETIC-REVOKE-PREVIEW" };
+  }
+  if (remoteFixture.active && (method === "agent.remoteControl" || method === "agent.remotePair")) return remoteFixture.rpc(method, params ?? {});
   if (method === "fs.read" && String(params?.path).startsWith("/html-fixture/")) return htmlFixture.read(String(params.path));
   if (projectDeleteFixture.active) return projectDeleteFixture.rpc(method, params ?? {});
   const recovery = recoveryRpc(method, params ?? {}); if (recovery) return recovery.value;
@@ -877,6 +883,7 @@ function ScenarioView({ name }: { name: Scenario }) {
   if (name === "workflow-transcript") return <WorkflowTranscriptProbe />;
   if (name === "background-task") return <BackgroundTaskProbe />;
   if (name === "project-import") return <Stage><ImportCard teams={["crew"]} importDirHint="/synthetic/projects" onClose={() => {}} onSubmit={async (values) => { projectImports.push(values); }} /></Stage>;
+  if (name === "schedule-command") return <Stage><ScheduleCommandProbe /></Stage>;
   if (name === "remote-control") return <Stage><RemoteControlProbe /></Stage>;
   if (name === "native-mcp-settings" || name === "codex-full-settings") return <NativeMcpSettingsProbe />;
   if (name === "quick-spawn") return <MainScreenProbe name="agents" />;
@@ -1256,6 +1263,7 @@ window.__UI_QA__ = {
   designSanitize: (source) => staticDesignDocument(source).html,
   customProviderRpc: () => customProviderCalls.map((call) => ({ method: call.method, params: { ...call.params } })),
   quickSpawns: () => quickSpawns,
+  scheduleCommand: scheduleCommandFixture,
   remote: remoteFixture,
   nativeMcpCalls: () => nativeMcpCalls,
   failNativeMcp: () => { failNativeMcp = true; },

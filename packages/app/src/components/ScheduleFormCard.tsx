@@ -1,3 +1,4 @@
+import { ScheduleSudoSetup } from "./ScheduleSudoSetup";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { OverlayCard, OverlayCardHeader } from "./OverlayCard";
 import { ConfirmCard } from "./ConfirmCard";
@@ -42,7 +43,7 @@ function fieldOrder(v: ScheduleFormValues): FieldKey[] {
     v.targetKind === "existing" ? ["existingAgentId", "maxPendingMessages"]
     : v.targetKind === "team" ? ["team", "teamRole"]
     : v.targetKind === "role" ? ["role"]
-    : v.targetKind === "command" ? ["command", "cwd", "commandTimeoutSec"]
+    : v.targetKind === "command" ? ["command", "cwd", "commandTimeoutSec", "commandSudo"]
     : ["cwd", "model", "isolation"];
   const scheduleFields: FieldKey[] =
     v.scheduleKind === "cron" ? ["cron"] : v.scheduleKind === "every" ? ["everyN", "everyUnit"] : ["at"];
@@ -100,15 +101,15 @@ export function ScheduleFormCard({ mode = "create", initial, onSubmit, onClose }
     if (error) setError(null);
   };
 
-  const submit = (): void => {
+  const submit = (walk = false): void => {
     if (busy) return;
-    if (clampedIndex < order.length - 1) { setFieldIndex(clampedIndex + 1); return; }
-    const invalid = validateScheduleForm(values);
+    if (walk && clampedIndex < order.length - 1) { setFieldIndex(clampedIndex + 1); return; }
+    const invalid = validateScheduleForm(values, mode === "edit" ? initialValuesRef.current : undefined);
     if (invalid) {
       setError(invalid);
       return;
     }
-    const payload = mode === "edit" ? buildJobUpdatePatch(values) : buildJobSpec(values);
+    const payload = mode === "edit" ? buildJobUpdatePatch(values, initialValuesRef.current) : buildJobSpec(values);
     setBusy(true);
     void onSubmit(payload).then(onClose).catch((err: unknown) => {
       setBusy(false);
@@ -117,7 +118,8 @@ export function ScheduleFormCard({ mode = "create", initial, onSubmit, onClose }
   };
 
   const onKeyDown = (ev: React.KeyboardEvent): void => {
-    if (ev.key === "Enter") { ev.preventDefault(); submit(); return; }
+    if ((ev.target as HTMLElement).closest("[data-sudo-setup]")) return;
+    if (ev.key === "Enter") { ev.preventDefault(); submit(true); return; }
     if (ev.key.toLowerCase() === "n" && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); requestClose(); return; }
     if ((ev.target as HTMLElement).tagName === "SELECT") return; // the dropdown owns its own arrow keys
     if (ev.key === "ArrowUp") { ev.preventDefault(); setFieldIndex((i) => Math.max(0, i - 1)); return; }
@@ -178,8 +180,8 @@ export function ScheduleFormCard({ mode = "create", initial, onSubmit, onClose }
   // Cron scanning must not repeat for every character typed into the prompt.
   const { preview, upcoming } = useMemo(() => {
     const now = Date.now();
-    return { preview: computeSchedulePreview(values, now), upcoming: upcomingScheduleRuns(values, now) };
-  }, [values.scheduleKind, values.cron, values.everyN, values.everyUnit, values.at, values.tz]);
+    return { preview: computeSchedulePreview(values, now, mode === "edit" && (!values.enabled || initialValuesRef.current.enabled) ? initialValuesRef.current : undefined), upcoming: upcomingScheduleRuns(values, now) };
+  }, [values.scheduleKind, values.cron, values.everyN, values.everyUnit, values.at, values.tz, values.enabled, mode]);
   const editing = mode === "edit";
 
   return (
@@ -239,7 +241,13 @@ export function ScheduleFormCard({ mode = "create", initial, onSubmit, onClose }
               {selectField("isolation", "isolation", [{ value: "none", label: "none" }, { value: "worktree", label: "worktree" }])}
             </div>
           )}
-          {textField("prompt", "prompt")}
+          {values.targetKind === "command" ? <>
+            {textField("command", "command", 'echo "OK"')}
+            {textField("commandTimeoutSec", "timeout (sec)", "600")}
+            {row("commandSudo", "sudo", <input type="checkbox" data-field="commandSudo" ref={el => { inputRefs.current.commandSudo = el; }} checked={values.commandSudo ?? false} onFocus={() => setFieldIndex(order.indexOf("commandSudo"))} onChange={e => set("commandSudo")(e.target.checked)} />)}
+            {values.commandSudo && <ScheduleSudoSetup target={buildJobSpec(values).target} /> }
+            <div className={styles.help}>Runs a shell command without an agent. Leave cwd blank to use your home directory. Sudo uses /bin/sh with a clean root environment; use absolute program paths.</div>
+          </> : textField("prompt", "prompt")}
           <div className={styles.pair}>
             {selectField("scheduleKind", "schedule", [
               { value: "cron", label: "cron" }, { value: "every", label: "every" }, { value: "at", label: "at (once)" },
@@ -289,7 +297,7 @@ export function ScheduleFormCard({ mode = "create", initial, onSubmit, onClose }
           </div>
           <div className={styles.help}>{CATCH_UP_HELP}</div>
           <div className={styles.pair}>
-            {values.targetKind !== "existing" && textField("maxBudgetUsd", "budget $", "optional")}
+            {values.targetKind !== "existing" && values.targetKind !== "command" && textField("maxBudgetUsd", "budget $", "optional")}
             <div className={styles.field}>
               <span className={activeKey === "enabled" ? styles.labelActive : styles.label}>enabled</span>
               <input
@@ -303,13 +311,13 @@ export function ScheduleFormCard({ mode = "create", initial, onSubmit, onClose }
             </div>
           </div>
           <div className={preview.error ? styles.previewError : styles.previewOk}>
-            {preview.error ? `invalid schedule: ${preview.error}` : `next run: ${preview.nextRunTs !== null ? new Date(preview.nextRunTs).toLocaleString() : "—"}`}
+            {preview.error ? `invalid schedule: ${preview.error}` : `next run: ${preview.nextRunTs !== null ? new Date(preview.nextRunTs).toLocaleString() : editing && values.scheduleKind === "at" && Date.parse(values.at) <= Date.now() ? "none — one-shot time has passed; saving does not rerun it" : "—"}`}
             {upcoming.length > 1 && <details><summary>next {upcoming.length} runs (local time)</summary><ol>{upcoming.map(ts => <li key={ts}>{new Date(ts).toLocaleString()}</li>)}</ol></details>}
           </div>
         </div>
         <div className={styles.footer}>
           {values.targetKind !== "command" && <label><input type="checkbox" checked={values.promptTemplate ?? false} onChange={e => setValues(v => ({ ...v, promptTemplate: e.target.checked }))} />prompt variables: {"{{job}}, {{iso}}, {{ts}}, {{agentId}}"}</label>}
-          <span className={styles.submitChip} onClick={submit} data-schedule-submit>
+          <span className={styles.submitChip} onClick={() => submit()} data-schedule-submit>
             <span className={styles.submitKey}>enter</span>
             <span className={styles.submitVerb}> {editing ? "save" : "create"}</span>
           </span>

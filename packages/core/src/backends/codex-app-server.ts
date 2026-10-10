@@ -1,3 +1,5 @@
+import { createHash, randomUUID } from "node:crypto";
+import { RemotePairResultSchema, type RemotePairResult } from "@chimera/protocol";
 import { CodexMeetingPlanner } from "./codex-meeting-planner.js";
 import type { CodexFactoryOptions, CodexLike, CodexThreadEvent, CodexThreadLike } from "./codex.js";
 import type { CodexInput } from "./codex-input.js";
@@ -93,6 +95,8 @@ export class CodexAppServer implements CodexLike {
   private completedTurnIds = new Set<string>();
   private requests = new Map<string | number, { cancel: () => void }>();
   private consuming = false;
+  private localUserIds = new Set<string>();
+  private userItems = new Set<string>();
   private turnSignal: AbortSignal | undefined;
   private idleWaiters = new Set<() => void>();
   private ensureThread: (() => Promise<void>) | undefined;
@@ -122,6 +126,19 @@ export class CodexAppServer implements CodexLike {
     // or launch a separate bridge that cannot attach to this agent's thread.
     const response = await this.rpc.request(`remoteControl/${enable ? "enable" : "disable"}`, { ephemeral: true });
     return remoteControlResult(response);
+  }
+  async remotePair(): Promise<RemotePairResult> {
+    await this.ensureThread?.();
+    if (!this.threadId || this.closed) throw new Error("Codex thread is not connected");
+    try {
+      const result = await this.rpc.request("remoteControl/pairing/start", { manualCode: true });
+      // Do not expose/store the QR credential or raw provider errors.
+      return RemotePairResultSchema.parse({ manualPairingCode: result.manualPairingCode, environmentId: result.environmentId, expiresAt: result.expiresAt });
+    } catch (error) {
+      if (error instanceof CodexRpcError && error.code === -32601)
+        throw new Error("This Codex CLI does not support device pairing. Update Codex and reconnect this agent.");
+      throw new Error("Codex device pairing failed. Enable remote control and check the account's Remote access.");
+    }
   }
   readonly nativeVoice: NativeVoiceHandle = {
     planMeeting: async (input, signal) => { await this.ready; return this.meetingPlanner.plan(input, signal, this.plannerOptions); },
@@ -199,7 +216,7 @@ export class CodexAppServer implements CodexLike {
 
   private wakeIdle(): void { for (const done of [...this.idleWaiters]) done(); }
 
-  constructor(options: CodexFactoryOptions, private permission: PermissionDecider, private dialog?: DialogDecider, factory?: RpcProcessFactory, private suppressQuestions = false, private fullRiskGranted = false) {
+  constructor(options: CodexFactoryOptions & { agentId?: string }, private permission: PermissionDecider, private dialog?: DialogDecider, factory?: RpcProcessFactory, private suppressQuestions = false, private fullRiskGranted = false) {
     const env = { ...(options.env ?? {}) };
     // API-key login MUST be memory-only; never overwrite a shared subscription
     // auth.json/keychain entry. Keep the built-in provider for namespace tools.
@@ -224,7 +241,10 @@ export class CodexAppServer implements CodexLike {
       this.voiceState?.({ error: error.message, closed: true });
       if (!this.consuming) this.onBackgroundEvent?.({ type: "error", message: error.message });
     };
-    const initialize: InitializeParams = { clientInfo: { name: "chimera", title: "Chimera", version: "0.1.0" }, capabilities: { experimentalApi: true, requestAttestation: false } };
+    // Codex persists enrollment by account + clientInfo.name. Every agent has
+    // its own app-server, so a shared name makes the second bridge fail HTTP 409.
+    // Stable across resume, without moving CODEX_HOME or copying credentials.
+    const initialize: InitializeParams = { clientInfo: { name: options.agentId ? `chimera_${createHash("sha256").update(options.agentId).digest("hex").slice(0, 32)}` : "chimera", title: "Chimera", version: "0.1.0" }, capabilities: { experimentalApi: true, requestAttestation: false } };
     this.ready = this.rpc.request("initialize", initialize).then(async () => {
       this.rpc.notify("initialized");
       if (options.apiKey) await this.rpc.request("account/login/start", { type: "apiKey", apiKey: options.apiKey });
@@ -313,6 +333,8 @@ export class CodexAppServer implements CodexLike {
         turnOptions?.signal?.throwIfAborted();
         owner.consuming = true;
         owner.active = true;
+        const clientUserMessageId = randomUUID();
+        owner.localUserIds.add(clientUserMessageId);
         owner.usage = {};
         owner.snapshots.clear();
         owner.fileChanges.clear();
@@ -326,7 +348,8 @@ export class CodexAppServer implements CodexLike {
         };
         signal?.addEventListener("abort", abort, { once: true });
         try {
-          const params: TurnStartParams = { threadId: owner.threadId!, input: wireInput(input), effort: invocationOptions.modelReasoningEffort, approvalPolicy: invocationOptions.approvalPolicy, sandboxPolicy: owner.sandboxPolicy(invocationOptions), ...(turnOptions?.outputSchema ? { outputSchema: turnOptions.outputSchema } : {}) };
+          const params: TurnStartParams = {
+            clientUserMessageId, threadId: owner.threadId!, input: wireInput(input), effort: invocationOptions.modelReasoningEffort, approvalPolicy: invocationOptions.approvalPolicy, sandboxPolicy: owner.sandboxPolicy(invocationOptions), ...(turnOptions?.outputSchema ? { outputSchema: turnOptions.outputSchema } : {}) };
           // Requests may arrive before the response. Wait for this exact turn's
           // acceptance rather than borrowing the preceding turn's full bypass.
           let resolvePosture!: (full: boolean) => void;
@@ -339,7 +362,7 @@ export class CodexAppServer implements CodexLike {
             if (interrupted) abort();
           } catch (error) { resolvePosture(false); throw error; }
           finally { if (owner.startingPosture === posture) owner.startingPosture = undefined; }
-        } catch (error) { if (!signal?.aborted) owner.onPermissionFailed?.(error); signal?.removeEventListener("abort", abort); owner.active = false; owner.consuming = false; owner.turnSignal = undefined; throw error; }
+        } catch (error) { if (!signal?.aborted) owner.onPermissionFailed?.(error); signal?.removeEventListener("abort", abort); owner.active = false; owner.consuming = false; owner.localUserIds.delete(clientUserMessageId); owner.turnSignal = undefined; throw error; }
         return { events: (async function* () {
           try {
             while (owner.active || owner.events.length) {
@@ -359,10 +382,13 @@ export class CodexAppServer implements CodexLike {
       },
       async steer(input) {
         if (!owner.active || !owner.turnId) return false;
+        const clientUserMessageId = randomUUID();
+        owner.localUserIds.add(clientUserMessageId);
         try {
-          await owner.rpc.request("turn/steer", { threadId: owner.threadId, expectedTurnId: owner.turnId, input: wireInput(input) });
+          await owner.rpc.request("turn/steer", { threadId: owner.threadId, expectedTurnId: owner.turnId, clientUserMessageId, input: wireInput(input) });
           return true;
         } catch (error) {
+          if (error instanceof CodexRpcError) owner.localUserIds.delete(clientUserMessageId);
           // The turn can finish between the active check and the RPC. Only an
           // explicit rejection is replayable; timeout/disconnect may have accepted it.
           if (error instanceof CodexRpcError && !owner.active && !owner.failure && !owner.closed) return false;
@@ -408,6 +434,7 @@ export class CodexAppServer implements CodexLike {
     if (method === "turn/started") {
       this.active = true; this.turnId = p.turn.id;
       this.completedTurnIds.delete(this.turnId!);
+      this.userItems.clear();
       this.compactOnly = !this.consuming; this.sawCompaction = false;
       this.usage = {}; this.billableUsage = {}; this.snapshots.clear(); this.fileChanges.clear(); this.startedItems.clear();
       this.push({ type: "turn.started", turnId: this.turnId });
@@ -465,6 +492,7 @@ export class CodexAppServer implements CodexLike {
       } : null, ...(maintenance ? { maintenance: true } : {}) });
       this.wake?.();
       this.turnId = null;
+      this.localUserIds.clear();
       this.compactOnly = false; this.sawCompaction = false;
       this.wakeIdle();
     } else if (method === "item/commandExecution/outputDelta" || method === "item/mcpToolCall/progress") {
@@ -476,6 +504,18 @@ export class CodexAppServer implements CodexLike {
       this.push({ type: "item.updated", item: { id: p.itemId, type: "agent_message", text: full } });
     } else if (method === "item/started" || method === "item/completed") {
       const item = p.item as Row;
+      if (item.type === "userMessage") {
+        if (typeof item.id !== "string" || this.userItems.has(item.id) || p.turnId && this.completedTurnIds.has(p.turnId)) return;
+        this.userItems.add(item.id);
+        // Match the native echoed client ID, never body text or event order:
+        // mobile steering can race a local submission with identical content.
+        if (typeof item.clientId === "string" && this.localUserIds.has(item.clientId)) return;
+        const text = Array.isArray(item.content) ? item.content.map((part: Row) =>
+          part.type === "text" && typeof part.text === "string" ? part.text : `[${String(part.type ?? "attachment")}]`
+        ).join("\n") : "";
+        this.push({ type: "remote.user_message", messageId: `${this.threadId}:${item.id}`, text });
+        return;
+      }
       if (item.type === "contextCompaction") this.sawCompaction = true;
       else this.compactOnly = false;
       if (item.type === "fileChange") this.fileChanges.set(item.id, item.changes ?? []);

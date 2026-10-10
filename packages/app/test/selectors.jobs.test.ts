@@ -891,3 +891,49 @@ describe("requeueNoticeLabel", () => {
     expect(requeueNoticeLabel("nightly", NOW + 3_600_000, NOW)).toBe("requeued nightly — next run in 1h");
   });
 });
+
+
+describe("command schedule editing", () => {
+  const raw = { name: "echo", schedule: { at: 100049 }, tz: "UTC", enabled: true,
+    target: { command: 'echo "OK"', timeoutMs: 1501, env: { MODE: "test" }, restartBackoffMs: 5000 } };
+  it("requires a command and a valid timeout without validating hidden agent budget", () => {
+    const v = { ...defaultScheduleFormValues(), name: "echo", targetKind: "command" as const, command: "echo ok", maxBudgetUsd: "invalid" };
+    expect(validateScheduleForm(v)).toBeNull();
+    expect(validateScheduleForm({ ...v, command: " " })).toBe("command is required");
+    for (const timeout of ["0", "-1", "NaN", "21601", "0.0001"]) expect(validateScheduleForm({ ...v, commandTimeoutSec: timeout })).toContain("timeout");
+    expect(validateScheduleForm({ ...v, commandTimeoutSec: "1.001" })).toBeNull();
+  });
+  it("edits an elapsed one-shot without restating/rearming its schedule or losing command options", () => {
+    const initial = scheduleFormValuesFromSpec(raw);
+    const v = { ...initial, command: "echo updated" };
+    expect(validateScheduleForm(v, initial)).toBeNull();
+    const patch = buildJobUpdatePatch(v, initial);
+    expect(patch).not.toHaveProperty("schedule");
+    expect(patch).not.toHaveProperty("tz");
+    expect(patch).not.toHaveProperty("enabled");
+    expect(patch.target).toEqual({ ...raw.target, command: "echo updated" });
+    expect(buildJobSpec({ ...v, commandTimeoutSec: "1.001" }).target).toHaveProperty("timeoutMs", 1001);
+    expect(jobRow(raw).targetLabel).toBe("command (no agent)");
+  });
+  it("still rejects new or changed past dates and re-enabling an expired job", () => {
+    const initial = scheduleFormValuesFromSpec(raw);
+    expect(validateScheduleForm(initial)).toContain("not in the future");
+    expect(validateScheduleForm({ ...initial, at: "2000-01-01T00:00" }, initial)).toContain("not in the future");
+    expect(validateScheduleForm(initial, { ...initial, enabled: false })).toContain("not in the future");
+  });
+  it("preserves recurring phase for command edits, sends explicit new schedules", () => {
+    const initial = scheduleFormValuesFromSpec({ ...raw, schedule: { every: { n: 1, unit: "hours" } } });
+    expect(buildJobUpdatePatch({ ...initial, command: "echo new" }, initial)).not.toHaveProperty("schedule");
+    expect(buildJobUpdatePatch({ ...initial, everyN: "2" }, initial).schedule).toEqual({ every: { n: 2, unit: "hours" } });
+  });
+});
+
+describe("sudo schedule form", () => {
+  it("round-trips sudo and removes the opt-in when unchecked, retaining environment", () => {
+    const initial = scheduleFormValuesFromSpec({ name: "root-task", schedule: { cron: "0 3 * * *" }, target: { command: "/usr/bin/true", sudo: true, env: { X: "one" }, timeoutMs: 1000 } });
+    expect(initial.commandSudo).toBe(true);
+    expect(buildJobSpec(initial).target).toMatchObject({ sudo: true, env: { X: "one" } });
+    expect(buildJobUpdatePatch({ ...initial, commandSudo: false }, initial).target).not.toHaveProperty("sudo");
+    expect(jobRow({ target: { command: "test", sudo: true } }).targetLabel).toBe("command (sudo)");
+  });
+});

@@ -415,6 +415,83 @@ describe("Codex app-server", () => {
       expect(events.at(-1).maintenance).toBeUndefined();
     } finally { client.close(); }
   });
+  it("isolates remote enrollment per agent while retaining identity on resume", async () => {
+    const mocks = [server(), server(), server()];
+    for (const mock of mocks) mock.onMessage = m => {
+      if (m.method === "remoteControl/enable") mock.send({ id: m.id, result: { status: "connecting" } });
+    };
+    const handles = mocks.map((mock, i) => new CodexAgentBackend({ appServerProcess: mock.factory, validateModel: async () => {} })
+      .spawn({ ...cxSpec({ providerOptions: { codexTransport: "app-server" }, persistent: true, ...(i === 2 ? { resume: "thread-a", resumeOnly: true } : {}) }), agentId: i === 1 ? "different-agent" : "same-agent" }, () => {}, async () => false));
+    try {
+      await Promise.all(handles.map(h => h.remoteControl!(true)));
+    } finally { await Promise.all(handles.map(h => h.kill())); }
+    const names = mocks.map(m => m.messages.find(r => r.method === "initialize").params.clientInfo.name);
+    expect(names[0]).not.toBe("chimera");
+    expect(names[0]).not.toBe(names[1]);
+    expect(names[0]).toBe(names[2]);
+    expect(names[0]).toMatch(/^chimera_[a-f0-9]{32}$/);
+    expect(mocks[2]!.messages.find(m => m.method === "thread/resume").params.threadId).toBe("thread-a");
+    expect(mocks.every(m => !m.messages.some(r => r.method.startsWith("config/")))).toBe(true);
+  });
+
+  it("pairs the current app-server without persisting or emitting pairing credentials", async () => {
+    const mock = server(); const events: any[] = [];
+    const secret = "SHORT-CODE";
+    mock.onMessage = m => {
+      if (m.method === "remoteControl/pairing/start") mock.send({ id: m.id, result: { pairingCode: "PRIVATE-QR", manualPairingCode: secret, environmentId: "env-pair", expiresAt: 1900000000 } });
+    };
+    const handle = new CodexAgentBackend({ appServerProcess: mock.factory, validateModel: async () => {} }).spawn(cxSpec({ providerOptions: { codexTransport: "app-server" }, persistent: true }), e => events.push(e), async () => false);
+    try {
+      await vi.waitFor(() => expect(mock.messages.some(m => m.method === "turn/start")).toBe(true));
+      const before = mock.messages.length;
+      expect(await handle.remotePair!()).toEqual({ manualPairingCode: secret, environmentId: "env-pair", expiresAt: 1900000000 });
+      expect(mock.messages.slice(before)).toEqual([expect.objectContaining({ method: "remoteControl/pairing/start", params: { manualCode: true } })]);
+      expect(JSON.stringify(events)).not.toMatch(/SHORT-CODE|PRIVATE-QR/);
+      mock.onMessage = m => { if (m.method === "remoteControl/pairing/start") mock.send({ id: m.id, error: { code: -32000, message: "secret PRIVATE-QR" } }); };
+      await expect(handle.remotePair!()).rejects.toThrow("Codex device pairing failed");
+      mock.onMessage = m => { if (m.method === "remoteControl/pairing/start") mock.send({ id: m.id, error: { code: -32601, message: "unknown" } }); };
+      await expect(handle.remotePair!()).rejects.toThrow("does not support device pairing");
+    } finally { await handle.kill(); }
+  });
+
+  it("mirrors remote user items once and queues local input behind a mobile turn", async () => {
+    const mock = server(); const events: any[] = [];
+    const handle = new CodexAgentBackend({ appServerProcess: mock.factory, validateModel: async () => {} }).spawn(cxSpec({ providerOptions: { codexTransport: "app-server" }, persistent: true }), e => events.push(e), async () => false);
+    const user = (id: string, text: string, turnId = "turn-a", threadId = "thread-a", clientId: string | null = null) => {
+      for (const edge of ["started", "completed"]) mock.send({ method: `item/${edge}`, params: { threadId, turnId, item: { type: "userMessage", id, clientId, content: [{ type: "text", text }] } } });
+    };
+    try {
+      await vi.waitFor(() => expect(mock.messages.some(m => m.method === "turn/start")).toBe(true));
+      const firstLocalId = mock.messages.find(m => m.method === "turn/start").params.clientUserMessageId;
+      expect(firstLocalId).toEqual(expect.any(String));
+      user("local", "local initial prompt", "turn-a", "thread-a", firstLocalId);
+      await handle.steer!("same steering text");
+      const steerId = mock.messages.find(m => m.method === "turn/steer").params.clientUserMessageId;
+      // Deliberately deliver remote input before the local echo, same body.
+      user("steer", "same steering text");
+      user("local-steer", "same steering text", "turn-a", "thread-a", steerId);
+      mock.complete();
+      await vi.waitFor(() => expect(events.some(e => e.kind === "turn_complete")).toBe(true));
+      mock.send({ method: "turn/started", params: { threadId: "thread-a", turn: { id: "mobile-turn" } } });
+      user("foreign", "other thread", "mobile-turn", "thread-b");
+      user("mobile", "mobile next prompt", "mobile-turn");
+      await handle.send("queued local reply");
+      expect(mock.messages.filter(m => m.method === "turn/start")).toHaveLength(1);
+      mock.send({ method: "turn/completed", params: { threadId: "thread-a", turn: { id: "mobile-turn", status: "completed" } } });
+      await vi.waitFor(() => expect(mock.messages.filter(m => m.method === "turn/start")).toHaveLength(2));
+      user("local2", "queued local reply", "turn-a", "thread-a", mock.messages.filter(m => m.method === "turn/start")[1]!.params.clientUserMessageId);
+      mock.complete();
+      await vi.waitFor(() => expect(events.filter(e => e.kind === "turn_complete")).toHaveLength(3));
+      const delivered = events.filter(e => e.data?.delivered);
+      expect(delivered.map(e => e.data.text)).toEqual(["same steering text", "mobile next prompt"]);
+      expect(delivered.every(e => e.data.from === "codex-remote")).toBe(true);
+      expect(delivered[0].data.messageId).not.toBe(delivered[1].data.messageId);
+      let state = initialState;
+      events.forEach((e, i) => { state = reduce(state, { type: "event", event: { ...e, agentId: "cx-1", seq: i + 1, ts: i + 1 } }); });
+      expect(JSON.stringify(state.agents["cx-1"]!.transcript)).toContain("mobile next prompt");
+    } finally { await handle.kill(); }
+  });
+
   it("exposes native compaction and ephemeral remote control on app-server handles", async () => {
     const mock = server(); const events: any[] = [];
     mock.onMessage = m => {

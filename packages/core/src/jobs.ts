@@ -1,3 +1,4 @@
+import { planJobSudo, sudoJobInvocation } from "./job-sudo.js";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
@@ -401,7 +402,7 @@ export type JobSchedulerDeps = {
 /** The result of a scheduled shell run. `exitCode: null` means the command never produced one —
  * it was killed on timeout, or the shell could not start it — and `error` says which. */
 export type CommandRunResult = { exitCode: number | null; output: string; error?: string };
-export type CommandRunner = (target: { command: string; cwd?: string; env?: Record<string, string>; timeoutMs: number }) => Promise<CommandRunResult>;
+export type CommandRunner = (target: { command: string; cwd?: string; env?: Record<string, string>; timeoutMs: number; sudo?: boolean }) => Promise<CommandRunResult>;
 
 // JOB-COMMAND-TARGET: bounded on purpose. A scheduled command that prints megabytes (a verbose
 // build, a `find /`) would otherwise put all of it into jobs.json, which is rewritten in full on
@@ -415,14 +416,20 @@ export function tailOutput(text: string, max = COMMAND_OUTPUT_MAX): string {
 
 export const runShellCommand: CommandRunner = async (target) => {
   const { spawn } = await import("node:child_process");
+  let elevated: ReturnType<typeof sudoJobInvocation> | undefined;
+  if (target.sudo) {
+    try { elevated = sudoJobInvocation(target); }
+    catch (error) { return { exitCode: null, output: "", error: error instanceof Error ? error.message : "Sudo authorization required" }; }
+  }
   return await new Promise<CommandRunResult>((resolve) => {
     // A LOGIN shell: a scheduled command is written the way an operator would type it, and the
     // tools those commands reach for (aws, gcloud, kubectl, nvm-managed node) live on a PATH the
     // daemon's own non-interactive environment usually does not have.
-    const child = spawn(target.command, {
-      shell: process.env["SHELL"] ?? "/bin/sh",
-      cwd: target.cwd ?? homedir(),
-      env: { ...process.env, ...(target.env ?? {}) },
+    const child = spawn(elevated?.command ?? target.command, elevated?.args ?? [], {
+      shell: elevated ? false : process.env["SHELL"] ?? "/bin/sh",
+      cwd: elevated ? "/" : target.cwd ?? homedir(),
+      env: elevated ? { PATH: "/usr/bin:/bin:/usr/sbin:/sbin", LANG: "C" } : { ...process.env, ...(target.env ?? {}) },
+      stdio: elevated ? ["ignore", "pipe", "pipe"] : undefined,
       // Its own process group, so a timeout kills the whole tree rather than just the shell and
       // leaving its children orphaned and running.
       detached: true,
@@ -434,8 +441,10 @@ export const runShellCommand: CommandRunner = async (target) => {
     let timedOut = false;
     const timer = setTimeout(() => {
       timedOut = true;
-      try { process.kill(-child.pid!, "SIGKILL"); } catch { child.kill("SIGKILL"); }
-    }, target.timeoutMs);
+      // sudo's monitor owns the root process and its policy timeout. Preserve it to forward TERM.
+      const signal = elevated ? "SIGTERM" : "SIGKILL";
+      try { process.kill(-child.pid!, signal); } catch { child.kill(signal); }
+    }, elevated?.timeoutMs ?? target.timeoutMs);
     child.on("error", (e) => {
       clearTimeout(timer);
       resolve({ exitCode: null, output: tailOutput(out), error: `could not start command: ${e.message}` });
@@ -446,7 +455,7 @@ export const runShellCommand: CommandRunner = async (target) => {
       resolve({
         exitCode: code,
         output: tailOutput(out),
-        ...(code === 0 ? {} : { error: `exited ${code}` }),
+        ...(code === 0 ? {} : { error: elevated ? `sudo command exited ${code}; if authorization was denied, authorize the current command in schedule settings` : `exited ${code}` }),
       });
     });
   });
@@ -1571,6 +1580,7 @@ export class JobScheduler {
       if (target.role !== undefined && !(target.role in team.roles))
         throw new JobError(`team "${target.team}" has no role "${target.role}"`);
     } else if ("command" in target) {
+      if (target.sudo) planJobSudo(target);
       // Nothing to resolve — the shell decides at run time whether the command exists. The
       // dispatch it may trigger, though, IS resolvable now, and a trigger pointing at a team or
       // role that does not exist would otherwise surface only when the thing it watches for finally
@@ -1586,8 +1596,9 @@ export class JobScheduler {
   // so the "required for everything else" half lives here, beside the other target validation and
   // before anything persists. Without it an agent-targeted job could be created with no prompt and
   // would only fail at its first fire — hours later, as a mysterious run failure.
-  private validatePrompt(spec: { target: JobTarget; prompt?: string; maxBudgetUsd?: number | null }): void {
+  private validatePrompt(spec: { target: JobTarget; schedule?: JobSchedule; prompt?: string; maxBudgetUsd?: number | null }): void {
     if ("existingAgentId" in spec.target && spec.maxBudgetUsd != null) throw new JobError("existing-agent jobs use the agent's own budget; maxBudgetUsd cannot be set on this job");
+    if ("command" in spec.target && spec.target.sudo && spec.schedule && "watch" in spec.schedule) throw new JobError("Sudo command jobs require a timed schedule; watch mode is not supported.");
     const isCommand = "command" in spec.target;
     if (!isCommand && (spec.prompt === undefined || spec.prompt.length === 0))
       throw new JobError("prompt is required for a team/agentSpec/role/existingAgentId job — it is what the agent is asked to do");
@@ -1663,7 +1674,8 @@ export class JobScheduler {
     const reenabled = wasDisabled && merged.enabled === true;
     let nextRunTs: number | null = job.nextRunTs;
     if (!merged.enabled) nextRunTs = null;
-    else if (scheduleChanged || reenabled || nextRunTs === null) nextRunTs = validateSchedule(merged.schedule, merged.tz, this.now());
+    // A completed one-shot stays exhausted when only its command/options are edited.
+    else if (scheduleChanged || reenabled || (nextRunTs === null && !("at" in job.schedule && job.schedule.at <= this.now()))) nextRunTs = validateSchedule(merged.schedule, merged.tz, this.now());
     const updated = JobRecordSchema.parse({
       ...merged, createdAt: job.createdAt, nextRunTs, lastRuns: job.lastRuns,
       consecutiveFailures: reenabled ? 0 : job.consecutiveFailures,

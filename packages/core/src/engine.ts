@@ -1,3 +1,5 @@
+import { planJobSudo } from "./job-sudo.js";
+import { JobSudoPlanParams, JobSudoPlanResultSchema } from "@chimera/protocol";
 import { CanvasRpc } from "./rpc/canvas-rpc.js";
 import { CanvasStore } from "./canvas-store.js";
 import { ConversationForks } from "./fork.js";
@@ -30,7 +32,7 @@ import {
   isPeerMethod, parseAgentAddress, formatAgentAddress, assertFederationSafeSpec,
   MailboxForwardParamsSchema, ContentBlockSchema, AgentSendOptionsSchema, AssignParams, DispatchParams, AnswerDialogParams, SetModelParams,
   SetEffortParams, SetTurnLimitParams, SetAccountParams, AgentHandoffParams, AgentRebindParams,
-  RemoteControlParams, CompactParams, FsListParams, FsReadParams, FsResolveParams,
+  RemoteControlParams, RemotePairParams, CompactParams, FsListParams, FsReadParams, FsResolveParams,
   AgentBulkSendParamsSchema, AgentBulkResumeParamsSchema,
   MemoryAddParams, MemoryEditParams, MemoryDeleteParams, MemorySearchParams, MemoryGetParams, MemoryStatsParams, MemoryGraphParams, MemoryIndexParams, ToolPolicyModeSchema, ToolPolicySchema,
   PeerConfigSchema, InviteCreateParams, InviteRevokeParams, FedJoinParams, FedGrantParams, JobUpdateParams,
@@ -3240,6 +3242,10 @@ export class Engine {
             ...(p.deliverTo !== undefined ? { deliverTo: p.deliverTo } : {}),
           });
         }
+        // Desktop-only: no MCP registration, no pairing credential in event logs.
+        case "agent.remotePair": {
+          return await this.supervisor.remotePair(RemotePairParams.parse(params).agentId);
+        }
         case "agent.remoteControl": {
           const p = RemoteControlParams.parse(params);
           return await this.supervisor.remoteControl(p.agentId, p.enable, p.name, p.acknowledgeTransition);
@@ -3374,6 +3380,11 @@ export class Engine {
         // ---------- D10: scheduled actions — job.* family (coverage C12) ----------
         // Local-only by construction (absent from PEER_METHODS): a peer never sees or
         // drives our schedules.
+        case "job.sudoPlan": {
+          const { target } = JobSudoPlanParams.parse(params);
+          if (!("command" in target) || !target.sudo) throw new Error("Select a sudo command target first.");
+          return JobSudoPlanResultSchema.parse(planJobSudo(target));
+        }
         case "job.create": {
           const spec = JobCreateParams.parse(params).spec;
           const created = this.jobs.create(spec);
@@ -3390,7 +3401,7 @@ export class Engine {
               agentId: "operator", action: "job_command_created", resource: created.name,
               decision: "recorded",
               reason: `scheduled shell command created for job "${created.name}" — runs unattended with daemon privileges`,
-              detail: { command: created.target.command, cwd: created.target.cwd ?? null, schedule: created.schedule },
+              detail: { command: created.target.command, sudo: created.target.sudo === true, cwd: created.target.cwd ?? null, schedule: created.schedule },
             });
           }
           return created;

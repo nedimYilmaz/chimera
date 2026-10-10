@@ -51,6 +51,8 @@ export function ScheduleDetail({ row, spec, now, events, onOpenRun, error, onRet
   const toneClass = row.lastRun ? toneClassOf(row.lastRun.result) : styles.toneMuted;
   const tz = spec && typeof spec["tz"] === "string" ? (spec["tz"] as string) : null;
   const prompt = spec && typeof spec["prompt"] === "string" ? (spec["prompt"] as string) : null;
+  const target = spec?.target as Record<string, unknown> | undefined;
+  const command = typeof target?.command === "string" ? target.command : null;
   const schedule = spec && typeof spec["schedule"] === "object" && spec["schedule"] !== null ? (spec["schedule"] as Record<string, unknown>) : null;
   const isCron = !!schedule && typeof schedule["cron"] === "string";
   // job.list's row already carries the newest run (JobRow.lastRun) — the full
@@ -196,11 +198,11 @@ export function ScheduleDetail({ row, spec, now, events, onOpenRun, error, onRet
           </ul>
         )}
 
-        <div className={styles.promptLabel}>prompt</div>
-        {prompt !== null ? (
+        <div className={styles.promptLabel}>{row.targetKind === "command" ? "command" : "prompt"}</div>
+        {command !== null ? <pre data-schedule-command style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{command}</pre> : prompt !== null ? (
           <MessageBody text={prompt} done rawView={false} />
         ) : (
-          <div className={styles.faint}>loading…</div>
+          <div className={styles.faint}>{spec ? "—" : "loading…"}</div>
         )}
       </div>
     </>

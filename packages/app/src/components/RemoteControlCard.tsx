@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { RemotePairResultSchema, type RemotePairResult } from "@chimera/protocol";
 import type { UiState } from "@chimera/ui-state";
 import { registerOverlay } from "./OverlayOutlet";
 import { OverlayCard, OverlayCardHeader } from "./OverlayCard";
@@ -25,9 +26,34 @@ export function RemoteControlCard() {
   const status = agent?.remoteControl;
   const enabled = status?.enabled === true;
   const [pending, setPending] = useState(false);
+  const [pairing, setPairing] = useState<RemotePairResult | null>(null);
+  const [pairError, setPairError] = useState<string | null>(null);
+  const [pairPending, setPairPending] = useState(false);
+  const pairGeneration = useRef(0);
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => { pairGeneration.current++; setPairing(null); setPairError(null); setPairPending(false); return () => { pairGeneration.current++; }; }, [open, agent?.agentId, enabled]);
+  useEffect(() => {
+    if (!pairing) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [pairing]);
+  const pair = (): void => {
+    if (!agent || !enabled || pending || pairPending) return;
+    const id = agent.agentId;
+    const generation = ++pairGeneration.current;
+    setPairPending(true); setPairError(null); setPairing(null);
+    void rpcCall("agent.remotePair", { agentId: id }).then(result => {
+      if (generation !== pairGeneration.current || !systemLocal.getState().remoteControlOpen || appStore.getState().selectedAgentId !== id) return;
+      setNow(Date.now()); setPairing(RemotePairResultSchema.parse(result));
+    }).catch(() => {
+      // Do not render arbitrary provider errors containing pairing credentials.
+      if (generation === pairGeneration.current && systemLocal.getState().remoteControlOpen && appStore.getState().selectedAgentId === id)
+        setPairError("Device pairing failed. Check that remote is connected and your Codex CLI/account supports pairing.");
+    }).finally(() => { if (generation === pairGeneration.current) setPairPending(false); });
+  };
   const needsTransition = agent?.provider === "codex" && (agent.codexTransport ?? agent.permissionApplication?.transport) !== "app-server" && !enabled;
   const unavailable = !agent || agent.state !== "running" || (agent.provider !== "claude" && agent.provider !== "codex");
-  const disabled = pending || unavailable || (needsTransition && agent.busy);
+  const disabled = pending || pairPending || unavailable || (needsTransition && agent.busy);
   const toggle = (): void => {
     if (!agent || disabled) return;
     setPending(true);
@@ -41,7 +67,7 @@ export function RemoteControlCard() {
   useEffect(() => {
     if (!open || !agent) return;
     const onKey = (ev: KeyboardEvent): void => {
-      if (isEditableTarget(ev.target)) return;
+      if (isEditableTarget(ev.target) || ev.target instanceof Element && ev.target.closest("[data-remote-pair]")) return;
       if (ev.key === "Enter") {
         ev.stopPropagation();
         ev.preventDefault();
@@ -78,12 +104,24 @@ export function RemoteControlCard() {
         )}
         {status?.serverName && <div className={styles.fieldRow}><span className={styles.fieldLabel}>server</span><span>{status.serverName}</span></div>}
         {status?.environmentId && <div className={styles.fieldRow}><span className={styles.fieldLabel}>environment</span><span>{status.environmentId}</span></div>}
+        {status?.connectionStatus === "errored" && <span role="alert">Remote connection failed; this host is not reachable through this bridge. A name/environment ID alone does not mean connected.</span>}
         {needsTransition && <span className={styles.ghost} data-remote-transition-help>
           {agent.busy ? "Wait for this turn to finish. " : ""}Switch and enable reconnects this agent for remote access, preserving its conversation, name and permissions. No messages will be replayed.
         </span>}
+        {agent.provider === "codex" && enabled && <div>
+          <button type="button" className={styles.applyChip} onClick={pair} disabled={pending || pairPending || unavailable} data-remote-pair>
+            {pairPending ? "creating code…" : "pair mobile device"}
+          </button>
+          {pairing && pairing.expiresAt * 1000 > now && <div data-remote-pair-code>
+            <div>Pairing code: <strong>{pairing.manualPairingCode}</strong></div>
+            <div>Expires {new Date(pairing.expiresAt * 1000).toLocaleTimeString()}. Use it only on your own device.</div>
+          </div>}
+          {pairing && pairing.expiresAt * 1000 <= now && <div data-remote-pair-expired>Code expired. Create a new code to pair.</div>}
+          {pairError && <div role="alert">{pairError}</div>}
+        </div>}
         <span className={styles.ghost}>
           {agent.provider === "codex"
-            ? "Codex app-server remote access (not voice). The connection status and server identity come from Codex; this protocol does not return an attach URL. Requires a supported CLI/account."
+            ? "Mobile access needs a connected remote host and device pairing with the same ChatGPT account/workspace. Open Codex (or Remote) in ChatGPT mobile and select the paired host and this conversation. Enabling alone does not pair your phone."
             : enabled
             ? "open the attach link on claude.ai/code or the provider's mobile/desktop app"
             : "enabling starts the provider's bridge on this agent's live session"}

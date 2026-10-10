@@ -2520,6 +2520,16 @@ export type RemoteControlStatus = {
   environmentId?: string;
 };
 
+// Pairing credentials are returned only to the requesting UI; never persist them
+// in agent status, event history, or the model's tool surface.
+export const RemotePairParams = z.object({ agentId: z.string().min(1) }).strict();
+export const RemotePairResultSchema = z.object({
+  manualPairingCode: z.string().min(1).max(256),
+  environmentId: z.string().min(1),
+  expiresAt: z.number().int().positive(),
+}).strict();
+export type RemotePairResult = z.infer<typeof RemotePairResultSchema>;
+
 // ---------- agent.compact (COMPACTION-OBSERVABILITY) ----------
 // Request compaction now. Generic providers compact directly; Claude uses its slash
 // channel and Codex app-server uses thread/compact/start. Native completion is
@@ -4378,6 +4388,8 @@ export const JobTargetSchema = z.union([
   // external — it runs to completion and settles its own run entry.
   z.object({
     command: z.string().min(1),
+    // Requires a separately authorized, root-owned command snapshot; never stores a password.
+    sudo: z.boolean().optional(),
     cwd: z.string().min(1).optional(),
     // Merged OVER the daemon's own environment, never replacing it — a scheduled command that
     // lost PATH would fail in a way that looks like the command is missing.
@@ -4414,6 +4426,13 @@ export const JobTargetSchema = z.union([
   }).strict(),
 ]);
 export type JobTarget = z.infer<typeof JobTargetSchema>;
+
+// Read-only desktop setup preview. It does not install policy or execute a command.
+export const JobSudoPlanParams = z.object({ target: JobTargetSchema }).strict();
+export const JobSudoPlanResultSchema = z.object({
+  fingerprint: z.string(), authorizeScript: z.string(), revokeScript: z.string(),
+});
+export type JobSudoPlanResult = z.infer<typeof JobSudoPlanResultSchema>;
 
 export const JobSpecSchema = z.object({
   name: CoordName,

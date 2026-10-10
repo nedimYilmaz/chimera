@@ -5178,6 +5178,20 @@ export class AgentSupervisor {
     });
   }
 
+  async remotePair(agentId: string): Promise<import("@chimera/protocol").RemotePairResult> {
+    return this.queueRemoteControl(agentId, async () => {
+      const record = this.status(agentId);
+      const handle = this.handles.get(agentId);
+      if (record.state !== "running" || record.remoteControlIntent?.enabled !== true)
+        throw new AgentNotRunningError("Enable remote control on the running agent before pairing a device");
+      if (!handle?.remotePair) throw new RemoteControlUnsupportedError("This provider connection does not support device pairing");
+      const result = await handle.remotePair();
+      if (this.agents.get(agentId) !== record || record.state !== "running" || this.handles.get(agentId) !== handle || this.killingRecords.has(record))
+        throw new AgentNotRunningError("Agent session changed while pairing the device");
+      return result;
+    });
+  }
+
   private async applyRemoteControl(agentId: string, enable: boolean, name?: string): Promise<RemoteControlStatus> {
     const r = this.status(agentId);                            // throws UnknownAgentError for ghosts
     if (r.state !== "running")

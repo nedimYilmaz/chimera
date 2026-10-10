@@ -188,6 +188,9 @@ function normalizeCodexEventContent(ev: CodexThreadEvent, deltas?: Map<string, s
       // none, but its turn.started is still the first authentic proof Codex picked the prompt up
       // (thread.started only proves the process spawned), so it must not be dropped.
       return { kind: "status", data: { turnStarted: true, ...(typeof ev["turnId"] === "string" ? { turnId: ev["turnId"] } : {}) }, raw: ev };
+    case "remote.user_message":
+      return { kind: "status", data: { delivered: true, from: "codex-remote", text: ev["text"], messageId: ev["messageId"],
+        messageMetadata: { from: "codex-remote", source: "operator", engineId: "codex", kind: "user_message" } }, raw: ev };
     case "tool.progress":
       return { kind: "status", data: { toolProgress: { toolId: ev["itemId"], text: boundToolResultText(String(ev["text"] ?? "")) } }, raw: ev };
     case "item.started":
@@ -619,7 +622,7 @@ export class CodexAgentBackend implements AgentBackend {
     // the same configured binary used for execution, including future models.
     if (this.deps.codexFactory && !this.deps.validateModel) assertCodexToolDeferral(factoryOptions, threadOptions);
     const codex = transport === "app-server"
-      ? new CodexAppServer(factoryOptions, _decidePermission, _decideDialog, this.deps.appServerProcess, spec.autonomy === "full", spec.acknowledgeCodexFullAccessRisk)
+      ? new CodexAppServer({ ...factoryOptions, agentId: spec.agentId }, _decidePermission, _decideDialog, this.deps.appServerProcess, spec.autonomy === "full", spec.acknowledgeCodexFullAccessRisk)
       : (this.deps.codexFactory ?? defaultFactory)(factoryOptions);
     if (codex instanceof CodexAppServer) {
       codex.onPermissionApplied = options => {
@@ -1060,7 +1063,7 @@ export class CodexAgentBackend implements AgentBackend {
         return application();
       },
       isTurnActive: () => executingTurn || codex instanceof CodexAppServer && codex.isTurnActive(),
-      ...(codex instanceof CodexAppServer ? { compact: () => codex.compact(), compactOwner: "sdk" as const, remoteControl: (enable: boolean, name?: string) => codex.remoteControl(enable, name) } : {}),
+      ...(codex instanceof CodexAppServer ? { remotePair: () => codex.remotePair(), compact: () => codex.compact(), compactOwner: "sdk" as const, remoteControl: (enable: boolean, name?: string) => codex.remoteControl(enable, name) } : {}),
       ...(codex instanceof CodexAppServer && codex.realtimeEnabled ? { nativeVoice: codex.nativeVoice } : {}),
       send: async (text: string, images?: Image[], content?: ContentBlock[], delivery?: AgentDelivery) => {
         if (loop.ended || loop.closed) throw new Error("input stream closed");

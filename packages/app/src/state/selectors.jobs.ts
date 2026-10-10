@@ -146,6 +146,7 @@ export function jobRow(raw: Record<string, unknown>): JobRow {
     targetKind === "existing" ? `existing agent · ${str(target?.["existingAgentId"])}`
     : targetKind === "team" ? `team ${targetTeam}${targetRole ? ` · role ${targetRole}` : ""}`
     : targetKind === "role" ? `role · ${targetRole ?? "?"}`
+    : targetKind === "command" ? (target?.sudo === true ? "command (sudo)" : "command (no agent)")
     : `agent · ${agentSpec ? str(agentSpec["cwd"]) : "?"}`;
   return {
     name: str(raw["name"]),
@@ -724,6 +725,7 @@ export type ScheduleFormValues = {
   // with the agent target (both mean "where does this run"); the rest is command-only.
   command: string;
   commandTimeoutSec: string;
+  commandSudo?: boolean;
   cwd: string;
   model: string;
   // agent-target only: worktree isolation needs a git repo at cwd (else the run
@@ -764,7 +766,7 @@ export const LOCAL_TZ = (): string => {
 export function defaultScheduleFormValues(): ScheduleFormValues {
   return {
     existingAgentId: "",
-    name: "", targetKind: "team", team: "", teamRole: "", role: "", roleOverrides: {}, command: "", commandTimeoutSec: "", cwd: "", model: "", isolation: "none",
+    name: "", targetKind: "team", team: "", teamRole: "", role: "", roleOverrides: {}, command: "", commandTimeoutSec: "", commandSudo: false, cwd: "", model: "", isolation: "none",
     prompt: "", scheduleKind: "cron", cron: "0 * * * *", everyN: "30", everyUnit: "minutes",
     at: "", tz: LOCAL_TZ(), overlapPolicy: "skip", catchUp: false, catchUpMaxStalenessMin: "",
     maxBudgetUsd: "", enabled: true,
@@ -779,6 +781,7 @@ export type SchedulePreview = { nextRunTs: number | null; error: string | null }
 export function computeSchedulePreview(
   v: Pick<ScheduleFormValues, "scheduleKind" | "cron" | "everyN" | "everyUnit" | "at" | "tz">,
   now = Date.now(),
+  initial?: ScheduleFormValues,
 ): SchedulePreview {
   const tz = v.tz.trim() || "UTC";
   try {
@@ -802,6 +805,7 @@ export function computeSchedulePreview(
   }
   try {
     const next = computeNextRunTs(schedule, tz, now);
+    if (next === null && "at" in schedule && initial && unchangedSchedule(v, initial)) return { nextRunTs: null, error: null };
     if (next === null) return { nextRunTs: null, error: "at" in schedule ? "scheduled time is not in the future" : "cron schedule can never fire" };
     return { nextRunTs: next, error: null };
   } catch (err) {
@@ -812,24 +816,26 @@ export function computeSchedulePreview(
 /** First validation error for the create-schedule form, or null when
  * submittable. Mirrors protocol constraints (JobSpecSchema) client-side so the
  * inline error is instant — an invalid cron is NEVER silently accepted. */
-export function validateScheduleForm(v: ScheduleFormValues): string | null {
+export function validateScheduleForm(v: ScheduleFormValues, initial?: ScheduleFormValues): string | null {
   if (!v.name.trim()) return "name is required";
   if (!COORD_NAME_RE.test(v.name.trim())) return "name: letters, digits, _ and - only";
   if (v.targetKind === "team" && !v.team.trim()) return "team is required";
   if (v.targetKind === "agent" && !v.cwd.trim()) return "cwd is required";
   if (v.targetKind === "role" && !v.role.trim()) return "role is required";
   if (v.targetKind === "existing" && !v.existingAgentId.trim()) return "existing agent is required";
+  if (v.targetKind === "command" && !v.command.trim()) return "command is required";
+  if (v.targetKind === "command" && v.commandTimeoutSec.trim() && (Number(v.commandTimeoutSec) !== Number(Number(v.commandTimeoutSec).toFixed(3)) || Number(v.commandTimeoutSec) <= 0 || Number(v.commandTimeoutSec) > 21600)) return "timeout must be greater than 0 and at most 21600 seconds";
   if (v.targetKind !== "command" && !v.prompt.trim()) return "prompt is required";
   if (v.targetKind === "existing" && v.maxPendingMessages?.trim() && (!Number.isInteger(Number(v.maxPendingMessages)) || Number(v.maxPendingMessages) < 1 || Number(v.maxPendingMessages) > 1000)) return "pending message limit must be 1–1000";
   if (v.scheduleKind === "cron" && !v.cron.trim()) return "cron expression is required";
   if (v.scheduleKind === "every" && (!v.everyN.trim() || !Number.isInteger(Number(v.everyN)) || Number(v.everyN) <= 0))
     return "every: n must be a positive integer";
   if (v.scheduleKind === "at" && !v.at.trim()) return "date/time is required";
-  const preview = computeSchedulePreview(v);
+  const preview = computeSchedulePreview(v, Date.now(), initial && (!v.enabled || initial.enabled) ? initial : undefined);
   if (preview.error) return preview.error;
   if (v.catchUpMaxStalenessMin.trim() && !(Number.isInteger(Number(v.catchUpMaxStalenessMin)) && Number(v.catchUpMaxStalenessMin) > 0))
     return "catch-up limit: minutes must be a positive integer";
-  if (v.targetKind !== "existing" && v.maxBudgetUsd.trim() && !(Number(v.maxBudgetUsd) > 0)) return "budget must be a positive number";
+  if (v.targetKind !== "existing" && v.targetKind !== "command" && v.maxBudgetUsd.trim() && !(Number(v.maxBudgetUsd) > 0)) return "budget must be a positive number";
   return null;
 }
 
@@ -852,8 +858,9 @@ export function buildJobSpec(v: ScheduleFormValues): Record<string, unknown> {
       ? {
           ...v.commandExtras,
           command: v.command.trim(),
+          ...(v.commandSudo ? { sudo: true } : {}),
           ...(v.cwd.trim() ? { cwd: v.cwd.trim() } : {}),
-          ...(v.commandTimeoutSec.trim() ? { timeoutMs: Number(v.commandTimeoutSec) * 1000 } : {}),
+          ...(v.commandTimeoutSec.trim() ? { timeoutMs: Math.round(Number(v.commandTimeoutSec) * 1000) } : {}),
         }
       : { agentSpec: { ...v.agentSpecExtras, cwd: v.cwd.trim(), isolation: v.isolation, ...(v.model.trim() ? { model: v.model.trim() } : {}) } };
   // JOB-COMMAND-TARGET: a command job carries neither a prompt (its command IS the instruction)
@@ -865,7 +872,7 @@ export function buildJobSpec(v: ScheduleFormValues): Record<string, unknown> {
     tz: v.tz.trim() || "UTC",
     target,
     ...(isCommand ? {} : { prompt: v.prompt.trim() }),
-    ...(v.promptTemplate !== undefined ? { promptTemplate: v.promptTemplate } : {}),
+    ...(!isCommand && v.promptTemplate !== undefined ? { promptTemplate: v.promptTemplate } : {}),
     catchUp: v.catchUp,
     // Explicit null, never omitted: buildJobUpdatePatch reuses this object, and a dropped key
     // would leave a previously-set bound in place when the operator cleared the field.
@@ -878,8 +885,17 @@ export function buildJobSpec(v: ScheduleFormValues): Record<string, unknown> {
 
 /** job.update patch — the SAME buildJobSpec output minus the immutable `name`
  * key (W16/F15/D11: the schedules "e" edit chip). */
-export function buildJobUpdatePatch(v: ScheduleFormValues): Record<string, unknown> {
+function unchangedSchedule(v: Pick<ScheduleFormValues, "scheduleKind" | "cron" | "everyN" | "everyUnit" | "at" | "tz">, initial: ScheduleFormValues): boolean {
+  return v.scheduleKind === initial.scheduleKind && v.tz === initial.tz &&
+    (v.scheduleKind === "at" ? v.at === initial.at : v.scheduleKind === "cron" ? v.cron === initial.cron : v.everyN === initial.everyN && v.everyUnit === initial.everyUnit);
+}
+
+export function buildJobUpdatePatch(v: ScheduleFormValues, initial?: ScheduleFormValues): Record<string, unknown> {
   const { name: _name, ...patch } = buildJobSpec(v);
+  // An unrelated edit must retain the daemon's exact timestamp and interval phase.
+  if (initial && unchangedSchedule(v, initial)) { delete patch.schedule; delete patch.tz; }
+  if (initial && v.enabled === initial.enabled) delete patch.enabled;
+  if (v.targetKind === "command") { patch.maxBudgetUsd = null; patch.promptTemplate = false; }
   return patch;
 }
 
@@ -911,7 +927,7 @@ export function scheduleFormValuesFromSpec(raw: Record<string, unknown>): Schedu
     maxPendingMessages: targetKind === "existing" && typeof target?.["maxPendingMessages"] === "number" ? String(target.maxPendingMessages) : "",
     ...(typeof raw.promptTemplate === "boolean" ? { promptTemplate: raw.promptTemplate } : {}),
     ...(agentSpec ? { agentSpecExtras: extras(agentSpec, ["cwd", "model", "isolation"]) } : {}),
-    ...(targetKind === "command" ? { commandExtras: extras(target, ["command", "cwd", "timeoutMs"]) } : {}),
+    ...(targetKind === "command" ? { commandExtras: extras(target, ["command", "cwd", "timeoutMs", "sudo"]) } : {}),
     team: targetKind === "team" ? str(target?.["team"]) : "",
     teamRole: targetKind === "team" && typeof target?.["role"] === "string" ? str(target["role"]) : "",
     role: targetKind === "role" && typeof target?.["role"] === "string" ? str(target["role"]) : "",
@@ -920,8 +936,9 @@ export function scheduleFormValuesFromSpec(raw: Record<string, unknown>): Schedu
     // JOB-COMMAND-TARGET: `cwd` is shared — an agent target carries it inside agentSpec, a
     // command target carries it at the top level, and both mean "where does this run".
     command: targetKind === "command" ? str(target?.["command"]) : "",
+    commandSudo: targetKind === "command" && target?.sudo === true,
     commandTimeoutSec: targetKind === "command" && typeof target?.["timeoutMs"] === "number"
-      ? String(Math.round((target["timeoutMs"] as number) / 1000)) : "",
+      ? String((target["timeoutMs"] as number) / 1000) : "",
     cwd: targetKind === "agent" ? str(agentSpec?.["cwd"]) : targetKind === "command" ? str(target?.["cwd"]) : "",
     model: targetKind === "agent" ? str(agentSpec?.["model"]) : "",
     isolation: targetKind === "agent" && agentSpec?.["isolation"] === "worktree" ? "worktree" : "none",

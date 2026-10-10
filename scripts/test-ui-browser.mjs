@@ -1725,6 +1725,28 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
 
   check("execution mode normal spawn preserves plan choice", await evaluate(`window.__UI_QA__.quickSpawns()[1].executionMode==='plan'`));
 
+  await show("schedule-command");
+  check("schedule command displays editable command and timeout", await evaluate(`document.querySelector('[data-field="command"]').value==='echo "OK"' && document.querySelector('[data-field="commandTimeoutSec"]').value==='30' && !document.querySelector('[data-field="prompt"]') && !document.querySelector('[data-field="maxBudgetUsd"]') && !document.body.textContent.includes('invalid schedule')`));
+  await input('[data-field="command"]', 'echo UPDATED');
+  await click('[data-schedule-submit]'); await settleRender();
+  check("schedule command saves elapsed one shot without rearming", await evaluate(`(() => {const p=window.__UI_QA__.scheduleCommand.saved[0];return !!p && p.target.command==='echo UPDATED' && p.target.env.MODE==='kept' && p.target.timeoutMs===30000 && !('schedule' in p) && !('tz' in p) && !('prompt' in p) && !document.querySelector('[data-schedule-submit]');})()`));
+  check("schedule detail shows command instead of perpetual prompt loading", await evaluate(`document.querySelector('[data-schedule-command]').textContent==='echo "OK"' && document.body.textContent.includes('command (no agent)') && !document.body.textContent.includes('loading…')`));
+
+  await click('[data-new-command]'); await settleRender();
+  await click('[data-schedule-submit]'); await settleRender();
+  check("schedule command creation rejects empty command", await evaluate(`document.body.textContent.includes('command is required') && window.__UI_QA__.scheduleCommand.saved.length===1 && !document.body.textContent.includes('one-shot time has passed')`));
+  await input('[data-field="command"]', 'echo CREATED');
+  await input('[data-field="commandTimeoutSec"]', '12');
+  await click('[data-field="commandSudo"]'); await settleRender();
+  await click('[data-sudo-prepare]'); await settleRender();
+  check("schedule sudo offers read only authorization and revoke previews", await evaluate(`document.querySelector('[data-sudo-copy]') && document.querySelector('[data-sudo-revoke]') && document.body.textContent.includes('SYNTHETIC-AUTHORIZATION-PREVIEW') && window.__UI_QA__.scheduleCommand.saved.length===1 && window.__UI_QA__.scheduleCommand.plans.length===1`));
+  await input('[data-field="command"]', 'echo CHANGED'); await settleRender();
+  check("schedule sudo invalidates preview when command changes", await evaluate(`!document.querySelector('[data-sudo-copy]') && document.body.textContent.includes('Settings changed')`));
+  await input('[data-field="command"]', 'echo CREATED');
+
+  await click('[data-schedule-submit]'); await settleRender();
+  check("schedule command creation submits shell target without agent fields", await evaluate(`(() => {const p=window.__UI_QA__.scheduleCommand.saved[1];return p?.target.command==='echo CREATED' && p.target.sudo===true && p.target.timeoutMs===12000 && !!p.schedule.cron && !('prompt' in p) && !('maxBudgetUsd' in p);})()`));
+
   await show("remote-control");
   for (const width of [390, 780, 1200]) {
     await viewport(width, 844); await settleRender();
@@ -1744,6 +1766,22 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
   await evaluate(`window.__UI_QA__.remote.configure('app-server')`); await settleRender();
   await click('[data-remote-control-toggle]'); await evaluate(`window.__UI_QA__.remote.complete()`); await settleRender();
   check("remote appserver enables without switching", await evaluate(`window.__UI_QA__.remote.calls[2].enable===true && !('acknowledgeTransition' in window.__UI_QA__.remote.calls[2])`));
+  await evaluate(`document.querySelector('[data-remote-pair]').focus()`); await buttonKey('Enter','Enter'); await settleRender();
+  check("remote pairing request is deduplicated", await evaluate(`document.querySelector('[data-remote-pair]').disabled && window.__UI_QA__.remote.pairCalls===1`));
+  await evaluate(`window.__UI_QA__.remote.completePair()`); await settleRender();
+  check("remote pairing displays short lived code", await evaluate(`document.querySelector('[data-remote-pair-code]').textContent.includes('SYNTHETIC-CODE') && document.body.textContent.includes('same ChatGPT account')`));
+  for (const width of [390, 780, 1200]) {
+    await viewport(width,844); await settleRender();
+    check(`remote pairing ${width}px fit`, await evaluate(`(() => {const b=document.querySelector('[data-remote-pair]');b.focus();const r=b.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&document.body.scrollWidth<=innerWidth;})()`));
+  }
+  await click('[data-remote-pair]'); await evaluate(`window.__UI_QA__.remote.completePair(true)`); await settleRender();
+  check("remote pairing hides expired code", await evaluate(`!!document.querySelector('[data-remote-pair-expired]') && !document.querySelector('[data-remote-pair-code]')`));
+  await click('[data-remote-pair]'); await evaluate(`window.__UI_QA__.remote.completePair(false,true)`); await settleRender();
+  check("remote pairing errors do not expose credentials", await evaluate(`document.body.textContent.includes('Device pairing failed') && !document.body.textContent.includes('SECRET-ERROR-TOKEN')`));
+  await click('[data-remote-pair]'); await evaluate(`window.__UI_QA__.remote.close()`); await settleRender();
+  await evaluate(`window.__UI_QA__.remote.completePair()`); await settleRender();
+  await evaluate(`window.__UI_QA__.remote.configure('app-server')`); await settleRender();
+  check("remote pairing discards results after close", await evaluate(`!document.querySelector('[data-remote-pair-code]') && !document.body.textContent.includes('SYNTHETIC-CODE')`));
   await evaluate(`window.__UI_QA__.remote.configure('exec',false,'paused')`); await settleRender();
   check("remote paused agent cannot restart implicitly", await evaluate(`document.querySelector('[data-remote-control-toggle]').disabled`));
   await evaluate(`window.__UI_QA__.remote.configure('exec',false,'running','openai')`); await settleRender();

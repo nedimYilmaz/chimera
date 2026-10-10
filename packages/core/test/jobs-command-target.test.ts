@@ -186,3 +186,36 @@ describe("what a command run must not leak", () => {
     expect(serialized).toContain("inline");           // the job is still observable BY NAME
   });
 });
+
+
+describe("editing completed command jobs", () => {
+  it("saves a command-only patch without rerunning a completed one-shot, then permits explicit future rescheduling", async () => {
+    const calls: unknown[] = [];
+    const rig = rigWith({ exitCode: 0, output: "OK" }, calls);
+    try {
+      const at = T0 + 1049;
+      rig.jobs.create({ name: "once", schedule: { at }, target: { command: "echo OK" } });
+      rig.clock.box.t = at;
+      await rig.jobs.tick();
+      await waitUntil(() => rig.jobs.get("once").lastRuns.length === 1);
+      const before = rig.jobs.get("once");
+      expect(before.nextRunTs).toBeNull();
+      const updated = rig.jobs.update("once", { target: { ...before.target, command: "echo NEW" } as never });
+      expect(updated.schedule).toEqual({ at });
+      expect(updated.nextRunTs).toBeNull();
+      expect(updated.lastRuns).toEqual(before.lastRuns);
+      await rig.jobs.tick();
+      expect(calls).toHaveLength(1);
+      expect(() => rig.jobs.update("once", { schedule: { at: at - 1 } })).toThrow(/not in the future/);
+      rig.jobs.update("once", { enabled: false });
+      expect(() => rig.jobs.update("once", { enabled: true })).toThrow(/not in the future/);
+      const later = at + 10000;
+      expect(rig.jobs.update("once", { enabled: true, schedule: { at: later } }).nextRunTs).toBe(later);
+      rig.clock.box.t = later;
+      await rig.jobs.tick();
+      await waitUntil(() => rig.jobs.get("once").lastRuns.length === 2);
+      expect(calls).toHaveLength(2);
+      expect(calls[1]).toMatchObject({ command: "echo NEW" });
+    } finally { rig.jobs.detach(); }
+  });
+});

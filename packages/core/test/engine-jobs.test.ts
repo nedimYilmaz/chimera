@@ -63,3 +63,17 @@ describe("Engine job.* RPC family (D10)", () => {
     })).rejects.toMatchObject({ code: "protocol" });
   });
 });
+
+it("sudo setup RPC is a read-only preview and never creates or runs a job", async () => {
+  const e = new Engine({ home: makeEngineHome(), backends: backends(new FakeAgentBackend([])) });
+  if (process.platform !== "darwin" && process.platform !== "linux" || process.getuid?.() === 0) {
+    await expect(e.handle("job.sudoPlan", { target: { command: "echo SAFE", sudo: true } })).rejects.toThrow();
+    return;
+  }
+  const p = await e.handle("job.sudoPlan", { target: { command: "echo SAFE", sudo: true } }) as Record<string, unknown>;
+  expect(Object.keys(p).sort()).toEqual(["authorizeScript", "fingerprint", "revokeScript"]);
+  expect(p.authorizeScript).toContain("AUTHORIZE");
+  expect(await e.handle("job.list", {})).toEqual([]);
+  await expect(e.handle("job.sudoPlan", { target: { command: "echo SAFE" } })).rejects.toThrow(/sudo command/);
+  await expect(e.handle("job.create", { spec: { name: "root-watch", schedule: { watch: true }, target: { command: "echo SAFE", sudo: true } } })).rejects.toThrow(/timed schedule/);
+});
