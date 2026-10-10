@@ -441,8 +441,14 @@ describe("MCP-OAUTH slice 2: mcpstore.oauth.start/finish + oauth connect", () =>
     it("cancel racing an in-flight legitimate callback: the exchange still completes and lands in the keychain; cancel's own cleanup only runs after", async () => {
       let releaseToken: () => void = () => {};
       const gate = new Promise<void>((resolve) => { releaseToken = resolve; });
-      const mock = makeMockOAuthEnvironment({ tokenResponseGate: () => gate });
+      let tokenExchangeStarted: () => void = () => {};
+      const exchangeStarted = new Promise<void>((resolve) => { tokenExchangeStarted = resolve; });
+      const mock = makeMockOAuthEnvironment({ tokenResponseGate: () => {
+        tokenExchangeStarted();
+        return gate;
+      } });
       const { resourceUrl } = await mock.listen();
+      const pending: Promise<unknown>[] = [];
       try {
         const { engine, keychain } = engineOn(makeEngineHome());
         await addOAuthServer(engine, "remote", resourceUrl);
@@ -450,13 +456,17 @@ describe("MCP-OAUTH slice 2: mcpstore.oauth.start/finish + oauth connect", () =>
 
         // drive the browser's callback hit -- it will hang mid token-exchange until releaseToken()
         const callbackPromise = driveBrowser(started.authorizeUrl);
-        // give the request time to actually reach the loopback server and block inside the
-        // (gated) token exchange, so cancel() below genuinely races a live exchange.
-        await new Promise((r) => setTimeout(r, 20));
+        pending.push(callbackPromise);
+        // A fixed delay can cancel before the callback even connects on a busy CI runner.
+        // Wait for the actual exchange so this exercises cancellation of an in-flight request.
+        await Promise.race([exchangeStarted, callbackPromise.then(() => {
+          throw new Error("OAuth callback completed before reaching the token exchange gate");
+        })]);
 
         let cancelSettled = false;
         const cancelPromise = engine.handle("mcpstore.oauth.cancel", { pendingId: started.pendingId })
           .then(() => { cancelSettled = true; });
+        pending.push(cancelPromise);
 
         // cancel's finalize() awaits listener.close(), which cannot resolve while the
         // in-flight callback's connection is still open -- so cancel must still be pending.
@@ -479,6 +489,8 @@ describe("MCP-OAUTH slice 2: mcpstore.oauth.start/finish + oauth connect", () =>
         await expect(engine.handle("mcpstore.oauth.finish", { pendingId: started.pendingId }))
           .rejects.toMatchObject({ code: "protocol" });
       } finally {
+        releaseToken();
+        await Promise.allSettled(pending);
         await mock.close();
       }
     });
