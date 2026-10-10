@@ -8,7 +8,8 @@ async function setup(options: Record<string, unknown> = {}) {
   const spawn = h.codex.spawn.bind(h.codex);
   vi.spyOn(h.codex, 'spawn').mockImplementation((spec, ...rest) => {
     const handle = spawn(spec, ...rest);
-    if (spec.providerOptions.codexTransport !== 'app-server') delete handle.remoteControl;
+    // The first handle represents an exec process restored from before the default changed.
+    if (h.codex.spawns.length === 1 && options.codexTransport !== 'app-server') delete handle.remoteControl;
     return handle;
   });
   const r = await h.sup.spawn({ provider: 'codex', account: 'cx-main', prompt: 'x', cwd: '/tmp', isolation: 'none', session: true, resumeOnly: true, resume: 'same-native-session', permissionProfile: 'full', acknowledgeCodexFullAccessRisk: true, displayLabel: 'my-codex', providerOptions: options });

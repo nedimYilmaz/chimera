@@ -168,7 +168,7 @@ describe("RemoteControlCard — Enter toggles remote control (REMOTE-CONTROL-CAR
       return {};
     };
     act(() => {
-      appStore.dispatch({ type: "event", event: { seq: 9001, ts: 1, agentId: "rc-1", kind: "agent_started", data: { model: "m1" } } } as never);
+      appStore.dispatch({ type: "event", event: { seq: 9001, ts: 1, agentId: "rc-1", kind: "agent_started", data: { model: "m1", provider: "claude" } } } as never);
       appStore.dispatch({ type: "selectAgent", agentId: "rc-1" } as never);
       systemLocal.set({ remoteControlOpen: true });
     });

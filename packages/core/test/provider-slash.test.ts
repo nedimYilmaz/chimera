@@ -7,7 +7,7 @@ import type { AgentBackend } from "@chimera/core/backend";
 import { makeEngineHome } from "./helpers.js";
 import { parseCodexCommand } from "@chimera/core/backends/codex-commands";
 
-function fixture() {
+function fixture(opts: { legacyExec?: boolean } = {}) {
   let active = false;
   const home = makeEngineHome(), path = join(home, "config.json");
   const config = JSON.parse(readFileSync(path, "utf8"));
@@ -19,7 +19,8 @@ function fixture() {
   const command = vi.fn(async (text: string) => `native ${text}`);
   const backend: AgentBackend = { provider: "codex", capabilities: fake.capabilities, spawn(spec, sink, permission) {
     const handle = fake.spawn(spec, sink, permission);
-    return { ...handle, isTurnActive: () => active, ...(spec.providerOptions.codexTransport === "app-server" ? { command } : {}) };
+    // Restored pre-migration processes lack native commands even though new launches default to app-server.
+    return { ...handle, isTurnActive: () => active, ...(spec.providerOptions.codexTransport === "app-server" && !(opts.legacyExec && fake.spawns.length === 1) ? { command } : {}) };
   } };
   const engine = new Engine({ home, backends: new Map([["codex", backend]]) });
   return { engine, fake, command, home, setActive: (value: boolean) => { active = value; } };
@@ -27,7 +28,7 @@ function fixture() {
 
 describe("native provider slash dispatch", () => {
   it("does not interrupt an active exec turn to migrate its connection", async () => {
-    const { engine, fake, home, setActive } = fixture();
+    const { engine, fake, home, setActive } = fixture({ legacyExec: true });
     const r = await engine.supervisor.spawn({ prompt: "fixture", cwd: home, isolation: "none", provider: "codex", conductor: true });
     try {
       setActive(true);
@@ -48,8 +49,8 @@ describe("native provider slash dispatch", () => {
       expect(command).not.toHaveBeenCalled();
     } finally { await engine.supervisor.suspendForShutdown(); }
   });
-  it("reattaches default exec to app-server, keeps identity/session/permissions, and does not enqueue a prompt", async () => {
-    const { engine, fake, command, home } = fixture();
+  it("reattaches a restored exec session to app-server, keeps identity/session/permissions, and does not enqueue a prompt", async () => {
+    const { engine, fake, command, home } = fixture({ legacyExec: true });
     const r = await engine.supervisor.spawn({ prompt: "fixture", cwd: home, isolation: "none", provider: "codex", conductor: true, permissionProfile: "full", acknowledgeCodexFullAccessRisk: true });
     try {
       await vi.waitFor(() => expect(r.sessionId).toBe("native-session"));

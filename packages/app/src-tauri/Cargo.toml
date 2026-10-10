@@ -1,6 +1,6 @@
 [package]
 name = "chimera-app"
-version = "0.1.5"
+version = "0.1.6"
 description = "Chimera desktop cockpit"
 edition = "2021"
 publish = false

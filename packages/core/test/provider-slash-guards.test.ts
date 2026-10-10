@@ -9,7 +9,7 @@ import { makeEngineHome } from "./helpers.js";
 
 const SESSION: FakeStep = { emit: { kind: "agent_started", data: { sessionId: "native-session" } } };
 
-function fixture(opts: { steps?: FakeStep[]; exposeCommand?: boolean } = {}) {
+function fixture(opts: { steps?: FakeStep[]; exposeCommand?: boolean; legacyExec?: boolean } = {}) {
   const home = makeEngineHome(), path = join(home, "config.json");
   const config = JSON.parse(readFileSync(path, "utf8"));
   config.accounts[0].provider = "codex";
@@ -20,7 +20,7 @@ function fixture(opts: { steps?: FakeStep[]; exposeCommand?: boolean } = {}) {
   const exposeCommand = opts.exposeCommand ?? true;
   const backend: AgentBackend = { provider: "codex", capabilities: fake.capabilities, spawn(spec, sink, permission) {
     const handle = fake.spawn(spec, sink, permission);
-    return { ...handle, isTurnActive: () => false, ...(exposeCommand && spec.providerOptions.codexTransport === "app-server" ? { command } : {}) };
+    return { ...handle, isTurnActive: () => false, ...(exposeCommand && spec.providerOptions.codexTransport === "app-server" && !(opts.legacyExec && fake.spawns.length === 1) ? { command } : {}) };
   } };
   const engine = new Engine({ home, backends: new Map([["codex", backend]]) });
   return { engine, fake, command, home };
@@ -59,7 +59,7 @@ describe("Codex native command guards", () => {
   });
 
   it("refuses /goal on an exec agent that has no session yet without reattaching", async () => {
-    const { engine, fake, command, home } = fixture({ steps: [{ awaitSend: true }] });
+    const { engine, fake, command, home } = fixture({ steps: [{ awaitSend: true }], legacyExec: true });
     const r = await engine.supervisor.spawn({ prompt: "fixture", cwd: home, isolation: "none", provider: "codex", conductor: true });
     try {
       expect(engine.supervisor.status(r.agentId).sessionId).toBeFalsy();
@@ -70,7 +70,7 @@ describe("Codex native command guards", () => {
   });
 
   it("rejects when the hold fails during reattach and leaves the next command unblocked", async () => {
-    const { engine, fake, command, home } = fixture();
+    const { engine, fake, command, home } = fixture({ legacyExec: true });
     const r = await engine.supervisor.spawn({ prompt: "fixture", cwd: home, isolation: "none", provider: "codex", conductor: true });
     try {
       await vi.waitFor(() => expect(engine.supervisor.status(r.agentId).sessionId).toBe("native-session"));
