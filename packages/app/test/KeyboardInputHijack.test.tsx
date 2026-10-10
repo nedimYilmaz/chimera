@@ -161,7 +161,13 @@ describe("RemoteControlCard — Enter toggles remote control (REMOTE-CONTROL-CAR
     act(() => systemLocal.set({ remoteControlOpen: false }));
   });
 
-  it("Enter at an editable target does not toggle; Enter at a non-editable target does", async () => {
+  it("Enter at editable or pairing targets does not toggle; Enter at another non-editable target does", async () => {
+    // Pairing uses DOM ancestry; the node renderer needs the browser's Element surface.
+    class PairingButton {
+      tagName = "BUTTON";
+      closest(selector: string) { return selector === "[data-remote-pair]" ? this : null; }
+    }
+    vi.stubGlobal("Element", PairingButton);
     const calls: unknown[] = [];
     rpcImpl = async (method: string, params?: unknown) => {
       if (method === "agent.remoteControl") { calls.push(params); return { sessionUrl: "u" }; }
@@ -175,6 +181,10 @@ describe("RemoteControlCard — Enter toggles remote control (REMOTE-CONTROL-CAR
     act(() => { mounted = create(React.createElement(OverlayOutlet, { host: "agents" })); });
 
     act(() => fireKeydown({ key: "Enter", target: EDITABLE, stopPropagation: () => {} }));
+    await act(async () => settle());
+    expect(calls.length).toBe(0);
+
+    act(() => fireKeydown({ key: "Enter", target: new PairingButton(), stopPropagation: () => {} }));
     await act(async () => settle());
     expect(calls.length).toBe(0);
 

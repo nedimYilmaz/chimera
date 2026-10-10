@@ -80,6 +80,8 @@ const DYNAMIC_OR_ALIAS_COVERED = new Set([
 // entrypoint, so it never reaches this scan.
 const INTENTIONALLY_EXCLUDED_RPCS = new Set([
   "canvas.saveLayout", // Cosmetic private operator layout; agents read the graph only.
+  "agent.remotePair", // Device pairing credentials belong only to the requesting desktop operator.
+  "job.sudoPlan", // Per-command root authorization previews are reviewed by the operator in the UI.
   // Agents must never mint pairing codes or activate a network surface.
   "operatorweb.status", "operatorweb.enable", "operatorweb.disable", "operatorweb.pairStart", "operatorweb.sessionList", "operatorweb.sessionRevoke", "operatorweb.settingsSet",
   // Local executable install and private microphone-derived content are operator-only.

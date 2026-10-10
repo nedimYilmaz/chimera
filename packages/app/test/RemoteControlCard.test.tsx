@@ -16,11 +16,13 @@ import { RemoteControlCard } from "../src/components/RemoteControlCard";
 let view: ReturnType<typeof create> | undefined;
 beforeEach(() => { vi.stubGlobal("window", { addEventListener: vi.fn(), removeEventListener: vi.fn() }); });
 afterEach(() => { act(() => view?.unmount()); vi.unstubAllGlobals(); vi.clearAllMocks(); });
-it("shows native Codex state/identity without claiming a Claude attach link or voice connection", async () => {
+it("shows native Codex state/identity and device pairing requirements without a Claude attach link", async () => {
   act(() => { view = create(<RemoteControlCard />); });
   const text = JSON.stringify(view!.toJSON());
   expect(text).toContain("connecting"); expect(text).toContain("my-codex"); expect(text).toContain("env-local");
-  expect(text).toContain("not voice"); expect(text).not.toContain("claude.ai");
+  expect(text).toContain("device pairing with the same ChatGPT account/workspace");
+  expect(text).toContain("Enabling alone does not pair your phone");
+  expect(text).not.toContain("claude.ai");
   expect(view!.root.findAllByProps({ "data-remote-control-url": true })).toHaveLength(0);
   await act(async () => view!.root.findByProps({ "data-remote-control-toggle": true }).props.onClick());
   expect(mocks.apply).toHaveBeenCalledWith("a", false, false);
