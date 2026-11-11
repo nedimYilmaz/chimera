@@ -15,7 +15,7 @@ it("denies provider settings, executable overrides, impersonation and arbitrary 
   expect(() => webRequest("queue.push", { queue: "q", prompt: "hi", overrides: { permissionProfile: "full" } })).toThrow();
   expect(() => webRequest("review.decide", { taskId: "t", status: "accepted", summary: "ok", actorAgentId: "a" })).toThrow();
 });
-it.each(["agent.forkCapabilities", "agent.fork"] as const)("explicitly denies %s to browser sessions", method => {
+it.each(["agent.forkCapabilities", "agent.fork", "agent.shellStart", "agent.shellCancel", "agent.shellStatus", "queue.completeTask"] as const)("explicitly denies %s to browser sessions", method => {
   expect(OPERATOR_WEB_DENIED[method]).toContain("not authorized for browser sessions");
   expect(() => webRequest(method, { agentId: "parent", upToSeq: 17, mode: "snapshot", task: "Inspect an alternative", callerAgentId: "parent" }))
     .toThrowError(expect.objectContaining({ status: 403 }));

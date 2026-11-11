@@ -169,11 +169,12 @@ export const KIMI_FANOUT_NOTE =
 //      strict-matches (reducer.ts tool_result case). Additionally: a turn that settles with a
 //      tool call still open (interrupt, dropped update, failed prompt) sweeps it closed with a
 //      synthetic error tool_result (closeOrphanedKimiToolCalls) -- no spinner can outlive a turn.
-import { ClientSideConnection, ndJsonStream, RequestError } from "@agentclientprotocol/sdk";
+// Kimi model/config and compaction updates use the full ACP v1 feature surface.
+import { client as acpClient, methods, ndJsonStream, RequestError } from "@agentclientprotocol/sdk/unstable";
 import type {
-  Client as AcpClient, McpCapabilities, McpServer as AcpMcpServer, PermissionOption, RequestPermissionRequest,
+  McpCapabilities, McpServer as AcpMcpServer, PermissionOption, RequestPermissionRequest,
   RequestPermissionResponse, SessionConfigOption, SessionNotification, ToolCallContent,
-} from "@agentclientprotocol/sdk";
+} from "@agentclientprotocol/sdk/unstable";
 import { recordProviderModels, type ModelOption } from "../providers/model-list-cache.js";
 import { scrubSecretShapes } from "../configstore.js";
 import { type ChildProcess, spawn as spawnProcess } from "node:child_process";
@@ -800,6 +801,7 @@ export const connectKimiAcp: KimiFactory = (spec, cwd, deps) => {
   const terminate = (): void => {
     if (closed) return;
     closed = true;
+    connection.close();
     grantRevoke?.();
     try { proc.kill("SIGTERM"); } catch { /* already gone */ }
     const grace = setTimeout(() => { try { proc.kill("SIGKILL"); } catch { /* already gone */ } }, 3000);
@@ -819,7 +821,7 @@ export const connectKimiAcp: KimiFactory = (spec, cwd, deps) => {
   });
 
   let sessionId = "";
-  const client: AcpClient = {
+  const client = {
     async sessionUpdate(params: SessionNotification) {
       if (params.sessionId !== sessionId) return;
       deps.onUpdate(params.update);
@@ -858,11 +860,16 @@ export const connectKimiAcp: KimiFactory = (spec, cwd, deps) => {
   });
   proc.stdout!.pipe(sanitizer);
   const stream = ndJsonStream(Writable.toWeb(proc.stdin!) as WritableStream<Uint8Array>, Readable.toWeb(sanitizer) as ReadableStream<Uint8Array>);
-  const conn = new ClientSideConnection(() => client, stream);
+  const connection = acpClient({ name: "chimera" })
+    .onNotification(methods.client.session.update, ({ params }) => client.sessionUpdate(params))
+    .onRequest(methods.client.session.requestPermission, ({ params }) => client.requestPermission(params))
+    .connect(stream);
+  proc.once("exit", () => connection.close());
+  const conn = connection.agent;
 
   const ready = (async (): Promise<KimiAcpSessionLike> => {
     const initResp = await Promise.race([
-      conn.initialize({ protocolVersion: 1, clientCapabilities: {} }),
+      conn.request(methods.agent.initialize, { protocolVersion: 1, clientCapabilities: {} }),
       spawnFailed,
     ]);
     // KIMI-STDIO-CAPABILITY-LIVE: log what the CLI actually advertised (info level, daemon-log
@@ -894,10 +901,10 @@ export const connectKimiAcp: KimiFactory = (spec, cwd, deps) => {
     if (spec.resume) {
       // LoadSessionResponse carries no sessionId of its own (the caller already knows it -- it's
       // the same id passed in the request); newSession's response is the only one that MINTS one.
-      await Promise.race([conn.loadSession({ sessionId: spec.resume, cwd, mcpServers }), spawnFailed]);
+      await Promise.race([conn.request(methods.agent.session.load, { sessionId: spec.resume, cwd, mcpServers }), spawnFailed]);
       sessionId = spec.resume;
     } else {
-      const sessResp = await Promise.race([conn.newSession({ cwd, mcpServers }), spawnFailed]);
+      const sessResp = await Promise.race([conn.request(methods.agent.session.new, { cwd, mcpServers }), spawnFailed]);
       sessionId = sessResp.sessionId;
       // DYNAMIC-MODEL-LISTS: kimi answers newSession with its OWN live model catalog as a
       // `configOptions` select (category "model") -- the same list its interactive picker shows.
@@ -912,13 +919,13 @@ export const connectKimiAcp: KimiFactory = (spec, cwd, deps) => {
         (kimiEfforts.length > 0 ? { ...m, supportedEfforts: kimiEfforts } : m)));
     }
     const mode = kimiModeFor(spec);
-    if (mode !== "default" || spec.executionMode !== undefined) await conn.setSessionMode({ sessionId, modeId: mode });
+    if (mode !== "default" || spec.executionMode !== undefined) await conn.request(methods.agent.session.setMode, { sessionId, modeId: mode });
     return {
       sessionId,
-      setMode: async mode => { await conn.setSessionMode({ sessionId, modeId: mode }); },
+      setMode: async mode => { await conn.request(methods.agent.session.setMode, { sessionId, modeId: mode }); },
       mcpNotice: notice,
-      prompt: (content) => conn.prompt({ sessionId, prompt: content }),
-      cancel: async () => { await conn.cancel({ sessionId }); },
+      prompt: (content) => conn.request(methods.agent.session.prompt, { sessionId, prompt: content }),
+      cancel: async () => { await conn.notify(methods.agent.session.cancel, { sessionId }); },
       close: async () => terminate(),
     };
   })();
@@ -1111,7 +1118,12 @@ export class KimiAgentBackend implements AgentBackend {
           // ACP cancellation is a fire-and-forget notification, not a promise-rejecting abort --
           // the in-flight prompt() call below still resolves normally, just with
           // stopReason:"cancelled" once the CLI honors it (see the module header's INTERRUPT note).
-          const onAbort = () => { void session.cancel(); };
+          const onAbort = () => {
+            void session.cancel().catch((error: unknown) => {
+              // Killing the process can close ACP before its queued cancel notification writes.
+              if (!loop.killed) sink({ kind: "error", data: { message: describeKimiError(error), phase: "session" } });
+            });
+          };
           controller.signal.addEventListener("abort", onAbort);
           let result: { stopReason: string };
           try {

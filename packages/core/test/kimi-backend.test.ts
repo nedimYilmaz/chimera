@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { AgentSpecSchema } from "@chimera/protocol";
 import type { ChimeraEngineAccessor, ResolvedAgentSpec } from "@chimera/core/backend";
-import { RequestError } from "@agentclientprotocol/sdk";
+import { RequestError } from "@agentclientprotocol/sdk/unstable";
 import {
   KIMI_FANOUT_NOTE, KIMI_FANOUT_TOOL_TITLES,
   KimiAgentBackend, buildKimiAcpArgs, buildKimiMcpServers, closeOrphanedKimiToolCalls, describeKimiError, kimiModeFor,

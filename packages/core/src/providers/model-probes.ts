@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable, Writable } from "node:stream";
-import { ClientSideConnection, ndJsonStream } from "@agentclientprotocol/sdk";
+import { client, methods, ndJsonStream } from "@agentclientprotocol/sdk/unstable";
 import { kimiModelOptions } from "../backends/kimi.js";
 import type { ModelOption } from "./model-list-cache.js";
 
@@ -57,12 +57,11 @@ export async function probeKimiModels(
     );
     // No client handler: this connection issues two requests and receives no agent-initiated
     // ones (no prompt is ever sent, so there are no permission/tool round trips to answer).
-    const conn = new ClientSideConnection(() => ({}) as never, stream);
-    const models = await withTimeout((async () => {
-      await conn.initialize({ protocolVersion: 1, clientCapabilities: {} });
-      const sess = await conn.newSession({ cwd: opts.cwd ?? tmpdir(), mcpServers: [] });
+    const models = await withTimeout(client({ name: "chimera-model-probe" }).connectWith(stream, async (conn) => {
+      await conn.request(methods.agent.initialize, { protocolVersion: 1, clientCapabilities: {} });
+      const sess = await conn.request(methods.agent.session.new, { cwd: opts.cwd ?? tmpdir(), mcpServers: [] });
       return kimiModelOptions(sess.configOptions);
-    })(), opts.timeoutMs ?? PROBE_TIMEOUT_MS, () => proc.kill("SIGKILL"));
+    }), opts.timeoutMs ?? PROBE_TIMEOUT_MS, () => proc.kill("SIGKILL"));
     return models;
   } catch {
     return [];

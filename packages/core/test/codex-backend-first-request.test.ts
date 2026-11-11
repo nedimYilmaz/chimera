@@ -152,14 +152,13 @@ describe("CodexAgentBackend first-request tool capture", () => {
 
     // Capture the REAL provider payload produced by the pinned SDK/CLI after MCP initialize +
     // tools/list and enabled_tools filtering. The literal first provider request defers MCP
-    // schemas behind tool_search, so it contains only the server source — never concrete names.
+    // schemas behind tool_search, so it contains only the deferred namespace — never tool names.
     const input = requests[2]!["input"] as Array<Record<string, unknown>>;
     expect(input.filter(item => item.role === "developer").some(item => JSON.stringify(item).includes("CHIMERA_TEST_SESSION_POLICY"))).toBe(true);
     expect(input.filter(item => item.role === "user").every(item => !JSON.stringify(item).includes("CHIMERA_TEST_SESSION_POLICY"))).toBe(true);
     const firstRequest = JSON.stringify(requests[2]);
     expect(firstRequest).toContain('"type":"tool_search"');
-    expect(firstRequest).toContain("- probe");
-    expect(firstRequest).not.toContain("mcp__probe");
+    expect(firstRequest).toContain("- mcp__probe");
     expect(firstRequest).not.toContain('"name":"alpha"');
     expect(firstRequest).not.toContain('"name":"beta"');
     expect(firstRequest).not.toContain('"name":"gamma"');
@@ -186,7 +185,7 @@ describe("CodexAgentBackend first-request tool capture", () => {
     // NOT pinned by this package's @openai/codex-sdk dependency when CHIMERA_CODEX_CLI_PATH is set
     // (see codex.ts's codexPathOverride) — it resolves to whatever `codex` CLI is installed on the
     // host, so these numbers drift with an operator's out-of-band global CLI upgrade, not with a
-    // chimera commit. A mismatch (or a missing "- probe" server line entirely) means the host's
+    // chimera commit. A mismatch (or a missing deferred namespace entirely) means the host's
     // codex CLI version no longer matches the shape this test was last pinned against; it is not
     // evidence of a code regression here.
     expect({ baselineBytes, narrowedBytes, removedBytes: baselineBytes - narrowedBytes }).toEqual({

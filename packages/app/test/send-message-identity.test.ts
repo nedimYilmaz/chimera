@@ -89,13 +89,18 @@ describe("send → durable mailbox → delivered projection", () => {
     const failedId = requests[0]!.messageId;
     expect(state.agents.a!.transcript[0]).toMatchObject({ messageId: failedId, content: content("YQ==") });
     await commands.sendToAgent("a", " same ", undefined, false, content("ZA=="), true);
+    // Force sends only the new message; queued content waits for the next completed turn.
+    expect(state.outbox).toEqual([queued[1], queued[2]]);
+    expect(requests).toHaveLength(2);
+    store.dispatch({ type: "event", event: { seq: 2, ts: 2, agentId: "a", kind: "turn_complete", data: {} } });
+    await vi.waitFor(() => expect(requests).toHaveLength(3));
     expect(state.outbox).toEqual([queued[2]]);
     expect(new Set(requests.map(request => request.messageId)).size).toBe(3);
     for (const [index, request] of requests.slice(1).entries()) {
-      store.dispatch({ type: "event", event: { seq: index + 2, ts: index + 2, agentId: "a", kind: "status", data: { delivered: true, messageMetadata: { from: "app", source: "operator", engineId: "local" }, from: "app", text: " same ", messageId: request.messageId, content: request.content } } });
+      store.dispatch({ type: "event", event: { seq: index + 3, ts: index + 3, agentId: "a", kind: "status", data: { delivered: true, messageMetadata: { from: "app", source: "operator", engineId: "local" }, from: "app", text: " same ", messageId: request.messageId, content: request.content } } });
     }
     expect(state.agents.a!.transcript.filter(row => row.role === "user")).toMatchObject([
-      { messageId: failedId, content: content("YQ==") }, { content: content("Yg==") }, { content: content("ZA==") },
+      { messageId: failedId, content: content("YQ==") }, { content: content("ZA==") }, { content: content("Yg==") },
     ]);
     expect(state.agents.b!.transcript).toHaveLength(0);
   });
