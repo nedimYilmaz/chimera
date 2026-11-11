@@ -28,7 +28,7 @@ export class QueueNotEmptyError extends Error { code = "protocol" as const; name
 
 // D12 (task workflows): `workflow` here is the QUEUE's default binding patch (a raw
 // name/null), not the pinned {name,version} a task carries — see TaskPush.workflow.
-export type QueueUpdateInput = { retryLimit?: number; workflow?: string | null; retryPolicy?: RetryPolicy };
+export type QueueUpdateInput = { existingAgentId?: string | null; retryLimit?: number; workflow?: string | null; retryPolicy?: RetryPolicy };
 
 // WD Stage 1 (coverage B9): `pushedBy` is the calling agent's id when the push came
 // through the chimera MCP (stamped from CHIMERA_AGENT_ID at the tool, mirroring how
@@ -165,6 +165,7 @@ export class QueueStore {
     let reverted = false;
     for (const t of this.tasks.values()) {
       if (t.state !== "in_progress") continue;
+      if (this.queues.get(t.queue)?.existingAgentId) continue; // Fixed identities retain their explicit completion claim across restart.
       const prevState = t.state;
       t.state = "pending"; t.agentId = null; reverted = true;   // spec §3: interrupted tasks revert to pending
       this.emitTask(t, { reason: "daemon-restart" }, prevState);
@@ -282,6 +283,7 @@ export class QueueStore {
   create(input: unknown): QueueSpec {
     const spec = QueueSpecSchema.parse(input);
     if (this.queues.has(spec.name)) throw new DuplicateQueueError(`queue "${spec.name}" already exists`);
+    this.validateBinding(spec);
     this.queues.set(spec.name, spec);
     this.save();
     this.events.append({ agentId: `queue:${spec.name}`, kind: "status", data: { queue: spec.name, state: "created", retryLimit: spec.retryLimit } });
@@ -304,14 +306,55 @@ export class QueueStore {
     const existing = this.get(name);   // throws UnknownQueueError
     const spec = QueueSpecSchema.parse({
       ...existing,
+      ...(patch.existingAgentId !== undefined ? { existingAgentId: patch.existingAgentId } : {}),
       ...(patch.retryLimit !== undefined ? { retryLimit: patch.retryLimit } : {}),
       ...(patch.workflow !== undefined ? { workflow: patch.workflow } : {}),
       ...(patch.retryPolicy !== undefined ? { retryPolicy: patch.retryPolicy } : {}),
     });
+    if (spec.existingAgentId !== existing.existingAgentId && this.allTasks().some(t => t.queue === name && t.state === "in_progress"))
+      throw new TaskNotEditableError("Cannot retarget a queue with an in-progress task");
+    this.validateBinding(spec);
     this.queues.set(name, spec);
     this.save();
     this.events.append({ agentId: `queue:${name}`, kind: "status", data: { queue: name, state: "updated", retryLimit: spec.retryLimit } });
     return spec;
+  }
+
+  private validateBinding(spec: QueueSpec): void {
+    if (!spec.existingAgentId) return;
+    if (spec.workflow) throw new TaskNotEditableError("Existing-agent queues do not support workflows");
+    for (const t of this.allTasks().filter(t => t.queue === spec.name && ["pending", "blocked"].includes(t.state)))
+      this.validateFixedTask(spec, { role: t.role, workflow: t.workflowOverride, overrides: t.overrides });
+  }
+
+  private validateFixedTask(q: QueueSpec, input: Pick<TaskPush, "role" | "workflow" | "overrides">): void {
+    if (q.existingAgentId && (input.role || input.workflow || Object.keys(input.overrides ?? {}).length))
+      throw new TaskNotEditableError("Existing-agent tasks use the agent's current settings; role, workflow and overrides are not supported");
+  }
+
+  noteExistingDeliveryError(taskId: string): void {
+    const t = this.task(taskId);
+    const error = "Existing-agent delivery is blocked; check target availability, mailbox capacity and permissions. No replacement was spawned.";
+    if (t.error === error) return;
+    t.error = error; this.saveDurable(); this.emitTask(t);
+  }
+
+  clearExistingDeliveryError(taskId: string): void {
+    const t = this.task(taskId);
+    if (!t.error) return;
+    t.error = null; this.saveDurable(); this.emitTask(t);
+  }
+
+  completeExistingTask(taskId: string, callerAgentId: string | undefined, result: string, success: boolean): TaskRecord {
+    const t = this.task(taskId);
+    if (!this.get(t.queue).existingAgentId || (callerAgentId !== undefined && callerAgentId !== t.agentId))
+      throw new TaskNotEditableError("Only the assigned agent or operator can complete this existing-agent task");
+    if (t.state === (success ? "done" : "failed") && (success ? t.resultText : t.error) === result) return t;
+    if (t.state !== "in_progress") throw new TaskNotEditableError("Task is not in progress");
+    t.error = null;
+    const finished = success ? this.markDone(taskId, result) : this.markFailed(taskId, result);
+    this.saveDurable();
+    return finished;
   }
 
   // QUEUE-PAUSE: pause/resume a queue's drain — persisted in QueueSpec.paused (same
@@ -352,7 +395,7 @@ export class QueueStore {
   }
 
   push(queueName: string, input: TaskPush): TaskRecord {
-    this.get(queueName);
+    this.validateFixedTask(this.get(queueName), input);
     // Reserved deterministic IDs are an internal import seam, never a public push option.
     if (input.taskId !== undefined && !/^gh-[a-f0-9]{64}$/.test(input.taskId)) throw new UnknownTaskError("invalid import task identity");
     const dependsOn = input.dependsOn ?? [];
@@ -455,7 +498,8 @@ export class QueueStore {
     // clobber the original startedAt (queue-latency = startedAt - pushedAt would
     // otherwise be silently overwritten by the LAST attempt instead of the first).
     if (t.startedAt === undefined) t.startedAt = Date.now();
-    this.save(); this.emitTask(t, {}, prevState);
+    if (this.get(t.queue).existingAgentId) this.saveDurable(); else this.save();
+    this.emitTask(t, {}, prevState);
     return t;
   }
 
@@ -735,7 +779,10 @@ export class QueueStore {
   markFailed(taskId: string, error: string): TaskRecord {
     const t = this.task(taskId);
     const prevState = t.state;
-    t.state = "failed"; t.error = error; t.agentId = null; t.endedAt = Date.now();
+    t.state = "failed"; t.error = error; t.endedAt = Date.now();
+    // A shared conversation survives task failure; retain its ownership for
+    // audit and idempotent completion after a lost RPC acknowledgment.
+    if (!this.get(t.queue).existingAgentId) t.agentId = null;
     this.save(); this.emitTask(t, {}, prevState);
     this.cascadeFailDependents(taskId);   // DEP1: a failed dep dooms its dependents
     return t;
@@ -928,6 +975,7 @@ export class QueueStore {
   // cycle validation plus a blocked/pending recompute + reconcile, none of which the version
   // bookkeeping makes cheap — deliberately omitted (TaskEditPatch has no dependsOn key).
   editTask(taskId: string, patch: TaskEditPatch, editedBy: string | null): TaskRecord {
+    this.validateFixedTask(this.get(this.task(taskId).queue), patch);
     const t = this.task(taskId);
     if (t.state !== "pending" && t.state !== "blocked")
       throw new TaskNotEditableError(`task ${taskId} is not editable (state: ${t.state}) — only pending or blocked tasks can be edited`);

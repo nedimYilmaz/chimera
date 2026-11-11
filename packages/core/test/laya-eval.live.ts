@@ -78,9 +78,13 @@ const fixturePath = fileURLToPath(new URL("./fixtures/pypi-laya.json", import.me
 async function wheelFor(version: string): Promise<LayaWheel> {
   if (version === LAYA.version) return LAYA.wheel as LayaWheel;
   const fixture = JSON.parse(await readFile(fixturePath, "utf8")) as { releases?: Record<string, unknown> };
+  const previous = JSON.parse(await readFile(new URL("./fixtures/pypi-laya-0.4.8.json", import.meta.url), "utf8")) as { releases?: Record<string, unknown> };
+  const previous0411 = JSON.parse(await readFile(new URL("./fixtures/pypi-laya-0.4.11.json", import.meta.url), "utf8")) as { releases?: Record<string, unknown> };
+  const previous0412 = JSON.parse(await readFile(new URL("./fixtures/pypi-laya-0.4.12.json", import.meta.url), "utf8")) as { releases?: Record<string, unknown> };
+  const previous0413 = JSON.parse(await readFile(new URL("./fixtures/pypi-laya-0.4.13.json", import.meta.url), "utf8")) as { releases?: Record<string, unknown> };
   // Keep historical digests available after a candidate becomes the pin, so the same command replays.
   const candidate = values["pypi-json"] ? JSON.parse(await readFile(values["pypi-json"], "utf8")) as { releases?: Record<string, unknown> } : null;
-  const releases = { ...fixture.releases, ...candidate?.releases };
+  const releases = { ...fixture.releases, ...previous.releases, ...previous0411.releases, ...previous0412.releases, ...previous0413.releases, ...candidate?.releases };
   const wheel = latestStable({ releases: { [version]: releases[version] } })?.wheel;
   assert(wheel, `Laya ${version} is neither the pin nor recorded in ${fixturePath}; record its digest there first`);
   return wheel;
@@ -205,7 +209,11 @@ async function runTrial(version: string, trial: number, order: number, env: Reco
     const server = listing.servers[0]!;
     assert(server.connected, `${version}: laya did not connect through the route: ${textOf(discovery.raw)}`);
     const tools = server.tools.map(t => t.name).sort();
-    assert.deepEqual(tools, EXPECTED_TOOLS, `${version}: unexpected tool set`);
+    // These reviewed catalogs include tournament; future versions must earn a new expectation.
+    const expectedTools = ["0.4.11", "0.4.12", "0.4.13", "0.4.14"].includes(version)
+      ? [...EXPECTED_TOOLS, "laya_tournament", "laya_predict_long"].sort()
+      : ["0.4.7", "0.4.8"].includes(version) ? [...EXPECTED_TOOLS, "laya_tournament"].sort() : EXPECTED_TOOLS;
+    assert.deepEqual(tools, expectedTools, `${version}: unexpected tool set`);
 
     const status = parseLayaPayload(await route.call("laya_status", {}));
     const statusLaya = status?.package_versions?.laya ?? null;

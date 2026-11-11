@@ -16,13 +16,12 @@
   background: var(--input-bg);
   border: 1px solid var(--field-idle);
   border-radius: var(--radius-chip);
-  padding: 3px 8px;
+  padding: var(--control-pad-y) var(--control-pad-x);
 }
-:where(button) { cursor: pointer; }
+:where(button) { appearance: none; cursor: pointer; background: var(--raised); padding-inline: var(--control-action-pad-x); }
 :where(button:hover:not(:disabled)) { background: var(--hover-bg); color: var(--fg); }
 :where(input, textarea)::placeholder { color: var(--muted); }
 :where(select option, select optgroup) { background: var(--panel); color: var(--fg); }
-:where(button, input, select, textarea):focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
 :where(button, input, select, textarea):disabled { color: var(--muted); cursor: not-allowed; }
 :where(textarea) { resize: vertical; max-width: 100%; }
 input:-webkit-autofill,
@@ -108,3 +107,36 @@ body {
 }
 
 html[data-reduce-motion="true"] *, html[data-reduce-motion="true"] *::before, html[data-reduce-motion="true"] *::after { animation-duration:0.01ms !important; animation-iteration-count:1 !important; transition-duration:0.01ms !important; scroll-behavior:auto !important; }
+
+/* Native single-choice controls share one quiet affordance across forms and
+   toolbars. Keep listboxes, embedded editors and third-party canvases native. */
+select:not([multiple]):is(:not([size]), [size="1"]):where(:not(.excalidraw *, .xterm *)) {
+  appearance: none;
+  background-image: var(--control-select-arrow);
+  background-position: right 8px center;
+  background-size: 12px 12px;
+  background-repeat: no-repeat;
+  padding-inline-end: 28px;
+  cursor: pointer;
+}
+/* A component may be borderless, but keyboard focus must never disappear. */
+:root :is(button, input, select, textarea, [role="button"], [tabindex]):where(:not(.excalidraw *, .xterm *)):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* Text-entry focus can follow a mouse click too; use a quiet field edge
+   instead of the accent halo reserved for keyboard navigation actions. */
+:root :is(input, select, textarea):where(:not(.excalidraw *, .xterm *)):focus:focus-visible {
+  outline: 1px solid var(--field-active);
+  outline-offset: 0;
+}
+:root :is(button, input, select, textarea):where(:not(.excalidraw *, .xterm *)):disabled {
+  opacity: var(--control-disabled-opacity);
+  cursor: not-allowed;
+}
+:root :is(input, select, textarea)[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+@media (forced-colors: active) {
+  select:not([multiple]):is(:not([size]), [size="1"]) { appearance: auto; background-image: none; }
+}

@@ -450,7 +450,7 @@ export function SpawnCard({ onClose, quick = false }: { onClose: () => void; qui
     // TERMINAL-RUNTIME: cycled like isolation — the two together are "where does this run".
     else if (field === "runtime") set("runtime")(cycleValue(["sdk", "terminal"], values.runtime.trim() || "sdk", reverse));
     else if (field === "settings") set("settings")(cycleValue(["", "on", "off"], values.settings, reverse));
-    else if (field === "executionMode" && effectiveProvider === "claude" && values.runtime !== "terminal") set("executionMode")(cycleValue(["", "auto", "execute", "plan"], values.executionMode, reverse));
+    else if (field === "executionMode" && values.runtime !== "terminal") set("executionMode")(cycleValue(effectiveProvider === "kimi" ? ["", "auto", "execute", "bypassPermissions"] : ["", "auto", "execute", "plan", "bypassPermissions"], values.executionMode, reverse));
     else if (field === "nativeMcps" && effectiveProvider === "claude" && values.runtime !== "terminal") set("nativeMcps")(cycleValue(["", "on", "off"], values.nativeMcps, reverse));
     else if (field === "orchestration") set("orchestration")(cycleValue(["", "on", "off"], values.orchestration, reverse));
   };
@@ -507,7 +507,7 @@ export function SpawnCard({ onClose, quick = false }: { onClose: () => void; qui
       // role / role leaves it unset too) this spawn's resolved project's own toggle.
       ...(values.settings === "on" ? { loadSettings: true } : {}),
       ...(values.settings === "off" ? { loadSettings: false } : {}),
-      ...(effectiveProvider === "claude" && values.runtime !== "terminal" && values.executionMode ? { executionMode: values.executionMode } : {}),
+      ...(values.runtime !== "terminal" && values.executionMode ? { executionMode: values.executionMode } : {}),
       ...(effectiveProvider === "claude" && values.runtime !== "terminal" && values.nativeMcps
         ? nativeMcpPatch(values.nativeMcps === "on") : {}),
       // CROSS-PROVIDER-MCP-STORE: same "auto stays out of roleFields entirely" convention —
@@ -550,7 +550,7 @@ export function SpawnCard({ onClose, quick = false }: { onClose: () => void; qui
       ...(overrides["permissionProfile"] !== undefined ? { permissionProfile: overrides["permissionProfile"] as string } : {}),
       // An explicitly chosen full profile remains consent even if role diffing
       // drops it because it equals the role default. Merely inheriting is not.
-      ...(values.profile.trim() === "full" ? { acknowledgeCodexFullAccessRisk: true } : {}),
+      ...((values.profile.trim() === "full" || values.executionMode === "bypassPermissions") ? { acknowledgeCodexFullAccessRisk: true } : {}),
       ...(resolvedProfile === "full"
         ? { permissionRequest: "auto" }
         : overrides["permissionProfile"] === undefined && roleOnPermissionRequest ? { permissionRequest: roleOnPermissionRequest } : {}),
@@ -571,7 +571,7 @@ export function SpawnCard({ onClose, quick = false }: { onClose: () => void; qui
       ...(values.role.trim() ? { role: values.role.trim() } : {}),
       ...(engine && engine !== "local" ? { engine } : {}),
       ...(overrides["loadSettings"] !== undefined ? { loadSettings: overrides["loadSettings"] as boolean } : {}),
-      ...(overrides["executionMode"] ? { executionMode: overrides["executionMode"] as "plan" | "execute" | "auto" } : {}),
+      ...(overrides["executionMode"] ? { executionMode: overrides["executionMode"] as "plan" | "execute" | "auto" | "bypassPermissions" } : {}),
       ...(overrides["strictMcpConfig"] !== undefined ? { strictMcpConfig: overrides["strictMcpConfig"] as boolean } : {}),
       ...(overrides["orchestration"] !== undefined ? { orchestration: overrides["orchestration"] as boolean } : {}),
     };
@@ -1045,12 +1045,13 @@ export function SpawnCard({ onClose, quick = false }: { onClose: () => void; qui
                 data-spawn-field="executionMode" value={values.executionMode}
                 onFocus={() => setFieldIndex(fields.indexOf("executionMode"))}
                 onChange={e => set("executionMode")(e.target.value)}
-                disabled={effectiveProvider !== "claude" || values.runtime === "terminal"}>
-                <option value="">Role default</option><option value="auto">Auto</option><option value="execute">Execute</option><option value="plan">Plan</option>
+                disabled={values.runtime === "terminal"}>
+                <option value="">Role default</option><option value="auto">Auto</option><option value="execute">Execute</option><option value="bypassPermissions">Full access (bypass permissions)</option>
+                {effectiveProvider !== "kimi" && <option value="plan">Plan</option>}
               </select>
             </span>
           </div>
-          <div className={`${styles.fieldHint} ${styles.wrapHint}`}>Claude SDK: Auto explicitly selects automatic permission review. Role default inherits the role’s selection. Plan uses native planning; Chimera permission restrictions still apply.</div>
+          <div className={`${styles.fieldHint} ${styles.wrapHint}`}>Role default inherits the role’s mode. Claude and Kimi use native modes; Codex uses native planning and access presets; API providers use Chimera-managed controls. Provider policy still applies.</div>
           <div className={styles.row}>
             <label className={styles.label} htmlFor="spawn-native-mcps">native MCPs</label>
             <span className={styles.inputBox}>

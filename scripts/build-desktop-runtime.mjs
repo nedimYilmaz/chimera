@@ -97,12 +97,6 @@ try {
     if (!match) throw new Error(`Unsupported override: ${line}`);
     overrides[match[1]] = match[2];
   }
-  // The release dependency graph also contains dugite/npm-facing transitive dependencies.
-  // Stay on the same major while closing advisories newer than the workspace override pins.
-  delete overrides['fast-uri@>=3 <3.1.7'];
-  delete overrides['ip-address@>=10 <10.7.0'];
-  overrides['fast-uri@>=3 <3.1.8'] = '3.1.8';
-  overrides['ip-address@>=10 <10.7.3'] = '10.7.3';
   const version = JSON.parse(await readFile(join(root, 'packages/app/src-tauri/tauri.conf.json'), 'utf8')).version;
   await writeFile(join(out, 'package.json'), JSON.stringify({ name: 'chimera-desktop-runtime', version, private: true, type: 'module', imports, dependencies, overrides }, null, 2));
   const checksumText = (await download(`${base}SHASUMS256.txt`)).toString();

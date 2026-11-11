@@ -31,6 +31,7 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 
 export function AgentDetailPanel({
   agent,
+  showBranchAction = true,
   status,
   loading,
   providerDefaultModels,
@@ -43,6 +44,7 @@ export function AgentDetailPanel({
   onSpawnAnotherLikeThis,
 }: {
   agent: AgentView;
+  showBranchAction?: boolean;
   status: Record<string, unknown> | null;
   loading: boolean;
   // MODEL-ACTUAL-SURFACE: providerId -> catalog defaultModel (useProviderDefaultModels),
@@ -97,7 +99,7 @@ export function AgentDetailPanel({
           ✕ close
         </button>
       </div>
-      <div><button type="button" onClick={e => { e.currentTarget.focus(); openConversationFork(agent.agentId); }}>Branch conversation…</button><ForkLineageChip lineage={agent.forkLineage} /></div>
+      <div>{showBranchAction && <button type="button" onClick={e => { e.currentTarget.focus(); openConversationFork(agent.agentId); }}>Branch conversation…</button>}<ForkLineageChip lineage={agent.forkLineage} /></div>
       <ContextLinks key={`context-${agent.agentId}`} agentId={agent.agentId} />
       <AgentResources key={agent.agentId} agentId={agent.agentId} />
       <Row label="state">

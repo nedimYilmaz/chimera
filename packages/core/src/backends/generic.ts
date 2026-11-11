@@ -1,3 +1,4 @@
+import { modeProfile } from "../execution-mode.js";
 import type { AgentDelivery } from "@chimera/protocol";
 import { deliveryContent, requireTextContent, withMessageInput } from "../message-delivery.js";
 import { randomUUID } from "node:crypto";
@@ -120,6 +121,7 @@ function toWireUsage(u: ChatUsage): Record<string, number> {
 }
 
 export class GenericAgentBackend implements AgentBackend {
+  readonly executionModes = ["auto", "plan", "execute", "bypassPermissions"] as const;
   readonly capabilities: BackendCapabilities = { supportsResume: false, supportsMcpServers: true, supportsSettingSources: false, supportsVoiceRealtime: false };
   // opts.vision defaults true so existing 2-arg callers/tests are unaffected; FAZ-1 drivers for
   // text-only APIs (deepseek, groq, ...) pass `{ vision: false }` from the catalog's
@@ -163,6 +165,8 @@ export class GenericAgentBackend implements AgentBackend {
       return { role: "user", content: blocks ? blocks.filter((b) => b.type === "text").map((b) => b.text).join("\n\n") : text, ...(blocks ? { contentBlocks: blocks } : {}) };
     };
 
+    let executionMode = spec.executionMode;
+    let currentProfile = modeProfile(this.provider, spec.executionMode, spec.permissionProfile);
     const messages: ChatMessage[] = [];
     if (spec.instructions) messages.push({ role: "system", content: spec.instructions });
     if (!spec.resumeOnly) messages.push(userMessage(spec.prompt, undefined, spec.initialDelivery ? deliveryContent(spec.prompt, undefined, spec.content, spec.initialDelivery) : spec.content));
@@ -213,7 +217,9 @@ export class GenericAgentBackend implements AgentBackend {
     // unanswered ask the flow still times out to autoDecision → deny for readOnly, so nothing is
     // relaxed silently). mcp__chimera__* still falls through to autoDecision's every-profile allow.
     const checkPermission = async (toolName: string, input: unknown): Promise<{ allow: boolean; message?: string }> => {
-      if (spec.permissionProfile === "readOnly" && MUTATING_TOOLS.has(toolName)) {
+      if (executionMode === "plan" && !["read_file", "list_dir", "grep"].includes(toolName))
+        return { allow: false, message: "Plan mode permits inspection only; switch to Auto or Full access to execute" };
+      if (currentProfile === "readOnly" && MUTATING_TOOLS.has(toolName)) {
         return { allow: false, message: `denied by permissionProfile "readOnly"` };
       }
       // WORKTREE-AGENT-WRITES-REACH-MAIN: decidePermission may return a string deny reason
@@ -288,6 +294,7 @@ export class GenericAgentBackend implements AgentBackend {
     const run = async () => {
       try {
         sink({ kind: "agent_started", data: {} });
+        if (executionMode) sink({ kind: "status", data: { executionMode } });
         // GENERIC-COMPACTION-WINDOW: makes the trigger visible instead of a silent guess — an
         // operator can tell "compacting at the model's real window" (source: catalog/hardcoded)
         // from "compacting at the last-resort default" (source: default) at runtime. Only
@@ -345,7 +352,7 @@ export class GenericAgentBackend implements AgentBackend {
           let providerItems: Record<string, unknown>[] | undefined;
           try {
             try {
-              for await (const ev of this.chatClient.stream({ messages, tools: [...GENERIC_TOOL_DEFS, ...mcpHost.tools], model: spec.model, signal: controller.signal, apiKey, accountName: spec.accountName, maxTokens: maxOutputTokens, effort: spec.effort, resultSchema: spec.resultSchema, openaiApi: spec.providerOptions["openaiApi"] })) {
+              for await (const ev of this.chatClient.stream({ messages: executionMode === "plan" ? [...messages, { role: "system", content: "Plan mode is active. Inspect with read_file, list_dir and grep, and present a plan. Do not execute commands or make changes. Other tools are disabled until the operator changes mode." }] : messages, tools: [...GENERIC_TOOL_DEFS, ...mcpHost.tools], model: spec.model, signal: controller.signal, apiKey, accountName: spec.accountName, maxTokens: maxOutputTokens, effort: spec.effort, resultSchema: spec.resultSchema, openaiApi: spec.providerOptions["openaiApi"] })) {
                 if (loop.killed) return;
                 turnCtl.heartbeat();
                 if (ev.type === "text_delta") { text += ev.text; sink({ kind: "message_delta", data: { text: ev.text } }); }
@@ -477,6 +484,8 @@ export class GenericAgentBackend implements AgentBackend {
     void run();
 
     return withMessageInput({
+      updatePermission: request => { currentProfile = request.permissionProfile; return undefined; },
+      setExecutionMode: async (mode, profile) => { executionMode = mode; currentProfile = profile; },
       send: async (text: string, images?: Image[], content?: ContentBlock[], delivery?: AgentDelivery) => {
         if (loop.ended || loop.closed) throw new Error("input stream closed");
         loop.push(userMessage(text, images, delivery ? deliveryContent(text, images, content, delivery) : content));

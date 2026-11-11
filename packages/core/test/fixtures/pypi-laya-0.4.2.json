@@ -1,0 +1,60 @@
+{
+  "_note": "Official PyPI laya 0.4.2 JSON fetched 2026-10-11; GitHub v0.4.2 stable verified. Retains reviewed 0.4.1 artifacts so the comparison replays after the pin moves.",
+  "info": {
+    "version": "0.4.2"
+  },
+  "releases": {
+    "0.4.1": [
+      {
+        "filename": "laya-0.4.1-py3-none-any.whl",
+        "packagetype": "bdist_wheel",
+        "yanked": false,
+        "url": "https://files.pythonhosted.org/packages/b8/f6/9e3f039d08319e153721210667548e2cac1679b56461c8b5e81acc93b4db/laya-0.4.1-py3-none-any.whl",
+        "digests": {
+          "blake2b_256": "b8f69e3f039d08319e153721210667548e2cac1679b56461c8b5e81acc93b4db",
+          "md5": "9dbc82bfc237e84cb68a3bae818839fc",
+          "sha256": "5252730d8be604aecdc6c52adeb591e75d2b97ef3f52278cba9b37e403c784c7"
+        },
+        "upload_time_iso_8601": "2026-10-08T17:29:20.679019Z"
+      },
+      {
+        "filename": "laya-0.4.1.tar.gz",
+        "packagetype": "sdist",
+        "yanked": false,
+        "url": "https://files.pythonhosted.org/packages/05/26/48881effdec3cd73ad4e919c38fbcee1ddb5efd732c5b65cbd8edda8e773/laya-0.4.1.tar.gz",
+        "digests": {
+          "blake2b_256": "052648881effdec3cd73ad4e919c38fbcee1ddb5efd732c5b65cbd8edda8e773",
+          "md5": "1cd09b65806868e79790d284a521bb15",
+          "sha256": "3c56d346a2ca3835fd92d3f4bd7ec8cbe50ffe03dc5d53520dd2b72c9770dca0"
+        },
+        "upload_time_iso_8601": "2026-10-08T17:29:22.678433Z"
+      }
+    ],
+    "0.4.2": [
+      {
+        "filename": "laya-0.4.2-py3-none-any.whl",
+        "packagetype": "bdist_wheel",
+        "url": "https://files.pythonhosted.org/packages/a6/d1/8d1d18b6645c729612a2e3008cba79b6b1fa1420b6a5df026650df2a7321/laya-0.4.2-py3-none-any.whl",
+        "yanked": false,
+        "upload_time_iso_8601": "2026-10-10T09:25:31.902188Z",
+        "digests": {
+          "blake2b_256": "a6d18d1d18b6645c729612a2e3008cba79b6b1fa1420b6a5df026650df2a7321",
+          "md5": "1a5a8b91e67815cc796ede662255eccb",
+          "sha256": "126284550840e8fc2445f9cd4c808e505d25d457242e7de5658b2cb9f9155b26"
+        }
+      },
+      {
+        "filename": "laya-0.4.2.tar.gz",
+        "packagetype": "sdist",
+        "url": "https://files.pythonhosted.org/packages/53/a0/8dfa9423557d2b4d439b3571f2f99a029e6d7cf7a87155df264713e1286f/laya-0.4.2.tar.gz",
+        "yanked": false,
+        "upload_time_iso_8601": "2026-10-10T09:25:33.812579Z",
+        "digests": {
+          "blake2b_256": "53a08dfa9423557d2b4d439b3571f2f99a029e6d7cf7a87155df264713e1286f",
+          "md5": "569da8ed21f9e99db7bf7524396c9a30",
+          "sha256": "aff6f51438ec1df41c97191fb13a4cbb423febe6f4fb27cbc131aeabaa04176a"
+        }
+      }
+    ]
+  }
+}

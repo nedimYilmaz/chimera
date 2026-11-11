@@ -108,6 +108,7 @@ export function triggerPromptWarnings(trigger: JobTrigger): string[] {
 
 /** Human-readable one-liner for a dispatch target, for events and run history. */
 export function describeDispatch(d: JobDispatch): string {
+  if ("queue" in d) return `queue ${d.queue}`;
   if ("team" in d) return `team ${d.team}${d.role ? `/${d.role}` : ""}`;
   if ("agentSpec" in d) return "inline agent";
   return `role ${d.role}`;

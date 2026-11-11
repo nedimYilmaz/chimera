@@ -157,7 +157,7 @@ export function createHostCommands(store: UiStore, request: RequestFn, now: () =
 
     /** W10 · F10: pull the ⇅ remote host-tools rows off the live peer.status RPC
      * (D8). Bound into the card's open path and re-run app-side on
-     * peer_paired/network_changed so a freshly-paired peer's tools appear. */
+     * peer_paired so a freshly-paired peer's tools appear. */
     refreshPeers,
 
     /** Seed the peer.status host-tools carriage rows directly (the unit-test

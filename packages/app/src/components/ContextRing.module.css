@@ -1,0 +1,20 @@
+.ring { position:relative; flex:0 0 38px; width:38px; height:38px; margin-left:auto; order:2; color:var(--success); }
+.ring[data-tone="warning"] { color:var(--warn); }
+.ring[data-tone="danger"] { color:var(--danger); }
+.ring[data-tone="unknown"] { color:var(--muted); }
+.ring svg { display:block; width:100%; height:100%; overflow:visible; }
+.track, .fill, .spinner { fill:none; stroke-width:2.5; }
+.track { stroke:var(--meter-track); }
+.fill { stroke:currentColor; stroke-linecap:round; transition:stroke-dasharray .25s ease, stroke .25s ease; }
+.percent { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:9px; font-variant-numeric:tabular-nums; color:var(--fg-soft); }
+.spinner { stroke:var(--success); transform-origin:center; animation:orbit 1.2s linear infinite; }
+.ring[data-tone="compacting"] .fill { opacity:.3; }
+.count { position:absolute; right:-2px; bottom:-2px; padding:0 2px; border-radius:var(--radius-chip); background:var(--panel); color:var(--success); font-size:9px; line-height:1.2; }
+.srOnly { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
+@keyframes orbit { to { transform:rotate(360deg); } }
+@media (prefers-reduced-motion:reduce) { .spinner { animation:none; } .fill { transition:none; } }
+
+.action { flex:0 0 38px; width:38px; height:38px; min-height:38px; margin-left:auto; order:2; padding:0; border:0; border-radius:50%; background:transparent; }
+.action .ring { margin:0; }
+.action:hover:not(:disabled) { background:var(--hover-bg); }
+:root .action:disabled { opacity:1; }

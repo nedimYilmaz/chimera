@@ -422,33 +422,6 @@
   color: var(--muted);
 }
 
-.authUrl {
-  color: var(--muted);
-  word-break: break-all;
-}
-
-.installHint {
-  color: var(--muted);
-  font-size: var(--fs-meta);
-}
-
-.installCmdRow {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 4px;
-}
-
-.installCmd {
-  font-family: var(--font-mono, monospace);
-  color: var(--fg);
-  background: var(--bg);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-chip, 4px);
-  padding: 2px 8px;
-  font-size: var(--fs-meta);
-}
-
 /* ---- W10 pairing seam ---- */
 .seam {
   background: var(--bg);

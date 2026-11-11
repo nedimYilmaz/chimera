@@ -148,7 +148,7 @@ describe("SpawnCard — account dropdown", () => {
     await act(async () => renderer.root.findByProps({ "data-spawn-submit": true }).props.onClick());
     const params = rpcImpl.mock.calls.find(([method]) => method === "agent.spawn")![1] as { spec: Record<string, unknown> };
     expect(params.spec.strictMcpConfig).toBeUndefined();
-    expect(params.spec.executionMode).toBeUndefined();
+    expect(params.spec.executionMode).toBe("plan");
     act(() => renderer.unmount());
   });
 

@@ -888,3 +888,9 @@ describe("eventSummaryOverride — job_dead_letter / job_disabled (F05.UI)", () 
     expect(eventKindTone("job_disabled")).toBe("warn");
   });
 });
+
+it("preserves and explicitly clears an existing-agent queue binding", () => {
+  const values = queueFormValuesFromSpec({ name: "reviews", retryLimit: 0, existingAgentId: "reviewer" });
+  expect(buildQueueSpec(values)).toEqual({ name: "reviews", retryLimit: 0, existingAgentId: "reviewer" });
+  expect(buildQueueUpdatePatch({ ...values, existingAgentId: "" })).toEqual({ retryLimit: 0, existingAgentId: null });
+});

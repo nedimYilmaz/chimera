@@ -38,3 +38,5 @@
   overflow-wrap: anywhere;
   flex-shrink: 0;
 }
+
+.embedded { border:0; border-radius:0; padding-bottom:0; }

@@ -30,12 +30,13 @@ class FakeResizeObserver {
 (globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver = FakeResizeObserver;
 
 import { TranscriptPanel } from "../src/components/TranscriptPanel";
+import { runAction } from "../src/keymap";
 import { appStore } from "../src/state/store";
 
 const focusCalls: string[] = [];
 function createNodeMock(el: { props?: Record<string, unknown> }) {
   if (el.props?.["data-transcript-search-toggle"] !== undefined) return { focus: () => focusCalls.push("toggle") };
-  if (el.props?.["data-transcript-search"] !== undefined) return { focus: () => focusCalls.push("input") };
+  if (el.props?.["data-transcript-search"] !== undefined) return { focus: () => focusCalls.push("input"), select: () => focusCalls.push("select") };
   return {};
 }
 
@@ -56,22 +57,17 @@ function soloAgent(agentId: string) {
 }
 
 describe("TranscriptPanel search focus (SEARCHBOX-UNCLICKABLE)", () => {
-  it("opening search autoFocuses the input; closing returns focus to the toggle", () => {
-    const agentId = "search-focus-1";
-    const agent = soloAgent(agentId);
-
-    act(() => { renderer = create(React.createElement(TranscriptPanel, { agent }), { createNodeMock }); });
-
-    const toggle = renderer!.root.findByProps({ "data-transcript-search-toggle": true });
-    act(() => { (toggle.props["onClick"] as () => void)(); });
-
+  it("keeps an input in the header without stealing draft focus, and the find command selects it", () => {
+    const agent = soloAgent("search-focus-1");
+    act(() => { renderer = create(<TranscriptPanel agent={agent} />, { createNodeMock }); });
     const input = renderer!.root.findByProps({ "data-transcript-search": "" });
-    expect(input.props["autoFocus"]).toBe(true);
-
-    const closeButton = renderer!.root.findByProps({ "aria-label": "close search" });
-    act(() => { (closeButton.props["onClick"] as () => void)(); });
-
-    expect(focusCalls).toEqual(["toggle"]);
-    expect(() => renderer!.root.findByProps({ "data-transcript-search-toggle": true })).not.toThrow();
+    expect(input.props.autoFocus).not.toBe(true);
+    expect(renderer!.root.findAllByProps({ "data-transcript-search-toggle": true })).toHaveLength(0);
+    act(() => { runAction("transcript.search", appStore); });
+    expect(focusCalls).toEqual(["input", "select"]);
+    act(() => input.props.onChange({ target: { value: "needle" } }));
+    act(() => renderer!.root.findByProps({ "aria-label": "clear search" }).props.onClick());
+    expect(renderer!.root.findByProps({ "data-transcript-search": "" }).props.value).toBe("");
+    expect(focusCalls.at(-1)).toBe("input");
   });
 });

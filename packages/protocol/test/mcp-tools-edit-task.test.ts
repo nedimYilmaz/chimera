@@ -48,3 +48,10 @@ describe("queue_edit_task resolver (TASK-EDIT-VERSIONING)", () => {
     expect(result.params.editedBy).toBe("a1");
   });
 });
+
+it("queue completion takes ownership from the authenticated connection, never tool arguments", () => {
+  const tool = MCP_TOOL_TABLE.find(t => t.name === "queue_complete_task")!;
+  const result = tool.resolve({ taskId: "t", result: "verified", callerAgentId: "forged" }, { agentId: "real", depth: 0 });
+  expect(result).toMatchObject({ kind: "rpc", method: "queue.completeTask", params: { callerAgentId: "real" } });
+  expect(() => tool.resolve({ taskId: "t", result: "verified" }, { depth: 0 })).toThrow(/Authenticated/);
+});

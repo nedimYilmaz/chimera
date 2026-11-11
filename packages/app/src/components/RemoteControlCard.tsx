@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { RemotePairResultSchema, type RemotePairResult } from "@chimera/protocol";
 import type { UiState } from "@chimera/ui-state";
-import { registerOverlay } from "./OverlayOutlet";
+import { registerOverlay, type OverlayProps } from "./OverlayOutlet";
 import { OverlayCard, OverlayCardHeader } from "./OverlayCard";
 import { appStore } from "../state/store";
 import { useStore } from "../state/useStore";
@@ -20,7 +20,7 @@ import styles from "./ModelCard.module.css";
 // KEYMAP-REDESIGN: system.remoteControl was retired as a keyboard chord
 // (letter-budget trade) — the opener is click-only now (plus the command
 // palette, mod+b, on non-agents tabs), so the header hint is just "esc".
-export function RemoteControlCard() {
+export function RemoteControlCard({ bottomInset }: Partial<OverlayProps> = {}) {
   const open = useSystemLocal((s) => s.remoteControlOpen);
   const agent = useStore((s: UiState) => (s.selectedAgentId ? s.agents[s.selectedAgentId] : undefined));
   const status = agent?.remoteControl;
@@ -83,7 +83,7 @@ export function RemoteControlCard() {
   const close = (): void => systemLocal.set({ remoteControlOpen: false });
 
   return (
-    <OverlayCard width={560} align="center" onClose={close}>
+    <OverlayCard width={560} align="center" bottomInset={bottomInset} onClose={close}>
       <OverlayCardHeader title="remote control" meta={displayName(agent)} hint="esc" />
       <div className={styles.body}>
         <div className={styles.fieldRow}>

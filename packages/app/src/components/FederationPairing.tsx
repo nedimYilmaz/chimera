@@ -62,8 +62,7 @@ export function FederationPairing({ engineId }: { engineId: string | null }) {
   const [confirmRevoke, setConfirmRevoke] = useState<InviteRow | null>(null);
   const joinRef = useRef<HTMLTextAreaElement | null>(null);
 
-  // load once on mount; keep fresh off daemon events (peer_paired / config /
-  // network_changed) — the pairing UI self-refreshes like the rest of settings.
+  // Load once, then refresh on peer_paired / config_changed like the rest of settings.
   useEffect(() => {
     void cmds.loadAll();
     const off = onDaemonEvent((e) => cmds.onDaemonEvent(e.kind));

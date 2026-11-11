@@ -301,7 +301,6 @@ export function featureRpc(method: string, params: Record<string, unknown> = {})
     case "config.get": return config;
     case "accounts.list": return [{ name: "claude-demo", provider: "claude" }, { name: "codex-demo", provider: "codex" }];
     case "providers.list": return [];
-    case "fed.network": return { installed: false, loggedIn: false, ip4: null, magicDNS: null, tailscaleSSH: false };
     case "fed.cloudflare": return { installed: false, provisioned: false, hostname: null, tunnelHealth: "unknown", selfprobe: "pending", accessTokenExpiry: null };
     case "secret.list": return { secrets };
     // The Queues tab loads these for its palette/search sources; the demo has none registered.

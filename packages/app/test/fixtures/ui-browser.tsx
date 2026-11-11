@@ -1,3 +1,6 @@
+import "../../src/components/CheckpointsCard";
+import { agentControlsFixture } from "./agent-controls";
+import { systemCommands, systemLocal } from "../../src/state/commands.system";
 import { ScheduleCommandProbe, scheduleCommandFixture } from "./schedule-command";
 import { RemoteControlProbe, remoteFixture } from "./remote-control";
 import { HistoryRecoveryProbe } from "./history-recovery";
@@ -48,6 +51,8 @@ import { MessageBody } from "../../src/components/MessageBody";
 import { Markdown } from "../../src/components/Markdown";
 import { OverlayOutlet } from "../../src/components/OverlayOutlet";
 import "../../src/components/PathViewerCard";
+import "../../src/components/ModelCard";
+import "../../src/components/EffortCard";
 import { ImportCard } from "../../src/components/ImportCard";
 import React, { useEffect, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -99,6 +104,7 @@ declare global {
     __UI_QA_IMAGE__?: { mediaType: "image/png"; data: string };
     __UI_QA__?: {
       show(name: Scenario): void;
+      agentControls: typeof agentControlsFixture;
       projectDelete: typeof projectDeleteFixture;
       fork: { mode(value: string): void; snapshot(): { calls: unknown[]; selected: string | null; draft: string; seq: number }; cycle(): void };
       git: { pending(): number; settle(mode: string): void; externalIndex(): void; externalContent(): void; cycle(): void; writes(): unknown[] };
@@ -171,14 +177,14 @@ declare global {
 type EdgeCase = "external-focus" | "cancel-focus" | "inline-child" | "portal-child" | "no-close" | "guard-popup";
 type ActionScenario = "confirm-actions" | "team-actions" | "queue-actions";
 type MainScreen = "review" | "welcome" | "projects" | "memory" | "events" | "roles" | "inbox" | "slo" | "runs" | "help" | "agents" | "settings" | "teams" | "queues";
-type Scenario = "schedule-command" | "codex-full-settings" | "history-recovery" | "remote-control" | "html-preview" | "media-preview" | "native-mcp-settings" | "message-identity" | "project-delete" | "qa-recovery" | "qa-liveboard" | "project-canvas" | "inspector-registry" | "operator-settings" | "operator-read" | "operator-control" | "conversation-fork" | "context-links" | "stt" | "git-review" | "issue-board" | "resources" | "output-images" | "teams-stability" | "team-roles-stability" | "roles-stability" | "desktop-preview" | "workflow-transcript" | "computer-use" | "background-task" | "project-import" | "slash-codex" | "slash-claude" | "group-order" | "quick-spawn" | "workspace-tools" | "keyboard" | `screen-${MainScreen}` | "metrics" | "accounts" | "local-links" | "design" | "design-error" | "design-large" | "secrets" | "live-names" | EdgeCase | ActionScenario | "topbar" | "modal" | "voice" | "ptt" | "transcript" | "pane" | "queues" | "teams" | "settings" | "spawn";
+type Scenario = "agent-controls" | "schedule-command" | "codex-full-settings" | "history-recovery" | "remote-control" | "html-preview" | "media-preview" | "native-mcp-settings" | "message-identity" | "project-delete" | "qa-recovery" | "qa-liveboard" | "project-canvas" | "inspector-registry" | "operator-settings" | "operator-read" | "operator-control" | "conversation-fork" | "context-links" | "stt" | "git-review" | "issue-board" | "resources" | "output-images" | "teams-stability" | "team-roles-stability" | "roles-stability" | "desktop-preview" | "workflow-transcript" | "computer-use" | "background-task" | "project-import" | "slash-codex" | "slash-claude" | "group-order" | "quick-spawn" | "workspace-tools" | "keyboard" | `screen-${MainScreen}` | "metrics" | "accounts" | "local-links" | "design" | "design-error" | "design-large" | "secrets" | "live-names" | EdgeCase | ActionScenario | "topbar" | "modal" | "voice" | "ptt" | "transcript" | "pane" | "queues" | "teams" | "settings" | "spawn";
 
 type PttSnapshot = { starts: number; stops: number; sends: string[]; backgroundActions: number };
 let sttActive = false;
 const speechFixture = {
   available: true, installed: true, state: "installed" as SttStatus["install"]["state"],
   preferences: { v: 1 as const, engine: "whisper-cpp" as "whisper-cpp" | null, language: "en" as "en" | "tr" },
-  sends: 0, transcribes: 0, audioBytes: 0, lastLanguage: "", micRequests: 0,
+  sends: 0, transcribes: 0, audioBytes: 0, lastLanguage: "", micRequests: 0, transcripts: [] as string[],
 };
 function fixtureSpeechStatus(): SttStatus {
   return { preferences: speechFixture.preferences, engines: [{ id: "whisper-cpp", available: speechFixture.available, installed: speechFixture.installed, languages: ["en", "tr"], ...(!speechFixture.available ? { reason: "unsupported platform" } : {}) }],
@@ -288,6 +294,7 @@ function contextRpc(method: string, params: Record<string, unknown> = {}) {
   return row;
 }
 window.__UI_QA_RPC__ = (method, params) => {
+  if (agentControlsFixture.active) { const result = agentControlsFixture.rpc(method, params ?? {}); if (result !== undefined) return result; }
   if (method === "job.sudoPlan") {
     scheduleCommandFixture.plans.push(params as Record<string, unknown>);
     return { fingerprint: "synthetic", authorizeScript: "SYNTHETIC-AUTHORIZATION-PREVIEW", revokeScript: "SYNTHETIC-REVOKE-PREVIEW" };
@@ -447,6 +454,7 @@ window.__UI_QA_RPC__ = (method, params) => {
   if (stabilityActive && method === "role.list") return new Promise((resolve, reject) => {
     stabilityPending.set(++stabilitySeq, { resolve, reject });
   });
+  if (method === "agent.shellStatus") return null;
   return rpcFixture(method, params);
 };
 appStore.dispatch({ type: "daemonStatus", status: rpcFixture("daemon.status") as never });
@@ -727,14 +735,16 @@ function ActionProbe({ name }: { name: ActionScenario }) {
   const [submit, setSubmit] = useState(0);
   const [close, setClose] = useState(0);
   const [disabled, setDisabled] = useState(0);
+  const [payload, setPayload] = useState<Record<string, unknown> | null>(null);
   const counters = JSON.stringify({ confirm, submit, close, disabled });
-  const onSubmit = async () => {
+  const onSubmit = async (value: Record<string, unknown>) => {
+    setPayload(value);
     setSubmit((value) => value + 1);
   };
   return (
     <Stage>
       <div data-ui-qa-action-host style={{ position: "relative", width: 630, maxWidth: "100%", height: "100%", minWidth: 0, overflow: "hidden" }}>
-        <output data-ui-qa-action-counts>{counters}</output>
+        <output data-ui-qa-action-counts data-payload={JSON.stringify(payload)}>{counters}</output>
         <ChipButton data-ui-qa-disabled-action disabled onClick={() => setDisabled((value) => value + 1)}>disabled synthetic action</ChipButton>
         {name === "confirm-actions" ? (
           <ConfirmCard
@@ -757,7 +767,8 @@ function ActionProbe({ name }: { name: ActionScenario }) {
         ) : (
           <QueueFormCard
             mode="edit"
-            initial={{ name: "quality-queue", retryLimit: "2" }}
+            initial={{ name: "quality-queue", retryLimit: "2", existingAgentId: "review-agent" }}
+            agents={[{ id: "review-agent", name: "gh-review" }]}
             onSubmit={onSubmit}
             onClose={() => setClose((value) => value + 1)}
           />
@@ -860,6 +871,19 @@ function NativeMcpSettingsProbe() {
     {open && <AgentSettingsCard agentId={agentId} onClose={() => setOpen(false)} />}</Stage>;
 }
 
+function AgentControlsProbe() {
+  useEffect(() => {
+    const sys = systemCommands(appStore, rpcCall);
+    const offs = [
+      registerActionHandler("system.remoteControl", () => sys.toggleRemoteControl()),
+      registerActionHandler("system.model", () => sys.toggleModel()),
+      registerActionHandler("system.effort", () => sys.toggleEffort()),
+    ];
+    return () => { offs.forEach(off => off()); systemLocal.set({ remoteControlOpen: false, modelOpen: false, effortOpen: false }); };
+  }, []);
+  return <MainScreenProbe name="agents" />;
+}
+
 function ScenarioView({ name }: { name: Scenario }) {
   useEffect(() => {
     let secondFrame = 0;
@@ -870,13 +894,15 @@ function ScenarioView({ name }: { name: Scenario }) {
   }, [name]);
   if (name === "qa-recovery" || name === "qa-liveboard") return <RecoveryProbe key={name} liveboard={name === "qa-liveboard"} />;
 
+  if (name === "agent-controls") return <AgentControlsProbe />;
   if (name === "project-delete") return <MainScreenProbe name="projects" />;
   if (name === "project-canvas") return <CanvasNavigationProbe />;
   if (name === "git-review") return <GitReviewProbe />;
   if (name === "issue-board") return <Stage><TopBar /><main data-issue-board style={{ position: "relative", flex: 1, minWidth: 0, minHeight: 0, overflow: "auto" }}><IssueSources queue="issue-queue" /><div data-issue-task-row role="button" tabIndex={0} onKeyDown={onRowKeyDown(() => {})} style={{ padding: 12 }}>Fictional queue task <IssueChip queue="issue-queue" taskId="issue-task" /></div><OverlayOutlet host="queues" /></main><Footer /></Stage>;
   if (name === "message-identity") return <MessageIdentityFixture />;
   if (name === "slash-codex" || name === "slash-claude") return <Stage><div style={{padding: 24, marginTop: 260}}><Composer /></div></Stage>;
-  if (name === "stt") return <Stage><TopBar /><div data-stt-stage style={{ flex: 1, minHeight: 0, minWidth: 0, overflow: "auto", padding: 12 }}><LocalSpeechSettings /></div><Composer /><Footer /></Stage>;
+  // The dictation component remains independently testable; it is no longer in Composer.
+  if (name === "stt") return <Stage><TopBar /><div data-stt-stage style={{ flex: 1, minHeight: 0, minWidth: 0, overflow: "auto", padding: 12 }}><PushToTalkControl agentId={agentId} onInsert={text => speechFixture.transcripts.push(text)} /><LocalSpeechSettings /></div><Composer /><Footer /></Stage>;
   if (name === "resources" || name === "context-links" || name === "conversation-fork") return <MainScreenProbe name="agents" />;
   if (name === "inspector-registry") return <MainScreenProbe name="agents" />;
   if (name === "group-order") return <MainScreenProbe name="agents" />;
@@ -950,6 +976,12 @@ const computerRequest = async (command: string, args?: Record<string, unknown>) 
   return computerStatus;
 };
 function show(name: Scenario): void {
+  // Remove the previous scenario subscriptions before resetting shared stores.
+  // Otherwise its listeners can start requests against the next scenario.
+  root?.unmount();
+  root = null;
+  if (agentControlsFixture.active) agentControlsFixture.restore();
+  agentControlsFixture.active = false;
   if (name === "message-identity") messageIdentityFixture.reset();
   resetRecovery(name);
   projectDeleteFixture.active = name === "project-delete";
@@ -979,7 +1011,7 @@ function show(name: Scenario): void {
   sttActive = name === "stt";
   window.__CHIMERA_VOICE_REAL_CAPTURE__ = sttActive;
   if (sttActive) {
-    Object.assign(speechFixture, { available: true, installed: true, state: "installed", sends: 0, transcribes: 0, audioBytes: 0, micRequests: 0, preferences: { v: 1, engine: "whisper-cpp", language: "en" } });
+    Object.assign(speechFixture, { available: true, installed: true, state: "installed", sends: 0, transcribes: 0, audioBytes: 0, micRequests: 0, transcripts: [], preferences: { v: 1, engine: "whisper-cpp", language: "en" } });
     micStreams.length = 0; sttLoadStatus.reset(); voiceLocal.dispatch({ type: "idle" });
     appStore.dispatch({ type: "connected", connected: true });
     appStore.dispatch({ type: "agentRecords", records: [{ ...agentRecords[0], state: "running", provider: "codex" }] as never });
@@ -1117,6 +1149,8 @@ function show(name: Scenario): void {
     appStore.dispatch({type:"selectAgent",agentId:agent});
     appStore.dispatch({type:"event",event:{seq:renameSeq++,ts:Date.now(),engineId:"local",agentId:appStore.getState().agents[agent]!.agentId,kind:"message",data:{text:"Bookmark browser probe",role:"user"}} as never});
   }
+  agentControlsFixture.active = name === "agent-controls";
+  if (agentControlsFixture.active) agentControlsFixture.reset();
   document.body.dataset.fixtureReady = "pending";
   if (name === "secrets" || name === "live-names") appStore.dispatch({ type: "agentRecords", records: [{ ...agentRecords[0], state: "running", displayLabel: "UI QA Agent" }] as never });
   appStore.dispatch({ type: "accountsOpen", open: name === "accounts" });
@@ -1125,7 +1159,6 @@ function show(name: Scenario): void {
     appStore.dispatch({ type: "accountsOpen", open: true });
   }
   if (name !== "accounts") appStore.dispatch({ type: "daemonStatus", status: rpcFixture("daemon.status") as never });
-  root?.unmount();
   const host = document.getElementById("root")!;
   host.replaceChildren();
   root = createRoot(host);
@@ -1133,6 +1166,7 @@ function show(name: Scenario): void {
 }
 
 window.__UI_QA__ = {
+  agentControls: agentControlsFixture,
   show,
   projectDelete: projectDeleteFixture,
   canvas: { remount() { const { layout, revision, large } = canvasFixture; show("project-canvas"); Object.assign(canvasFixture, { layout, revision, large }); }, mode(value: string) { canvasFixture.mode = value; }, large() { canvasFixture.large = true; }, remove() { canvasFixture.removed = true; }, snapshot() { return { calls: canvasFixture.calls, layout: canvasFixture.layout, revision: canvasFixture.revision, selectedAgentId: appStore.getState().selectedAgentId, tab: appStore.getState().activeTab }; }, cycle() { appStore.dispatch({ type: "connected", connected: false }); appStore.dispatch({ type: "connected", connected: true }); } },

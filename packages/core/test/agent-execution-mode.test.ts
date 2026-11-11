@@ -80,6 +80,47 @@ describe("native Claude execution mode", () => {
     h.emit({ type: "system", subtype: "init", session_id: "native-session", permissionMode: "auto" });
     await vi.waitFor(() => expect(rec.executionMode).toBe("auto"));
   });
+  it("explicit full mode launches bypass with opt-in and survives live auto/full transitions", async () => {
+    const h = await live({ executionMode: "bypassPermissions", permissionProfile: "readOnly" });
+    expect(h.calls[0]!.options.permissionMode).toBe("bypassPermissions");
+    expect(h.calls[0]!.options.allowDangerouslySkipPermissions).toBe(true);
+    for (const mode of ["auto", "bypassPermissions"] as const) {
+      const result = await h.e.handle("agent.reconfigure", { agentId: h.id, live: { executionMode: mode } });
+      expect(result).toMatchObject({ applied: ["executionMode"], respawned: false });
+      expect(h.setPermissionMode).toHaveBeenLastCalledWith(mode);
+      expect(h.e.supervisor.status(h.id).executionMode).toBe(mode);
+    }
+    const rec = h.e.supervisor.status(h.id);
+    expect(rec.spec.permissionProfile).toBe("readOnly");
+    expect(rec.sessionId).toBe("native-session");
+    expect(h.calls).toHaveLength(1);
+    const hooks = h.calls[0]!.options.hooks as { PreToolUse: Array<{ hooks: Array<(i: unknown) => Promise<unknown>> }> };
+    expect(await hooks.PreToolUse[0]!.hooks[0]!({ tool_name: "Write", tool_input: { file_path: "/tmp/blocked", content: "no" } })).toMatchObject({ hookSpecificOutput: { permissionDecision: "deny" } });
+    const replay = structuredClone(rec); delete replay.spec.executionMode; replay.executionMode = undefined;
+    reconstructAgentsFromLog([replay], [{ seq: 3, ts: 3, agentId: h.id, kind: "status", data: { executionMode: "bypassPermissions", requestedExecutionMode: "bypassPermissions" } }]);
+    expect(replay.executionMode).toBe("bypassPermissions"); expect(replay.spec.executionMode).toBe("bypassPermissions");
+  });
+  it("an auto-born session retains Chimera denials after native full acknowledgement", async () => {
+    const h = await live({ executionMode: "auto", permissionProfile: "readOnly" });
+    await h.e.handle("agent.reconfigure", { agentId: h.id, live: { executionMode: "bypassPermissions" } });
+    const hooks = h.calls[0]!.options.hooks as { PreToolUse: Array<{ hooks: Array<(i: unknown) => Promise<unknown>> }> };
+    expect(await hooks.PreToolUse[0]!.hooks[0]!({ tool_name: "Write", tool_input: { file_path: "/tmp/blocked", content: "no" } })).toMatchObject({ hookSpecificOutput: { permissionDecision: "deny" } });
+    h.emit({ type: "system", subtype: "status", permissionMode: "bypassPermissions" });
+    await vi.waitFor(() => expect(h.e.supervisor.status(h.id).executionMode).toBe("bypassPermissions"));
+    await h.e.handle("agent.reconfigure", { agentId: h.id, live: { executionMode: "auto" } });
+    expect(await hooks.PreToolUse[0]!.hooks[0]!({ tool_name: "Read", tool_input: { file_path: "/tmp/example" } })).toEqual({});
+  });
+  it("native full refusal preserves mode, session and profile without a restart", async () => {
+    const h = await live({ executionMode: "auto", permissionProfile: "full" });
+    h.setPermissionMode.mockRejectedValueOnce(new Error("Managed policy disables bypass permissions"));
+    await expect(h.e.handle("agent.reconfigure", { agentId: h.id, live: { executionMode: "bypassPermissions" } })).rejects.toThrow("Managed policy");
+    const rec = h.e.supervisor.status(h.id);
+    expect(rec.spec.executionMode).toBe("auto"); expect(rec.executionMode).toBe("plan");
+    expect(rec.spec.permissionProfile).toBe("full"); expect(rec.sessionId).toBe("native-session"); expect(h.calls).toHaveLength(1);
+    await h.e.supervisor.kill(h.id);
+    await h.e.handle("agent.reconfigure", { agentId: h.id, live: { executionMode: "bypassPermissions" } });
+    expect(rec.spec.executionMode).toBe("bypassPermissions"); expect(rec.executionMode).toBeUndefined();
+  });
   it("auto refusal retains the previous mode and stopped auto is saved without a native call", async () => {
     const h = await live({ executionMode: "plan" });
     h.setPermissionMode.mockRejectedValueOnce(new Error("auto unavailable"));
@@ -189,9 +230,50 @@ describe("native Claude execution mode", () => {
     expect(() => AgentSpecSchema.parse({ prompt: "p", cwd: "/tmp", executionMode: "invalid" })).toThrow();
     const h = await live();
     const rec = h.e.supervisor.status(h.id); rec.spec.runtime = "terminal";
-    await expect(h.e.handle("agent.reconfigure", { agentId: h.id, live: { executionMode: "execute" } })).rejects.toThrow("Claude SDK");
+    await expect(h.e.handle("agent.reconfigure", { agentId: h.id, live: { executionMode: "execute" } })).rejects.toThrow("not supported");
     rec.spec.runtime = "sdk"; rec.provider = "codex";
-    await expect(h.e.handle("agent.reconfigure", { agentId: h.id, live: { executionMode: "execute" } })).rejects.toThrow("Claude SDK");
+    await expect(h.e.handle("agent.reconfigure", { agentId: h.id, live: { executionMode: "execute" } })).rejects.toThrow("not supported");
     expect(h.setPermissionMode).not.toHaveBeenCalled();
+  });
+});
+
+describe.each(["codex", "kimi", "openai"])("%s mode RPC", provider => {
+  it("persists operator choice, profiles and pending state without restarting", async () => {
+    let emit: (e: any) => void = () => {};
+    const spawns: any[] = [];
+    const setMode = vi.fn(async () => ({ pending: provider === "codex" }));
+    const { withMessageInput } = await import("../src/message-delivery.js");
+    const backend: AgentBackend = { provider, executionModes: ["auto", "plan", "execute", "bypassPermissions"],
+      capabilities: { supportsResume: true, supportsMcpServers: true, supportsSettingSources: false },
+      spawn(spec, sink) { spawns.push(spec); emit = sink; sink({ kind: "agent_started", data: { sessionId: "same-session" } });
+        sink({ kind: "status", data: { executionMode: spec.executionMode } });
+        return withMessageInput({ send: async () => {}, interrupt: async () => {}, kill: async () => {}, close: async () => {}, setExecutionMode: setMode }); },
+    };
+    const e = new Engine({ home: makeEngineHome(), backends: new Map([[provider, backend]]) });
+    await e.handle("config.patch", { patch: { accounts: [{ name: "mode-account", provider, auth: { type: "subscription" } }], autoOrder: ["mode-account"] } });
+    const a = await e.handle("agent.spawn", { spec: { prompt: "mode test", provider, account: "mode-account", cwd: "/tmp", isolation: "none", executionMode: "auto" } }) as { agentId: string };
+    cleanup.push(() => e.supervisor.kill(a.agentId));
+    const rec = e.supervisor.status(a.agentId);
+    expect(spawns[0].permissionProfile).toBe(provider === "kimi" ? "full" : "acceptEdits");
+    if (provider === "codex") await expect(e.handle("agent.reconfigure", { agentId: a.agentId, live: { executionMode: "bypassPermissions" } })).rejects.toThrow("risk grant");
+    const before = structuredClone(rec);
+    const res = await e.handle("agent.reconfigure", { agentId: a.agentId, live: { executionMode: "bypassPermissions" }, ...(provider === "codex" ? { patch: { acknowledgeCodexFullAccessRisk: true } } : {}) });
+    expect(res).toMatchObject({ respawned: false, applied: ["executionMode"], executionModePending: provider === "codex" });
+    expect(rec.spec.permissionProfile).toBe("full");
+    expect(rec.spec.executionMode).toBe("bypassPermissions"); expect(rec.sessionId).toBe("same-session"); expect(spawns).toHaveLength(1);
+    expect(rec.executionMode).toBe(provider === "codex" ? "auto" : "bypassPermissions");
+    if (provider === "codex") {
+      expect(rec.spec.acknowledgeCodexFullAccessRisk).toBe(true);
+      emit({ kind: "status", data: { executionMode: "auto" } });
+      expect(rec.executionModePending).toBe(true);
+      emit({ kind: "status", data: { executionMode: "bypassPermissions" } });
+      expect(rec.executionModePending).toBe(false);
+    }
+    reconstructAgentsFromLog([before], [{ seq: 9, ts: 9, agentId: a.agentId, kind: "status", data: { requestedExecutionMode: "bypassPermissions", executionModePending: true, permissionChanged: true, permissionProfile: "full", acknowledgeCodexFullAccessRisk: provider === "codex", ...(rec.permissionApplication ? { permissionApplication: rec.permissionApplication } : {}) } }]);
+    expect(before.spec.executionMode).toBe("bypassPermissions"); expect(before.spec.permissionProfile).toBe("full");
+    if (provider === "codex") expect(before.spec.acknowledgeCodexFullAccessRisk).toBe(true);
+    rec.state = "paused";
+    await e.handle("agent.reconfigure", { agentId: a.agentId, live: { executionMode: "auto" } });
+    expect(rec.executionModePending).toBe(true); expect(rec.executionMode).toBeUndefined(); expect(setMode).toHaveBeenCalledTimes(1);
   });
 });

@@ -208,20 +208,9 @@ export function stateVisual(state: string): { glyph: string; tone: Tone } {
   }
 }
 
-// PAUSED-AGENTS-VISIBLE: WHY + WHEN for a paused row's badge — the acceptance bar for this
-// feature is explicitly "not just a paused dot": an operator idling on dozens of agents needs
-// the reason (will it resolve itself, or is it stuck retrying?) and the resume time without
-// opening the row. Reuses the shared reason label (ui-state/pause.ts) so app/tui never drift.
-// PAUSE-BADGE-NOISE: the two "nobody needed you" holds are the NORMAL resting state — after a
-// restart, or after an idle window — and they read IDENTICALLY on every row, so spelling them
-// out adds no per-row information at all. They are also long: "daemon restarted — resume to
-// continue" wrapped the badge onto a second line and squeezed the agent-NAME column clean off
-// the row, which is how a cosmetic label became a "where did all the names go" bug. The ⏸ glyph
-// alone carries them; the full sentence still shows wherever there is room for it (the detail
-// panel), via pauseReasonLabel directly. The exceptional holds keep their text — that is the
-// whole point of PAUSED-AGENTS-VISIBLE: "is this resolving itself or stuck retrying?" is a real
-// question for a session limit or a crash loop, and not one for a restart.
-const GLYPH_ONLY_HOLDS: ReadonlySet<string> = new Set(["daemon-restart", "idle-timeout"]);
+// Routine pauses stay compact in the roster; their reason is available on the
+// state glyph and in the inspector. Exceptional pauses still draw attention.
+const GLYPH_ONLY_HOLDS: ReadonlySet<string> = new Set(["daemon-restart", "idle-timeout", "operator-hold"]);
 
 export function pauseSummary(a: Pick<AgentView, "pauseReason" | "resumeAt">): string {
   if (a.pauseReason && GLYPH_ONLY_HOLDS.has(a.pauseReason)) return "";

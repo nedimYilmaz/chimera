@@ -2,11 +2,11 @@
 // screen. No React, no store, no rpc imports — unit-testable exactly like
 // selectors.system.ts. Everything the SettingsScreen renders that involves a
 // DECISION (which section, how a key badge is derived, how a masked field is
-// displayed, which section a config/network event must refresh) lives here as a
+// displayed, which section a config event must refresh) lives here as a
 // pure function so the logic is tested in the node env with no DOM.
 import { MCP_LISTENER_FOOTNOTE } from "@chimera/ui-state";
 import type { AccountStatus, AgentCapStatus } from "@chimera/ui-state";
-import type { CredentialType, DynamicCapConfig, McpListenerStatus, McpStoreAuthState, McpStoreImportable, McpStoreToolInfo, TailscaleNetworkStatus, CloudflareProvisionStatus } from "@chimera/protocol";
+import type { CredentialType, DynamicCapConfig, McpListenerStatus, McpStoreAuthState, McpStoreImportable, McpStoreToolInfo, CloudflareProvisionStatus } from "@chimera/protocol";
 import { findMcpOAuthGateway, type McpOAuthGateway } from "@chimera/protocol";
 import { DynamicCapConfigSchema, DEFAULT_COMPACTION_THRESHOLD, configPatchValue } from "@chimera/protocol";
 import { fmtClock, fmtCost } from "./selectors";
@@ -30,7 +30,7 @@ export type SettingsSectionMeta = {
  * own left rail + ↑↓ section cursor. */
 export const SETTINGS_SECTIONS: readonly SettingsSectionMeta[] = [
   { id: "providers", label: "providers & accounts", hint: "accounts · keys" },
-  { id: "network", label: "network & federation", hint: "tailscale · peers" },
+  { id: "network", label: "network & federation", hint: "cloudflare · peers" },
   { id: "tools", label: "host tools", hint: "mod+d card" },
   { id: "notify", label: "notifications", hint: "rules · channels" },
   { id: "hooks", label: "lifecycle hooks", hint: "on → actions" },
@@ -470,63 +470,8 @@ export function maskKey(length: number): string {
 }
 
 // ---------------------------------------------------------------------------
-// network & tailscale view (mock lines 930-934; fed.network state)
-// ---------------------------------------------------------------------------
-
-export type NetworkTone = "success" | "warn" | "danger" | "muted";
-
-export type NetworkView = {
-  loaded: boolean;
-  installed: boolean;
-  /** "connected" | "logged out" | "not installed" | "…" (loading). */
-  statusLabel: string;
-  statusTone: NetworkTone;
-  ip4: string | null;
-  magicDnsLabel: string;
-  /** "tailscale ssh — keyless mode" | "off". */
-  sshLabel: string;
-  /** The install hint shown on the installed:false path (mock: no binary). */
-  installHint: string | null;
-  /** The actual install command shown on the installed:false path (coverage B15:
-   * "the installed:false path shows … with the install command"). null otherwise. */
-  installCmd: string | null;
-  /** The install docs URL companion to installCmd. null otherwise. */
-  installUrl: string | null;
-};
-
-/** Project fed.network state into the tailscale block's view. null (not yet
- * probed) renders the loading state; installed:false renders the install path. */
-export function networkView(status: TailscaleNetworkStatus | null): NetworkView {
-  if (status === null) {
-    return {
-      loaded: false, installed: false, statusLabel: "…", statusTone: "muted",
-      ip4: null, magicDnsLabel: "…", sshLabel: "…", installHint: null, installCmd: null, installUrl: null,
-    };
-  }
-  if (!status.installed) {
-    return {
-      loaded: true, installed: false, statusLabel: "not installed", statusTone: "danger",
-      ip4: null, magicDnsLabel: "—", sshLabel: "—",
-      installHint: "tailscale is not installed on this host — install it to enable federation over the tailnet:",
-      installCmd: "curl -fsSL https://tailscale.com/install.sh | sh",
-      installUrl: "https://tailscale.com/download",
-    };
-  }
-  return {
-    loaded: true,
-    installed: true,
-    statusLabel: status.loggedIn ? "connected" : "logged out",
-    statusTone: status.loggedIn ? "success" : "warn",
-    ip4: status.ip4,
-    magicDnsLabel: status.magicDNS ? "on" : "off",
-    sshLabel: status.tailscaleSSH ? "tailscale ssh — keyless mode" : "off",
-    installHint: null, installCmd: null, installUrl: null,
-  };
-}
-
-// ---------------------------------------------------------------------------
-// CLOUDFLARE-APP-SURFACE — the Cloudflare federation block (mirrors networkView
-// above; fed.cloudflare / fed.cloudflare.up state). Four distinct, mutually
+// CLOUDFLARE-APP-SURFACE — the Cloudflare federation block
+// (fed.cloudflare / fed.cloudflare.up state). Four distinct, mutually
 // exclusive UI states, each with its own label/message (never a blank string
 // where a reason belongs): unconfigured, provisioning, probe failed, ready.
 // "ready" is gated STRICTLY on selfprobe === "passed" — steps having merely RUN
@@ -539,15 +484,14 @@ export type CloudflareView = {
   loaded: boolean;
   state: CloudflareUiState;
   statusLabel: string;
-  statusTone: NetworkTone;
+  statusTone: "success" | "warn" | "danger" | "muted";
   /** non-secret — "my own endpoint" (CloudflareProvisionStatusSchema.hostname),
    * shown once ready. null in every other state. */
   hostname: string | null;
 };
 
 /** Project fed.cloudflare state into the settings block's view. null (not yet
- * probed) renders the same "…" loading state networkView uses before its first
- * read lands. */
+ * probed) renders a "…" loading state before its first read lands. */
 export function cloudflareView(status: CloudflareProvisionStatus | null): CloudflareView {
   if (status === null) {
     return { loaded: false, state: "unconfigured", statusLabel: "…", statusTone: "muted", hostname: null };
@@ -566,15 +510,6 @@ export function cloudflareView(status: CloudflareProvisionStatus | null): Cloudf
     return { loaded: true, state: "ready", statusLabel: "ready", statusTone: "success", hostname: status.hostname };
   }
   return { loaded: true, state: "unconfigured", statusLabel: "not configured", statusTone: "muted", hostname: null };
-}
-
-/** The auth-key row badge. The key is write-only (Keychain only), so we can
- * only reflect whether THIS session stored one — the daemon never reports its
- * presence. false → the mock's neutral "not set". */
-export function authKeyBadge(storedThisSession: boolean): { label: string; tone: BadgeTone } {
-  return storedThisSession
-    ? { label: "▪ set", tone: "success" }
-    : { label: "not set", tone: "danger" };
 }
 
 // ---------------------------------------------------------------------------
@@ -1171,7 +1106,7 @@ export function extractAuthHeader(headers: Readonly<Record<string, string>>): Ex
 // refresh (handled by the screen's error channel).
 // ---------------------------------------------------------------------------
 
-export type SettingsRefresh = "providers" | "network" | "general" | "cloudflare";
+export type SettingsRefresh = "providers" | "general" | "cloudflare";
 
 export function sectionsForEvent(kind: string): readonly SettingsRefresh[] {
   switch (kind) {
@@ -1179,12 +1114,6 @@ export function sectionsForEvent(kind: string): readonly SettingsRefresh[] {
     // change refreshes both the providers table and the general section.
     case "config_changed":
       return ["providers", "general"];
-    // a network probe change (fed.network / up / auto-join) → the tailscale block.
-    case "network_changed":
-      return ["network", "cloudflare"];
-    // a new peer pinned into the overlay → the (W10) peers list lives in network.
-    case "peer_paired":
-      return ["network"];
     default:
       return [];
   }

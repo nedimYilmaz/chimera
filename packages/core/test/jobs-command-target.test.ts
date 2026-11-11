@@ -219,3 +219,22 @@ describe("editing completed command jobs", () => {
     } finally { rig.jobs.detach(); }
   });
 });
+
+describe("command output to an existing-agent queue", () => {
+  it("creates a tracked task and delivers to the same conversation without a team or new spawn", async () => {
+    const r = makeJobRig([[{ awaitSend: true }, { awaitClose: { resultText: "done" } }]], T0, { runCommand: async () => ({ exitCode: 0, output: "NEW repo#1" }) });
+    const agent = await r.sup.spawn({ prompt: "review", cwd: r.dir, isolation: "none", persistent: true, orchestration: { allow: true } });
+    try {
+      r.queues.create({ name: "reviews", existingAgentId: agent.agentId });
+      r.jobs.create({ name: "watcher", schedule: { cron: "*/5 * * * *" }, target: { command: "synthetic only", trigger: { when: { contains: "NEW" }, dispatch: { queue: "reviews" }, prompt: "Review {{output}}" } } });
+      await r.jobs.runNow("watcher");
+      await waitUntil(() => r.jobs.get("watcher").lastRuns.length > 0);
+      const task = r.queues.status("reviews").tasks[0]!;
+      expect(task.prompt).toBe("Review NEW repo#1");
+      expect(task.state).toBe("in_progress");
+      expect(task.agentId).toBe(agent.agentId);
+      expect(r.fake.spawns).toHaveLength(1);
+      expect(() => r.jobs.create({ name: "bad", schedule: { cron: "* * * * *" }, target: { command: "echo", trigger: { when: { contains: "NEW" }, dispatch: { queue: "missing" }, prompt: "{{output}}" } } })).toThrow(/unknown queue/);
+    } finally { r.jobs.detach(); r.scheduler.detach(); await r.sup.kill(agent.agentId); }
+  });
+});

@@ -32,7 +32,11 @@ export function Collapse({ open, children, className, fill }: { open: boolean; c
 
   useEffect(() => {
     if (open) { setMounted(true); return; }
-    if (prefersReducedMotion()) setMounted(false); // no transitionend will ever fire
+    if (prefersReducedMotion()) { setMounted(false); return; }
+    // A zero-height or interrupted transition may never emit transitionend.
+    // Keep the normal 180ms CSS animation, but bound retention of hidden children.
+    const fallback = setTimeout(() => setMounted(false), 300);
+    return () => clearTimeout(fallback);
   }, [open]);
 
   if (!mounted) return null;
@@ -41,7 +45,7 @@ export function Collapse({ open, children, className, fill }: { open: boolean; c
   return (
     <div
       className={cls}
-      onTransitionEnd={(e) => { if (e.propertyName === "grid-template-rows" && !open) setMounted(false); }}
+      onTransitionEnd={(e) => { if (e.target === e.currentTarget && e.propertyName === "grid-template-rows" && !open) setMounted(false); }}
     >
       <div className={styles.inner}>{rendered.current}</div>
     </div>

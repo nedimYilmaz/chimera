@@ -316,6 +316,7 @@ export function normalizeClaudeRateLimit(info: Record<string, unknown> | undefin
 }
 
 export class ClaudeAgentBackend implements AgentBackend {
+  readonly executionModes = ["auto", "plan", "execute", "bypassPermissions"] as const;
   readonly provider = "claude";
   readonly capabilities: BackendCapabilities = { supportsResume: true, supportsMcpServers: true, supportsSettingSources: true, supportsVoiceRealtime: false };
   // DYNAMIC-MODEL-METADATA: `modelCatalog` is a lazy accessor (backends are built BEFORE the Engine
@@ -500,7 +501,7 @@ export class ClaudeAgentBackend implements AgentBackend {
     const executionPermissionMode = (profile: ResolvedAgentSpec["permissionProfile"]): PermissionMode =>
       typeof explicitPermissionMode === "string" && explicitPermissionMode !== "plan"
         ? explicitPermissionMode as PermissionMode : mapPermission(profile);
-    const permissionMode = spec.executionMode === "auto" ? "auto" : executionPermissionMode(spec.permissionProfile);
+    const permissionMode = spec.executionMode === "auto" || spec.executionMode === "bypassPermissions" ? spec.executionMode : executionPermissionMode(spec.permissionProfile);
     let activePermissionMode: string = spec.executionMode === "plan" ? "plan" : permissionMode;
     // Explicit bypass shadows canUseTool and requires the skip-permissions opt-in.
     // Auto uses a deny-only hook so native classifier approval cannot skip Chimera's
@@ -528,9 +529,9 @@ export class ClaudeAgentBackend implements AgentBackend {
           // later enter auto through the supported live mode control.
           hooks: { PreToolUse: [{ hooks: [async (input: { tool_name: string; tool_input: unknown; tool_use_id?: string }) => {
               // Questions must be completed once via canUseTool's updatedInput channel.
-              if (input.tool_name === "AskUserQuestion") return {};
+              if (input.tool_name === "AskUserQuestion" && activePermissionMode !== "bypassPermissions") return {};
               const decision = await decideToolUse(input.tool_name, input.tool_input, input.tool_use_id);
-              return decision.behavior === "deny" ? adaptHookDecision(decision) : {};
+              return decision.behavior === "deny" || activePermissionMode === "bypassPermissions" ? adaptHookDecision(decision) : {};
           }] }] },
           // Use the SDK-provided toolUseID as the permission requestId when present.
           canUseTool: async (toolName: string, toolInput: unknown, opts?: { toolUseID?: string }) =>
@@ -811,7 +812,7 @@ export class ClaudeAgentBackend implements AgentBackend {
           if (msg.type === "system" && (msg.subtype === "init" || msg.subtype === "status")
             && ["plan", "default", "acceptEdits", "bypassPermissions", "dontAsk", "auto"].includes(String(msg["permissionMode"]))) {
             activePermissionMode = String(msg["permissionMode"]);
-            sink({ kind: "status", data: { executionMode: activePermissionMode === "plan" ? "plan" : activePermissionMode === "auto" ? "auto" : "execute", nativePermissionMode: msg["permissionMode"] } });
+            sink({ kind: "status", data: { executionMode: activePermissionMode === "plan" ? "plan" : activePermissionMode === "auto" ? "auto" : activePermissionMode === "bypassPermissions" ? "bypassPermissions" : "execute", nativePermissionMode: msg["permissionMode"] } });
           }
           if (msg.type === "system" && msg.subtype === "init") {
             if (typeof msg["model"] === "string") resolvedModel = msg["model"];   // R2: pricing-table fallback chain

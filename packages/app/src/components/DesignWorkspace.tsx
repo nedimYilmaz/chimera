@@ -1,3 +1,4 @@
+import { composerLocal, useComposerLocal } from "../state/commands.agents";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { NormalizedEvent } from "@chimera/protocol";
 import { rpcCall, readArtifactSnapshot } from "../rpc/bridge";
@@ -7,11 +8,12 @@ import { errorText } from "../state/errorText";
 import { designDocuments, staticDesignDocument, DESIGN_MAX_BYTES } from "../design/documents";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { Panel } from "./Panel";
+import { InspectorFrame, useInspectorFrame } from "./InspectorFrame";
 import { ChipButton } from "./ChipButton";
 import styles from "./DesignWorkspace.module.css";
 
 export type DesignRequest = <T>(method: string, params?: unknown) => Promise<T>;
-type View = "conversation" | "design" | "split";
+type View = "conversation" | "design";
 type Choice = { revision: string; tab: "preview" | "source"; width: "fit" | "390" | "768" | "1280" };
 // Bounded UI preferences only; authoritative revisions remain in ArtifactStore.
 const choices = new Map<string, Choice>();
@@ -23,15 +25,33 @@ function remember(key: string, choice: Choice) {
 export function DesignWorkspace({ scope, label, children }: { scope: ArtifactScope | null; label: string; children: ReactNode }) {
   const [view, setView] = useState<View>("conversation");
   const events = useStore((s) => s.events);
-  return <div className={styles.workspace} data-design-workspace>
-    <div className={styles.switches} role="group" aria-label="Inspector view">
-      {(["conversation", "design", "split"] as const).map((value) => <ChipButton key={value} aria-pressed={view === value} disabled={!scope && value !== "conversation"} onClick={() => setView(value)}>{value === "split" ? "Side by side" : value === "design" ? "Design" : "Conversation"}</ChipButton>)}
-    </div>
-    <div className={styles.panes} data-view={scope ? view : "conversation"}>
-      <div className={styles.conversation}>{children}</div>
-      {scope && view !== "conversation" && <ErrorBoundary key={scopeKey(scope)} label="design" message="Design preview failed — retry or choose Conversation."><DesignPanel scope={scope} label={label} events={events} /></ErrorBoundary>}
-    </div>
+  const detail = useComposerLocal(s => s.agentDetail);
+  const agentId = scope && "agentId" in scope ? scope.agentId : null;
+  const detailOpen = !!agentId && detail?.agentId === agentId;
+  const activeView = scope ? view : "conversation";
+  const tabs = <div className={styles.switches} role="tablist" aria-label="Inspector view">
+    {(["conversation", "design"] as const).map((value) => <button key={value} type="button" role="tab"
+      aria-selected={activeView === value} aria-controls={`inspector-${value}`} id={`inspector-${value}-tab`}
+      tabIndex={activeView === value ? 0 : -1} disabled={!scope && value === "design"}
+      data-agent-detail-toggle={value === "conversation" && agentId ? true : undefined}
+      title={value === "conversation" && agentId ? `${label} — ${activeView === "conversation" ? "Show or hide agent details" : "Open conversation"}` : undefined}
+      aria-expanded={value === "conversation" && agentId ? detailOpen : undefined}
+      onClick={() => {
+        if (value === "conversation" && activeView === "conversation" && agentId) composerLocal.set({ agentDetail: detailOpen ? null : { agentId } });
+        else setView(value);
+      }} onKeyDown={event => {
+        if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key) || !scope) return;
+        event.preventDefault();
+        const next = event.key === "Home" ? "conversation" : event.key === "End" ? "design" : activeView === "design" ? "conversation" : "design";
+        setView(next); document.getElementById(`inspector-${next}-tab`)?.focus();
+      }}>{value === "design" ? "Design" : agentId ? label : "Transcript"}</button>)}
   </div>;
+  return <InspectorFrame.Provider value={true}><Panel label={tabs} className={styles.workspace}>
+    <div className={styles.panes} data-design-workspace data-view={activeView}>
+      <div className={styles.conversation} role="tabpanel" id="inspector-conversation" aria-labelledby="inspector-conversation-tab" hidden={activeView !== "conversation"}>{children}</div>
+      {scope && activeView === "design" && <div className={styles.designPane} role="tabpanel" id="inspector-design" aria-labelledby="inspector-design-tab"><ErrorBoundary key={scopeKey(scope)} label="design" message="Design preview failed — retry or choose Transcript."><DesignPanel scope={scope} label={label} events={events} /></ErrorBoundary></div>}
+    </div>
+  </Panel></InspectorFrame.Provider>;
 }
 
 function scopeKey(scope: ArtifactScope): string { return "agentId" in scope ? `agent:${scope.agentId}` : `task:${scope.taskId}`; }
@@ -40,6 +60,7 @@ export function DesignPanel({ scope, label, events = [], request = rpcCall, read
   scope: ArtifactScope; label: string; events?: readonly NormalizedEvent[];
   request?: DesignRequest; readSnapshot?: (id: string) => Promise<string>;
 }) {
+  const embedded = useInspectorFrame();
   const key = scopeKey(scope);
   const seq = latestArtifactSeq(events);
   const [refresh, setRefresh] = useState(0);
@@ -84,7 +105,7 @@ export function DesignPanel({ scope, label, events = [], request = rpcCall, read
   }, [revisionId, readSnapshot, refresh]);
   const source = snapshot && snapshot.id === revisionId ? snapshot.text : null;
   const preview = useMemo(() => source === null ? null : staticDesignDocument(source), [source]);
-  return <Panel label="design" className={styles.panel}>
+  return <Panel label="design" embedded={embedded} className={styles.panel}>
     <div className={styles.heading}><strong>{label}</strong><ChipButton onClick={() => setRefresh((n) => n + 1)} disabled={loading}>Refresh</ChipButton></div>
     {error && <p role="alert" className={styles.note}>{error}</p>}
     {!documents.length ? <div className={styles.empty}>

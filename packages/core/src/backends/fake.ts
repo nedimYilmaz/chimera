@@ -48,6 +48,7 @@ export type FakeStep =
   | { dialog: { dialogId: string; dialogKind: string; payload?: Record<string, unknown> } };
 
 export class FakeAgentBackend implements AgentBackend {
+  readonly executionModes = ["auto", "plan", "execute", "bypassPermissions"] as const;
   readonly provider: string;
   readonly capabilities: BackendCapabilities = { supportsResume: true, supportsMcpServers: true, supportsSettingSources: true, supportsVoiceRealtime: false };
   public spawns: ResolvedAgentSpec[] = [];

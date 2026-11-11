@@ -153,7 +153,7 @@ describe("the settings card's structure", () => {
   it("does not advertise Claude native MCP switches on Codex", async () => {
     await mount("codex");
     expect(fieldNames()).not.toContain("nativeMcps");
-    expect(fieldNames()).not.toContain("executionMode");
+    expect(fieldNames()).toContain("executionMode");
   });
   it("does not advertise SDK native MCP switches for terminal sessions", async () => {
     withSpec({ ...DEFAULT_SPEC, runtime: "terminal" });

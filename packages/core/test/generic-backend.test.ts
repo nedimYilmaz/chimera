@@ -879,3 +879,28 @@ describe("GenericAgentBackend", () => {
     });
   });
 });
+
+it.each(["openai", "gemini", "custom-api"])("%s enforces Plan at the tool boundary and supports live Auto/Full", async provider => {
+  const dir = mkdtempSync(join(tmpdir(), "chimera-mode-")); const file = join(dir, "result.txt");
+  const write = { type: "message_complete" as const, content: "", toolCalls: [{ id: "w", name: "write_file", arguments: JSON.stringify({ path: file, content: "written" }) }] };
+  const end = { type: "message_complete" as const, content: "done", toolCalls: [] };
+  const { client, requests } = fakeChatClient([[write], [end], [write], [end], [end]]);
+  const events: BackendEvent[] = []; const permission = vi.fn(allow);
+  const handle = new GenericAgentBackend(provider, client).spawn(genSpec({ cwd: dir, executionMode: "plan", permissionProfile: "full", persistent: true }), e => events.push(e), permission);
+  try {
+    await waitUntil(() => events.filter(e => e.kind === "turn_complete").length === 1);
+    expect(() => readFileSync(file)).toThrow();
+    expect(permission).not.toHaveBeenCalled();
+    expect(requests[0]!.messages.some(m => m.role === "system" && String(m.content).includes("Plan mode is active"))).toBe(true);
+    await handle.setExecutionMode!("auto", "acceptEdits");
+    await handle.send("execute now");
+    await waitUntil(() => events.filter(e => e.kind === "turn_complete").length === 2);
+    expect(readFileSync(file, "utf8")).toBe("written");
+    expect(permission).toHaveBeenCalled();
+    expect(requests[2]!.messages.some(m => m.role === "system" && String(m.content).includes("Plan mode is active"))).toBe(false);
+    await handle.setExecutionMode!("bypassPermissions", "full");
+    await handle.send("continue");
+    await waitUntil(() => events.filter(e => e.kind === "turn_complete").length === 3);
+    expect(events.filter(e => e.kind === "agent_started")).toHaveLength(1);
+  } finally { await handle.kill(); }
+});

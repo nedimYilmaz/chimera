@@ -83,6 +83,7 @@ export function AgentsScreen() {
 // Inspector shortcuts and overlays are mounted only while its workspace is visible.
 function AgentsWorkspace({ fleetView, setFleetView, focus }: { fleetView: InspectorView; setFleetView: (view: InspectorView) => void; focus:boolean }) {
   const commands = agentCommands(appStore, rpcCall);
+  const [controlsHost, setControlsHost] = useState<HTMLDivElement | null>(null);
   // F50.UI: the budget-pause banner is a SystemStrips overlay, so its release confirm has to be
   // rendered (and executed) from the screen that owns the confirm slot, same as killAgent.
   const sysCommands = systemCommands(appStore, rpcCall);
@@ -145,14 +146,20 @@ function AgentsWorkspace({ fleetView, setFleetView, focus }: { fleetView: Inspec
   useEffect(() => {
     const el = bandRef.current;
     if (!el) return undefined;
-    const ro = new ResizeObserver(() => setBottomInset(el.offsetHeight + 8));
+    // The terminal now sits below the composer; decision cards must clear both.
+    const dock = el.nextElementSibling instanceof HTMLElement && el.nextElementSibling.hasAttribute("data-terminal-dock") ? el.nextElementSibling : null;
+    const measure = () => setBottomInset(el.offsetHeight + (dock?.offsetHeight ?? 0) + 8);
+    const ro = new ResizeObserver(measure);
     ro.observe(el);
-    setBottomInset(el.offsetHeight + 8);
+    if (dock) ro.observe(dock);
+    measure();
     return () => ro.disconnect();
   }, []);
 
   // mod+r — flow/list toggle (W3, re-lettered off ctrl+f — "f" is OS-reserved).
   const [settingsFor, setSettingsFor] = useState<string | null>(null);
+  const settingsForRef = useRef(settingsFor);
+  settingsForRef.current = settingsFor;
   useEffect(() => registerActionHandler("agents.toggleView", () => setLeftView((v) => (v === "list" ? "flow" : "list"))), []);
   useEffect(() => registerActionHandler("system.agentSettings", () => {
     const id = appStore.getState().selectedAgentId;
@@ -310,6 +317,7 @@ function AgentsWorkspace({ fleetView, setFleetView, focus }: { fleetView: Inspec
       accountsOpen: state.accountsOpen,
       resultOpen: state.resultOpen,
       modelOpen: systemLocal.getState().modelOpen,
+      effortOpen: systemLocal.getState().effortOpen,
       pluginsOpen: projectsLocal.getState().pluginsOpen,
       hostToolsOpen: getHostCommands(appStore, rpcCall).getState().open,
       helpOpen: state.helpOpen,
@@ -335,6 +343,7 @@ function AgentsWorkspace({ fleetView, setFleetView, focus }: { fleetView: Inspec
       case "accounts": appStore.dispatch({ type: "accountsOpen", open: false }); return true;
       case "result": appStore.dispatch({ type: "resultOpen", open: false }); return true;
       case "model": systemLocal.set({ modelOpen: false }); return true;
+      case "effort": systemLocal.set({ effortOpen: false }); return true;
       case "plugins": projectsLocal.set({ pluginsOpen: false }); return true;
       case "hostTools": getHostCommands(appStore, rpcCall).escape(); return true;
       case "help": appStore.dispatch({ type: "helpOpen", open: false }); return true;
@@ -416,7 +425,8 @@ function AgentsWorkspace({ fleetView, setFleetView, focus }: { fleetView: Inspec
         return;
       }
       if (ev.key === "Escape") {
-        if (contextShareOwnsEscape() || conversationForkOwnsEscape()) return;
+        // The settings dialog owns Escape; the screen must not clear the draft beneath it.
+        if (settingsForRef.current !== null || contextShareOwnsEscape() || conversationForkOwnsEscape()) return;
         if (escChain()) {
           ev.preventDefault();
           ev.stopImmediatePropagation();
@@ -471,7 +481,7 @@ function AgentsWorkspace({ fleetView, setFleetView, focus }: { fleetView: Inspec
               appStore.dispatch({ type: "notice", message: `transcript render failed: ${err.message}` })
             }
           >
-            <TranscriptPanel agent={undefined} workflow={workflowData} />
+            <TranscriptPanel agent={undefined} workflow={workflowData} controlsHost={controlsHost} />
           </ErrorBoundary>
         ) : selected?.shadow && selected.transcript.length === 0 ? (
           // R2 (inline sub-agent/workflow surfacing): a shadow with a real captured transcript
@@ -493,10 +503,17 @@ function AgentsWorkspace({ fleetView, setFleetView, focus }: { fleetView: Inspec
               appStore.dispatch({ type: "notice", message: `transcript render failed: ${err.message}` })
             }
           >
-            <TranscriptPanel agent={selected} />
+            <TranscriptPanel agent={selected} controlsHost={controlsHost} />
           </ErrorBoundary>
         )}
         </DesignWorkspace>
+        <A2ATicker />{/* A2A-UX-OVERHAUL: overlay-only now (the pinned bar is retired) — renders the ⇄ a2a history overlay + hosts its keybinding; live traffic shows in AgentList */}
+        {/* PANE-RESIZE: the second seam — the transcript above, the composer below. The band was
+            content-sized before; it now carries an explicit height so the split can be moved. */}
+        {composerPane.divider}
+        <div ref={bandRef} className={styles.band}>
+          <Composer controlsRef={setControlsHost} />
+        </div>
         {/* TERMINAL-SURVIVES-AGENT-SWITCH: mounted HERE, not inside TranscriptPanel, and that
             placement is the whole point. The dock already kept every tab of every agent mounted
             (only flipping `visible`) precisely because TerminalView's unmount is the one place
@@ -507,13 +524,7 @@ function AgentsWorkspace({ fleetView, setFleetView, focus }: { fleetView: Inspec
             remounts it, so the dock has to be owned by something that does not. This also gets it
             back for a selected SHADOW, whose branch renders AgentShadowPane and no panel at all. */}
         <TerminalDock />
-        <A2ATicker />{/* A2A-UX-OVERHAUL: overlay-only now (the pinned bar is retired) — renders the ⇄ a2a history overlay + hosts its keybinding; live traffic shows in AgentList */}
-        {/* PANE-RESIZE: the second seam — the transcript above, the composer below. The band was
-            content-sized before; it now carries an explicit height so the split can be moved. */}
-        {composerPane.divider}
-        <div ref={bandRef} className={styles.band}>
-          <Composer />
-        </div>
+
         {spawnOpen ? <SpawnCard quick={quickSpawn} onClose={() => { setQuickSpawn(false); composerLocal.set({ spawnOpen: false }); }} /> : null}
         {/* AGENT-RECONFIGURE: opened from the transcript header's ⚙ chip, always for the agent
             whose transcript is on screen — the settings you are about to change belong to the

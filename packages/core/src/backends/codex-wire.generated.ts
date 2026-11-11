@@ -112,7 +112,11 @@ export type FunctionCallOutputContentItem = { "type": "input_text", text: string
 
 export type FunctionCallOutputBody = string | Array<FunctionCallOutputContentItem>;
 
-export type TurnToolOutput = { name: string, namespace: string | null, output: FunctionCallOutputBody, };
+export type TurnToolOutput = { name: string, namespace: string | null, output: FunctionCallOutputBody,
+/**
+ * Requests retention of this output in the thread's model history.
+ */
+retain?: boolean, };
 
 export type TurnStartParams = {threadId: string, /**
  * Replace this thread's disabled plugin IDs.

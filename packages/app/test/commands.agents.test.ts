@@ -280,7 +280,7 @@ describe("resolveEscTier", () => {
     expect(resolveEscTier({ ...base, hostToolsOpen: true, helpOpen: true })).toBe("hostTools");
   });
   it("tier 0 beats the destructive interrupt on a busy agent (the MAJOR 1 regression)", () => {
-    for (const overlay of ["paletteOpen", "mcpPaletteOpen", "accountsOpen", "resultOpen", "modelOpen", "pluginsOpen", "hostToolsOpen"] as const) {
+    for (const overlay of ["paletteOpen", "mcpPaletteOpen", "accountsOpen", "resultOpen", "modelOpen", "effortOpen", "pluginsOpen", "hostToolsOpen"] as const) {
       expect(resolveEscTier({ ...base, [overlay]: true, canInterrupt: true })).not.toBe("interrupt");
       expect(resolveEscTier({ ...base, [overlay]: true, composeNonEmpty: true })).not.toBe("clearCompose");
     }
@@ -899,16 +899,12 @@ describe("outbox flush watcher", () => {
 });
 
 // ---------------------------------------------------------------------------
-// FORCE-SEND-MIDTURN (opt+enter): sendToAgent/sendToMain's `force` param
-// bypasses the busy-hold outbox and delivers straight through agent.send
-// even mid-turn. Measured empirically (see the merge commit) that a mid-turn
-// agent.send reaches the running SDK session's input queue immediately and
-// surfaces at its very next inference step. Ordering rule: force never jumps
-// ahead of messages already queued for the same target — it drains the
-// existing outbox first (oldest-first), then delivers itself.
+// FORCE-SEND-MIDTURN (opt+enter) sends only the forced message immediately.
+// Ordinary queued messages wait for a completed turn, including when force
+// interrupts an exec turn and continues the same session.
 // ---------------------------------------------------------------------------
 describe("force-send (sendToAgent/sendToMain `force`)", () => {
-  it("serializes forced bursts behind an older outbox send, including main/selected routes", async () => {
+  it("serializes forced bursts across main/selected routes without releasing the outbox", async () => {
     const store = makeStore({ mainConductorId: "m", agents: { m: running("m", { busy: true }) }, agentOrder: ["m"] });
     const sent: string[] = [];
     let release!: () => void;
@@ -917,7 +913,7 @@ describe("force-send (sendToAgent/sendToMain `force`)", () => {
       if (method === "agent.send") {
         const text = (params as { text: string }).text;
         sent.push(text);
-        if (text === "old") await blocked;
+        if (text === "force A") await blocked;
       }
       return {} as T;
     };
@@ -927,10 +923,11 @@ describe("force-send (sendToAgent/sendToMain `force`)", () => {
     const second = commands.sendToMain("force B", undefined, { force: true });
     const third = commands.sendToAgent("m", "force C", undefined, false, undefined, true);
     await Promise.resolve();
-    expect(sent).toEqual(["old"]);
+    expect(sent).toEqual(["force A"]);
     release();
     await Promise.all([first, second, third]);
-    expect(sent).toEqual(["old", "force A", "force B", "force C"]);
+    expect(sent).toEqual(["force A", "force B", "force C"]);
+    expect(store.state.outbox.map(o => o.text)).toEqual(["old"]);
   });
 
   it("sendToAgent force=true sends immediately while busy and does NOT enqueue", async () => {
@@ -966,7 +963,7 @@ describe("force-send (sendToAgent/sendToMain `force`)", () => {
     expect(tx[tx.length - 1]!.role === "user" ? tx[tx.length - 1] : {}).not.toHaveProperty("forced");
   });
 
-  it("ordering rule: force drains the existing outbox FIRST, oldest-first, then sends the forced message last", async () => {
+  it("force leaves queued messages FIFO until real turn completion, including steering handoffs", async () => {
     const store = makeStore({ agents: { m: running("m", { busy: true }) }, agentOrder: ["m"] });
     const { rpc, calls } = makeRpc();
     const commands = createAgentCommands(store, rpc);
@@ -976,13 +973,25 @@ describe("force-send (sendToAgent/sendToMain `force`)", () => {
     expect(store.getState().outbox.map((o) => o.text)).toEqual(["one", "two"]);
     // now a forced send arrives
     await commands.sendToAgent("m", "urgent", undefined, false, undefined, true);
-    expect(calls.filter((c) => c.method === "agent.send").map((c) => c.params["text"])).toEqual(["one", "two", "urgent"]);
-    expect(store.getState().outbox.length).toBe(0);
+    expect(calls.filter((c) => c.method === "agent.send").map((c) => c.params["text"])).toEqual(["urgent"]);
+    expect(store.state.outbox.map(o => o.text)).toEqual(["one", "two"]);
     const tx = store.getState().agents["m"]!.transcript;
-    expect(tx.filter((t) => t.role === "user").map((t) => (t.role === "user" ? t.text : ""))).toEqual(["one", "two", "urgent"]);
+    expect(tx.filter((t) => t.role === "user").map((t) => (t.role === "user" ? t.text : ""))).toEqual(["urgent"]);
+    store.dispatch({ type: "event", event: ev(1, "m", "turn_complete", { interrupted: true, steering: true }) });
+    await flush();
+    expect(store.state.agents.m!.busy).toBe(true);
+    expect(store.state.outbox.map(o => o.text)).toEqual(["one", "two"]);
+    expect(calls.filter(c => c.method === "agent.send")).toHaveLength(1);
+    store.dispatch({ type: "event", event: ev(2, "m", "turn_complete") });
+    await flush();
+    expect(store.state.outbox.map(o => o.text)).toEqual(["two"]);
+    store.dispatch({ type: "event", event: ev(3, "m", "turn_complete") });
+    await flush();
+    expect(store.state.outbox).toEqual([]);
+    expect(calls.filter(c => c.method === "agent.send").map(c => c.params.text)).toEqual(["urgent", "one", "two"]);
   });
 
-  it("sendToMain force=true sends mid-session immediately while the conductor is busy and drains its outbox first", async () => {
+  it("sendToMain force=true sends mid-session immediately while the conductor is busy and retains its outbox", async () => {
     const store = makeStore({
       mainConductorId: "m",
       selectedAgentId: "m",
@@ -994,11 +1003,22 @@ describe("force-send (sendToAgent/sendToMain `force`)", () => {
     await commands.sendToMain("queued-first"); // busy → held
     expect(store.getState().outbox.map((o) => o.text)).toEqual(["queued-first"]);
     await commands.sendToMain("forced-now", undefined, { force: true });
-    expect(calls.filter((c) => c.method === "agent.send").map((c) => c.params["text"])).toEqual(["queued-first", "forced-now"]);
-    expect(store.getState().outbox.length).toBe(0);
+    expect(calls.filter((c) => c.method === "agent.send").map((c) => c.params["text"])).toEqual(["forced-now"]);
+    expect(store.state.outbox.map(o => o.text)).toEqual(["queued-first"]);
     const tx = store.getState().agents["m"]!.transcript;
     expect(tx[tx.length - 1]).toMatchObject({ role: "user", text: "forced-now", forced: true });
-    expect(calls.filter(c => c.method === "agent.send").map(c => c.params["force"])).toEqual([undefined, true]);
+    expect(calls.filter(c => c.method === "agent.send").map(c => c.params["force"])).toEqual([true]);
+  });
+
+  it("failed forced RPC preserves queued content and other agents' messages", async () => {
+    const store = makeStore({ agents: { m: running("m", { busy: true }), other: running("other", { busy: true }) }, agentOrder: ["m", "other"] });
+    const commands = createAgentCommands(store, async () => { throw new Error("send failed"); });
+    await commands.sendToAgent("m", "with image", [{ path: "/tmp/image.png", mediaType: "image/png" }], false, [{ type: "text", text: "with image" }]);
+    await commands.sendToAgent("other", "other message");
+    const queued = structuredClone(store.state.outbox);
+    await commands.sendToAgent("m", "urgent", undefined, false, undefined, true);
+    expect(store.state.outbox).toEqual(queued);
+    expect(store.state.lastError).toContain("send failed");
   });
 
   it("sendComposed threads `force` through to sendToAgent for a resolved target", async () => {

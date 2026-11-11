@@ -1,3 +1,5 @@
+import { probeControlStyle } from "./probes/control-style.mjs";
+import { probeAgentControls } from "./probes/agent-controls.mjs";
 import { probeHtmlPreview } from "./probes/html-preview.mjs";
 import { probeMediaPreview } from "./probes/media-preview.mjs";
 import { probeMessageIdentity } from "./probes/message-identity.mjs";
@@ -121,6 +123,9 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
     signal,
     args: [
     "--headless=new",
+    "--disable-background-timer-throttling",
+    "--disable-renderer-backgrounding",
+    "--disable-backgrounding-occluded-windows",
     "--mute-audio",
     "--use-fake-device-for-media-stream",
     "--enable-automation",
@@ -143,7 +148,8 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
   await installLoopbackGuard(cdp, sessionId, `http://127.0.0.1:${port}`, { fakeMicrophone: true });
   await call("Page.navigate", { url: `http://127.0.0.1:${port}/__ui-qa` }, sessionId);
   const evaluate = async (expression) => {
-    const result = await call("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true }, sessionId);
+    const result = await call("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true }, sessionId)
+      .catch(error => { throw new Error(`${expression.slice(0, 300)}: ${error.message}`); });
     if (result.exceptionDetails) throw new Error(JSON.stringify(result.exceptionDetails));
     return result.result.value;
   };
@@ -156,6 +162,8 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
     throw new Error(`Timed out waiting for ${expression}`);
   };
   const viewport = async (width, height, reducedMotion = false) => {
+    // Keep real animation-frame/transition checks active across resized headless views.
+    await call("Page.bringToFront", {}, sessionId);
     await call("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: false }, sessionId);
     await call("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: reducedMotion ? "reduce" : "no-preference" }] }, sessionId);
     await waitFor(`innerWidth === ${width} && innerHeight === ${height}`);
@@ -249,6 +257,17 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
     && networkGuard.attempts.length === 2 && networkGuard.attempts.every((attempt) => attempt.blocked), networkGuard);
 
 
+  if (process.env.CHIMERA_BROWSER_GATE_CONTROL_STYLE_ONLY === "1") {
+    await probeControlStyle({ viewport, show, settleRender, evaluate, check, screenshot, key });
+    return;
+  }
+
+  if (process.env.CHIMERA_BROWSER_GATE_AGENT_CONTROLS_ONLY === "1") {
+    await probeAgentControls({ viewport, show, settleRender, evaluate, check, click, waitFor, screenshot, key });
+    return;
+  }
+
+  await probeControlStyle({ viewport, show, settleRender, evaluate, check, screenshot, key });
   await probeMessageIdentity({ show, settleRender, evaluate, check });
   await probeProjectDelete({ check, viewport, show, waitFor, evaluate, click, key, buttonKey, settleRender, screenshot });
 
@@ -573,7 +592,7 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
   check("desktop preview never opens a native window", commands.every((c) => ["computer_use_preview", "computer_use_status", "computer_use_stop"].includes(c)), commands);
   await viewport(1440, 1000);
 
-  const actionCounts = () => evaluate(`JSON.parse(document.querySelector('[data-ui-qa-action-counts]').textContent)`);
+  const actionCounts = () => evaluate(`(() => {const el = document.querySelector('[data-ui-qa-action-counts]'); return {...JSON.parse(el.textContent), payload:JSON.parse(el.dataset.payload)};})()`);
   const focus = (selector) => evaluate(`document.querySelector(${JSON.stringify(selector)})?.focus()`);
   const input = async (selector, value) => {
     await waitFor(`document.querySelector(${JSON.stringify(selector)})`);
@@ -716,6 +735,7 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
 
   await show("queue-actions");
   await waitFor(`document.querySelector('[data-queue-submit]')`);
+  check("queue existing agent selection survives edit and submits", await evaluate(`document.querySelector('[data-field="existingAgentId"]').value === 'review-agent' && document.querySelector('#queue-existing-agents option').textContent === 'gh-review'`));
   const queueButtons = await evaluate(`([...document.querySelectorAll('[data-queue-submit], [data-queue-cancel]')].map((button) => ({
     tag: button.tagName, type: button.getAttribute('type'), name: button.textContent.trim(), tabIndex: button.tabIndex,
   })))`);
@@ -725,7 +745,7 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
     && queueButtons.some((button) => button.name.includes("esc cancel")), queueButtons);
   await focus('[data-field="retryLimit"]');
   await buttonKey("Enter", "Enter");
-  check("Queue input Enter still submits", (await actionCounts()).submit === 1, await actionCounts());
+  check("Queue input Enter still submits", (await actionCounts()).submit === 1 && (await actionCounts()).payload.existingAgentId === "review-agent", await actionCounts());
 
   await show("queue-actions");
   await waitFor(`document.querySelector('[data-queue-submit]')`);
@@ -937,25 +957,25 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
   await waitFor(`document.querySelector('[data-stt-engine]')?.value === 'whisper-cpp'`);
   const speechIdle = await evaluate(`window.__UI_QA__.stt.snapshot()`);
   await call("Browser.grantPermissions", { origin: `http://127.0.0.1:${port}`, permissions: ["audioCapture"] });
-  await evaluate(`document.querySelector('[data-compose-input]').focus(); document.querySelector('[data-compose-input]').setSelectionRange(7, 7); document.querySelector('[data-push-to-talk]').focus()`);
+  await evaluate(`document.querySelector('[data-push-to-talk]').focus()`);
   await call("Input.dispatchKeyEvent", { type: "keyDown", key: " ", code: "Space", windowsVirtualKeyCode: 32 }, sessionId);
   try { await waitFor(`document.querySelector('[data-push-to-talk]').dataset.voiceStatus === 'listening'`); }
   catch (error) { throw new Error(`Local speech hold failed: ${JSON.stringify(await evaluate(`({ ...window.__UI_QA__.stt.snapshot(), label: document.querySelector('[data-push-to-talk]').textContent, disabled: document.querySelector('[data-push-to-talk]').disabled, focus: document.activeElement.outerHTML.slice(0,200) })`))}`); }
   await new Promise(resolve => setTimeout(resolve, 700));
   await call("Input.dispatchKeyEvent", { type: "keyUp", key: " ", code: "Space", windowsVirtualKeyCode: 32 }, sessionId);
-  await waitFor(`document.querySelector('[data-compose-input]').value === 'before review this message after'`);
+  await waitFor(`window.__UI_QA__.stt.snapshot().transcripts[0] === 'review this message'`);
   const speechInserted = await evaluate(`window.__UI_QA__.stt.snapshot()`);
-  check("ux26 s ptt hold release inserts draft", speechIdle.micRequests === 0 && speechInserted.micRequests === 1 && speechInserted.sends === 0 && speechInserted.transcribes === 1 && speechInserted.audioBytes > 44 && speechInserted.audioBytes <= 1920044 && speechInserted.lastLanguage === "en", speechInserted);
+  check("ux26 s standalone dictation returns text without changing composer", speechIdle.micRequests === 0 && speechInserted.micRequests === 1 && speechInserted.sends === 0 && speechInserted.transcribes === 1 && speechInserted.audioBytes > 44 && speechInserted.audioBytes <= 1920044 && speechInserted.lastLanguage === "en" && await evaluate(`document.querySelector('[data-compose-input]').value==='before  after' && !document.querySelector('[data-composer] [data-push-to-talk]')`), speechInserted);
   await evaluate(`(() => { const e = document.querySelector('[data-stt-language]'); e.value = 'tr'; e.dispatchEvent(new Event('change', {bubbles:true})); })()`);
   await waitFor(`window.__UI_QA__.stt.snapshot().loadedLanguage === 'tr'`);
   await evaluate(`new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))`);
-  await evaluate(`document.querySelector('[data-compose-input]').setSelectionRange(0,0); document.querySelector('[data-push-to-talk]').focus()`);
+  await evaluate(`document.querySelector('[data-push-to-talk]').focus()`);
   await call("Input.dispatchKeyEvent", { type: "keyDown", key: " ", code: "Space", windowsVirtualKeyCode: 32 }, sessionId);
   await waitFor(`document.querySelector('[data-push-to-talk]').dataset.voiceStatus === 'listening'`);
   await new Promise(resolve => setTimeout(resolve, 700));
   await call("Input.dispatchKeyEvent", { type: "keyUp", key: " ", code: "Space", windowsVirtualKeyCode: 32 }, sessionId);
-  await waitFor(`document.querySelector('[data-compose-input]').value.startsWith('Mesajı inceleyin')`);
-  check("ux26 s language selection stays local", await evaluate(`window.__UI_QA__.stt.snapshot().lastLanguage === 'tr' && window.__UI_QA__.stt.snapshot().sends === 0 && document.querySelector('[data-compose-input]').value.endsWith('before review this message after')`));
+  await waitFor(`window.__UI_QA__.stt.snapshot().transcripts[1] === 'Mesajı inceleyin'`);
+  check("ux26 s language selection stays local", await evaluate(`window.__UI_QA__.stt.snapshot().lastLanguage === 'tr' && window.__UI_QA__.stt.snapshot().sends === 0 && document.querySelector('[data-compose-input]').value === 'before  after'`));
   await evaluate(`new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))`);
   await evaluate(`document.querySelector('[data-push-to-talk]').focus()`);
   await call("Input.dispatchKeyEvent", { type: "keyDown", key: " ", code: "Space", windowsVirtualKeyCode: 32 }, sessionId);
@@ -1453,10 +1473,10 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
     check(`permission submitted ${width}px remains unverified with unknown policy`, await evaluate(`document.querySelector('[data-transcript-header]').textContent.includes('profile unverified') && !document.querySelector('[data-transcript-header]').textContent.includes('next turn pending') && [...document.querySelectorAll('[data-transcript-header] span')].some(e => e.title.includes('effective: unknown') && e.title.includes('Exec submitted readOnly (generation 1)') && e.title.includes('no native approval hooks'))`));
     await click('[data-permission-fresh]');
     await settleRender();
-    check(`permission fresh exec ${width}px uncertainty is informational`, await evaluate(`(() => { const chip = document.querySelector('[data-permission-tone="info"]'); return !!chip && chip.textContent.includes('full·auto') && chip.textContent.includes('profile unverified') && !chip.textContent.includes('⚠') && chip.title.includes('effective: unknown') && chip.title.includes('Exec submitted full (generation 0)'); })()`));
+    check(`permission fresh exec ${width}px uncertainty is informational`, await evaluate(`(() => { const chip = document.querySelector('[data-permission-tone="info"]'); return !!chip && !chip.textContent.includes('full·auto') && chip.textContent.includes('profile unverified') && !chip.textContent.includes('⚠') && chip.title.includes('effective: unknown') && chip.title.includes('Exec submitted full (generation 0)'); })()`));
     await click('[data-permission-ack]');
     await settleRender();
-    check(`permission acknowledged ${width}px clears pending warning`, await evaluate(`!document.querySelector('[data-transcript-header]').textContent.includes('next turn pending') && [...document.querySelectorAll('[data-transcript-header] span')].some(e => e.title.includes('effective: readOnly') && e.title.includes('Native profile acknowledged'))`));
+    check(`permission acknowledged ${width}px clears pending warning`, await evaluate(`!document.querySelector('[data-permission-tone]') && document.querySelector('[aria-label="Transcript metric details"]').textContent.includes('effective: readOnly') && document.querySelector('[aria-label="Transcript metric details"]').textContent.includes('Native profile acknowledged')`));
     const actionsBefore = await evaluate(`JSON.stringify([...document.querySelectorAll('[data-transcript-action]')].map(e => { const r=e.getBoundingClientRect(); return [r.x,r.y,r.width,r.height]; }))`);
     await click('[data-metrics-update]');
     await settleRender();
@@ -1911,7 +1931,7 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
   await evaluate(`window.__UI_QA__.softState('busy')`);
   await waitFor(`document.querySelector('[data-live-list] [aria-label="running · busy · over budget"]') || document.querySelector('[data-live-list] [class*="busyPulse"]')`);
   check("soft limit preserves busy running animation", await evaluate(`(() => { const e=document.querySelector('[data-live-list] [class*="busyPulse"]'); return !!e && getComputedStyle(e).animationName !== 'none' && !e.className.includes('toneWarn'); })()`));
-  check("soft limit warning is separate from running header", await evaluate(`(() => { const e=document.querySelector('[data-live-transcript] [class*="stateChip"]'); return e?.textContent.trim() === '◐ running' && e.className.includes('toneSuccess') && document.querySelector('[data-soft-limit-warning]')?.textContent.includes('soft limit'); })()`));
+  check("soft limit warning survives without duplicate lifecycle status", await evaluate(`(() => { const e=document.querySelector('[data-live-transcript] [class*="stateChip"]'); return !e && document.querySelector('[data-soft-limit-warning]')?.textContent.includes('soft limit'); })()`));
   await screenshot("soft-limit-running");
   await viewport(1200, 800, true);
   check("soft limit running remains distinct with reduced motion", await evaluate(`(() => { const e=document.querySelector('[data-live-list] [class*="busyPulse"]'); return !!e && getComputedStyle(e).animationName === 'none' && e.className.includes('toneBusy'); })()`));
@@ -2010,13 +2030,13 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
   await settleRender();
   check("design mobile viewport uses an actual 390px frame", await evaluate(`Math.round(document.querySelector('iframe').getBoundingClientRect().width) === 390`));
   await screenshot("design-mobile");
-  await evaluate(`[...document.querySelectorAll('[aria-label="Inspector view"] button')].find(b => b.textContent === 'Side by side').click()`);
+  await click('#inspector-conversation-tab');
   await settleRender();
-  check("design wide split preserves conversation beside canvas", await evaluate(`document.querySelector('[data-design-conversation]').getBoundingClientRect().width > 0 && document.querySelector('[data-view="split"]').getBoundingClientRect().width > document.querySelector('iframe').getBoundingClientRect().width`));
+  check("design transcript tab restores the mounted conversation", await evaluate(`document.querySelector('[data-design-conversation]').getBoundingClientRect().width > 0 && document.querySelector('#inspector-conversation-tab[aria-selected=true]').textContent==='design-a'`));
   await screenshot("design-split");
   await viewport(390, 850);
   await settleRender();
-  check("design narrow split stacks and keeps controls in bounds", await evaluate(`(() => { const p=document.querySelector('[data-view="split"]'); return getComputedStyle(p).flexDirection === 'column' && document.documentElement.scrollWidth <= innerWidth && [...document.querySelectorAll('select,button')].filter(e=>e.getClientRects().length).every(e=>e.getBoundingClientRect().right <= innerWidth+1); })()`));
+  check("design narrow tabs keep controls in bounds", await evaluate(`(() => { const p=document.querySelector('[role=tablist]'); return p.querySelectorAll('[role=tab]').length===2 && document.documentElement.scrollWidth <= innerWidth && [...document.querySelectorAll('select,button')].filter(e=>e.getClientRects().length).every(e=>e.getBoundingClientRect().right <= innerWidth+1); })()`));
   await screenshot("design-narrow");
   check("design inert parsing and preview make no resource requests", designLeaks === 0);
   check("design rejects oversize source before parsing", await evaluate(`(() => { try { window.__UI_QA__.designSanitize('a'.repeat(1048577)); return false; } catch(e) { return e.message.includes('1 MiB'); } })()`));
@@ -2279,7 +2299,7 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
   check("ux26 f fork keeps selection and draft", await evaluate(`window.__UI_QA__.fork.snapshot().selected==='ui-qa-agent' && window.__UI_QA__.fork.snapshot().draft==='Original composer draft' && !!document.querySelector('[data-fork-notice]') && !document.querySelector('[data-fork-form]')`));
   check("ux26 f selected boundary no duplicate execution", await evaluate(`(() => {const s=window.__UI_QA__.fork.snapshot(),calls=s.calls.filter(c=>c.method==='agent.fork');return calls.length===1 && calls[0].params.upToSeq===s.seq && calls[0].params.task.includes('Inspect the alternative') && calls[0].params.mode==='snapshot';})()`));
   await click('[data-fork-notice] button');
-  await click('button[title="agent detail"]');
+  await click('[data-agent-detail-toggle]');
   await waitFor(`document.querySelector('[data-fork-lineage]')`);
   check("ux26 f lineage chip no overflow", await evaluate(`document.querySelector('[data-fork-lineage]').textContent.includes('ui-qa-agent') && document.querySelector('[data-fork-lineage]').textContent.includes('snapshot')`));
   let composerReachable = true;
@@ -2475,6 +2495,7 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
 
   await probeWorkspaceRecovery({ check, show, evaluate, waitFor, click, key, viewport, screenshot, settleRender, artifactDir });
     await probeWorkspaceScale({ check, show, evaluate, waitFor, click, key, viewport, screenshot, settleRender, artifactDir });
+  await probeAgentControls({ viewport, show, settleRender, evaluate, check, click, waitFor, screenshot, key });
   if (artifactDir) console.log(`UI browser screenshots: ${artifactDir}`);
   } finally {
     try { cdp?.close(); } finally {
@@ -2483,7 +2504,11 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
       }
     }
   }
-}, { requiredCheckIds: process.env.CHIMERA_BROWSER_GATE_HEADER_ONLY === "1"
+}, { requiredCheckIds: process.env.CHIMERA_BROWSER_GATE_CONTROL_STYLE_ONLY === "1"
+  ? REQUIRED_CHECK_IDS.ui.filter(id => id.startsWith("ui.control-style-") || id === "ui.network-guard-blocks-external-fetch-and-websocket")
+  : process.env.CHIMERA_BROWSER_GATE_AGENT_CONTROLS_ONLY === "1"
+  ? REQUIRED_CHECK_IDS.ui.filter(id => id.startsWith("ui.agent-controls-") || id.startsWith("ui.composer-commands-") || id.startsWith("ui.toolbar-toggles-") || id.startsWith("ui.inspector-layout-") || id === "ui.network-guard-blocks-external-fetch-and-websocket")
+  : process.env.CHIMERA_BROWSER_GATE_HEADER_ONLY === "1"
   ? REQUIRED_CHECK_IDS.ui.filter(id => id.startsWith("ui.compact-header-") || id === "ui.network-guard-blocks-external-fetch-and-websocket")
   : process.env.CHIMERA_BROWSER_GATE_RECOVERY_ONLY === "1"
   ? REQUIRED_CHECK_IDS.ui.filter(id => id.startsWith("ui.ux26-qa-") || id === "ui.network-guard-blocks-external-fetch-and-websocket")

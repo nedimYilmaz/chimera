@@ -1,3 +1,4 @@
+import { modeProfile } from "../execution-mode.js";
 import { codexTransportFor } from "./codex-transport.js";
 export { codexTransportFor } from "./codex-transport.js";
 import type { PermissionApplication } from "@chimera/protocol";
@@ -551,11 +552,12 @@ export function buildThreadOptions(spec: ResolvedAgentSpec, cwd: string): Record
   // Always pass an explicit model. Leaving it absent lets ambient CLI config select an unknown
   // model whose fallback metadata has supports_search_tool=false.
   const model = spec.model ?? findProvider("codex")?.defaultModel;
+  const profile = modeProfile("codex", spec.executionMode, spec.permissionProfile);
   return {
     workingDirectory: cwd,
     skipGitRepoCheck: true,               // chimera owns isolation (ensureWorkdir); codex's own repo check is redundant
-    sandboxMode: SANDBOX_BY_PROFILE[spec.permissionProfile],
-    approvalPolicy: spec.permissionProfile === "full" || codexTransportFor(spec) === "exec" ? "never" : "on-request",
+    sandboxMode: SANDBOX_BY_PROFILE[profile],
+    approvalPolicy: profile === "full" || codexTransportFor(spec) === "exec" ? "never" : "on-request",
     // EFFORT: chimera's neutral enum is a literal subset of codex's own ModelReasoningEffort
     // ("minimal"|"low"|"medium"|"high"|"xhigh") — direct passthrough, no mapping.
     ...(spec.effort ? { modelReasoningEffort: spec.effort } : {}),
@@ -563,10 +565,13 @@ export function buildThreadOptions(spec: ResolvedAgentSpec, cwd: string): Record
     // Older in-memory specs may contain model:undefined after a settings change.
     // Only a defined override may replace the explicit model/default.
     model: spec.providerOptions.model !== undefined ? spec.providerOptions.model : model,
+    // An explicit operator mode wins over ambient transport overrides.
+    ...(spec.executionMode ? { sandboxMode: SANDBOX_BY_PROFILE[profile], approvalPolicy: profile === "full" ? "never" : "on-request", chimeraExecutionMode: spec.executionMode } : {}),
   };
 }
 
 export class CodexAgentBackend implements AgentBackend {
+  readonly executionModes = ["auto", "plan", "execute", "bypassPermissions"] as const;
   readonly provider = "codex";
   readonly capabilities: BackendCapabilities = { supportsResume: true, supportsMcpServers: true, supportsSettingSources: false, supportsVoiceRealtime: true };
   // DYNAMIC-MODEL-METADATA: lazy `modelCatalog` accessor (see ClaudeAgentBackend) — routes the
@@ -578,6 +583,9 @@ export class CodexAgentBackend implements AgentBackend {
   // per-tool canUseTool hook, so the supervisor's full-access risk gate remains.
   spawn(spec: ResolvedAgentSpec, sink: EventSink, _decidePermission: PermissionDecider, _decideDialog?: DialogDecider): AgentHandle {
     const transport = codexTransportFor(spec);
+    if (spec.executionMode && transport === "exec") throw new Error("Execution mode requires Codex app-server transport");
+    spec = { ...spec, permissionProfile: modeProfile("codex", spec.executionMode, spec.permissionProfile) };
+    if (spec.executionMode === "bypassPermissions" && !spec.acknowledgeCodexFullAccessRisk) throw new Error("Full Codex access requires an explicit risk grant");
     if (spec.plugins.length || spec.strictMcpConfig) throw new Error("Codex does not support Claude plugins/strictMcpConfig fields; configure native Codex plugins and MCP grants instead");
     const { workdir: cwd } = ensureWorkdir(spec);
     const factoryOptions = buildCodexOptions(spec);
@@ -625,6 +633,7 @@ export class CodexAgentBackend implements AgentBackend {
       ? new CodexAppServer({ ...factoryOptions, agentId: spec.agentId }, _decidePermission, _decideDialog, this.deps.appServerProcess, spec.autonomy === "full", spec.acknowledgeCodexFullAccessRisk)
       : (this.deps.codexFactory ?? defaultFactory)(factoryOptions);
     if (codex instanceof CodexAppServer) {
+      codex.onExecutionModeApplied = mode => sink({ kind: "status", data: { executionMode: mode } });
       codex.onPermissionApplied = options => {
         effectiveOptions = { ...options };
         if (inFlightOptions?.chimeraPermissionVersion === options.chimeraPermissionVersion) inFlightOptions = undefined;
@@ -1048,6 +1057,17 @@ export class CodexAgentBackend implements AgentBackend {
     return withMessageInput({
       get processPid() { return codex instanceof CodexAppServer ? codex.processPid : null; },
       ...(codex instanceof CodexAppServer ? { command: (text: string) => codex.command(text) } : {}),
+      setExecutionMode: async (mode, profile, acknowledgeRisk) => {
+        if (!(codex instanceof CodexAppServer)) throw new Error("Execution mode requires Codex app-server transport");
+        if (mode === "bypassPermissions" && !fullRiskGranted && !acknowledgeRisk) throw new Error("Full Codex access requires an explicit risk grant");
+        if (acknowledgeRisk) { fullRiskGranted = true; codex.grantFullAccessRisk(); }
+        desired = { ...desired, version: desired.version + 1, permissionProfile: profile };
+        const next = buildThreadOptions({ ...spec, executionMode: mode, permissionProfile: profile }, cwd);
+        desiredThreadOptions = { ...desiredThreadOptions, sandboxMode: next.sandboxMode, approvalPolicy: next.approvalPolicy, chimeraExecutionMode: mode, chimeraPermissionVersion: desired.version };
+        applyError = undefined;
+        emitApplication();
+        return { pending: true };
+      },
       updatePermission: request => {
         if (request.permissionProfile === "full" && request.acknowledgeCodexFullAccessRisk === true) {
           fullRiskGranted = true;
@@ -1055,10 +1075,10 @@ export class CodexAgentBackend implements AgentBackend {
         }
         if (request.permissionProfile === "full" && !fullRiskGranted) throw new Error("Full Codex access requires an explicit risk grant");
         desired = { ...request };
-        const next = buildThreadOptions({ ...spec, permissionProfile: request.permissionProfile, providerOptions: { ...spec.providerOptions, codexTransport: transport } }, cwd);
+        const next = buildThreadOptions({ ...spec, executionMode: undefined, permissionProfile: request.permissionProfile, providerOptions: { ...spec.providerOptions, codexTransport: transport } }, cwd);
         // Preserve the transport and session; only the next invocation's profile
         // options change. Native app-server acknowledges the exact start request.
-        desiredThreadOptions = { ...threadOptions, sandboxMode: next.sandboxMode, approvalPolicy: next.approvalPolicy, chimeraPermissionVersion: request.version };
+        desiredThreadOptions = { ...desiredThreadOptions, sandboxMode: next.sandboxMode, approvalPolicy: next.approvalPolicy, chimeraPermissionVersion: request.version };
         if (applyError && applyError.version !== desired.version) applyError = undefined;
         return application();
       },

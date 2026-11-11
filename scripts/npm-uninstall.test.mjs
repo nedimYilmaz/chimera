@@ -52,7 +52,7 @@ function fixture(platform = 'linux', custom = false, overrides = {}) {
   io.set(p.join(home, 'external-repo', '.git', 'HEAD'), 'external project');
   io.set(p.join(plan.cache, 'images', 'image.png'), 'shared app image');
   if (custom) io.set(p.join(plan.defaultState, 'config.json'), JSON.stringify({ accounts: [{ name: 'main', auth: { type: 'keychain', service: 'chimera:main' } }] }));
-  credentials.set('chimera:main', 'chimera'); credentials.set('chimera:tailscale-authkey', 'chimera');
+  credentials.set('chimera:main', 'chimera');
   const prefix = p.join(home, 'global'), globalRoot = p.join(prefix, ...(platform === 'win32' ? [] : ['lib']), 'node_modules'), globalDir = p.join(globalRoot, manifest.name);
   const faults = {};
   const run = async (cmd, args) => {
@@ -120,14 +120,14 @@ for (const platform of ['darwin', 'linux', 'win32']) test(`${platform}: normal u
   assert.ok(!f.io.entries.has(f.plan.app)); assert.ok(!f.io.entries.has(f.plan.root));
   assert.ok(f.io.entries.has(f.p.join(f.plan.state, 'config.json')));
   assert.ok(f.io.entries.has(f.p.join(f.plan.cache, 'images/image.png')));
-  assert.equal(f.credentials.size, 2);
+  assert.equal(f.credentials.size, 1);
   assert.ok(!f.calls.some(c => c.args[0] === 'delete-generic-password'));
   await uninstall([], f.hooks);
 });
 
 test('dry-run with purge performs zero commands/stops/writes and reports both homes', async () => {
   const f = fixture('darwin', true); await uninstall(['--purge-data', '--dry-run'], f.hooks);
-  assert.equal(f.calls.length, 0); assert.equal(f.io.removed.length, 0); assert.equal(f.credentials.size, 2);
+  assert.equal(f.calls.length, 0); assert.equal(f.io.removed.length, 0); assert.equal(f.credentials.size, 1);
   const plan = JSON.parse(f.messages[0]); assert.equal(plan.state, f.plan.state); assert.equal(plan.defaultState, f.plan.defaultState);
   assert.match(plan.npxCache, /preserved/);
 });
@@ -142,7 +142,7 @@ test('selected custom purge preserves default-home shared credentials and extern
   assert.ok(!f.io.entries.has(f.plan.state)); assert.ok(!f.io.entries.has(f.plan.cache));
   assert.ok(f.io.entries.has(f.p.join(f.plan.defaultState, 'config.json')));
   assert.ok(f.io.entries.has(f.p.join(f.home, 'external-repo/.git/HEAD')));
-  assert.deepEqual([...f.credentials.keys()], ['chimera:main', 'chimera:tailscale-authkey']);
+  assert.deepEqual([...f.credentials.keys()], ['chimera:main']);
   assert.match(f.messages[0], new RegExp(f.plan.defaultState)); assert.match(f.messages.at(-1), /Other homes preserved/);
   assert.ok(f.messages[0].includes(f.p.join(f.plan.state, 'projects')));
 });
@@ -216,7 +216,7 @@ test('verified npx-cache daemon can stop, while its npm-owned payload remains', 
 
 test('cross-platform purge explicitly reports unsupported credential adapters instead of claiming erasure', async () => {
   const f = fixture('linux'); await uninstall(['--purge-data'], f.hooks);
-  assert.equal(f.credentials.size, 2); assert.match(f.messages[0], /without a supported local ownership adapter/);
+  assert.equal(f.credentials.size, 1); assert.match(f.messages[0], /without a supported local ownership adapter/);
   assert.match(f.messages.at(-1), /Unsupported credential records retained/);
 });
 
@@ -229,7 +229,7 @@ for (const defect of ['mcp-ref', 'overlay-link', 'linked-global', 'symlink-npx']
     const pkg = f.p.join(f.home, '.npm/_npx/fixture/node_modules/@nedimyilmaz/chimera');
     f.io.set(pkg, '/external', 'link'); f.faults.codeRoot = f.p.join(pkg, 'packages/daemon/src');
   }
-  await assert.rejects(uninstall(['--purge-data'], f.hooks)); assert.equal(f.io.removed.length, 0); assert.equal(f.credentials.size, 2);
+  await assert.rejects(uninstall(['--purge-data'], f.hooks)); assert.equal(f.io.removed.length, 0); assert.equal(f.credentials.size, 1);
 });
 
 test('Windows native known-folder cache is independent from installer LOCALAPPDATA override', async () => {
@@ -314,7 +314,7 @@ test('post-confirmation repository replacement is rejected before any removal', 
   const f = fixture('darwin');
   f.hooks.confirm = async () => { f.io.set(f.p.join(f.plan.state, '.git/HEAD'), 'replaced repository'); return f.plan.state; };
   await assert.rejects(uninstall(['--purge-data'], f.hooks), /Refusing to purge a repository/);
-  assert.equal(f.io.removed.length, 0); assert.equal(f.credentials.size, 2);
+  assert.equal(f.io.removed.length, 0); assert.equal(f.credentials.size, 1);
 });
 
 for (const replacement of ['symlink', 'mount']) test(`post-confirmation ${replacement} replacement is rejected without removal`, async () => {
@@ -325,7 +325,7 @@ for (const replacement of ['symlink', 'mount']) test(`post-confirmation ${replac
     return f.plan.state;
   };
   await assert.rejects(uninstall(['--purge-data'], f.hooks), replacement === 'symlink' ? /symlink\/reparse/ : /cross-device/);
-  assert.equal(f.io.removed.length, 0); assert.equal(f.credentials.size, 2);
+  assert.equal(f.io.removed.length, 0); assert.equal(f.credentials.size, 1);
 });
 
 test('managed dependency symlinks are unlinked without traversing their destination', { skip: process.platform === 'win32' }, async () => {

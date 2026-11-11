@@ -98,13 +98,13 @@ export function useSystemSurfaces(): void {
     // W10 · F10: federation liveness. daemon.status carries state.peers only on
     // the 5s poll / on-connect; a pairing that lands BETWEEN polls would leave
     // the SpawnCard engine list and the ⇅ remote host-tools rows stale until the
-    // next tick. peer_paired/network_changed refetch both eagerly: refreshStatus
+    // next tick. peer_paired refetch both eagerly: refreshStatus
     // re-pulls state.peers (SpawnCard engine cycle), refreshPeers re-pulls the
     // peer.status host-tools carriage (HostToolsCard ⇅ rows). The pairing UI's
     // OWN peers table refreshes through its own onDaemonEvent hook.
     const host = getHostCommands(appStore, rpcCall);
     const offFed = onDaemonEvent((e) => {
-      if (e.kind === "peer_paired" || e.kind === "network_changed") {
+      if (e.kind === "peer_paired") {
         void sys.refreshStatus();
         void host.refreshPeers();
       }

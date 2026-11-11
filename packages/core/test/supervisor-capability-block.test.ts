@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { mkdtempSync } from "node:fs";
 import { describe, it, expect } from "vitest";
 import { ENGINE_TOOL_NAMES } from "@chimera/protocol/engine-help";
-import { AgentSupervisor, CAPABILITY_BLOCK_TOOLS, buildCapabilityBlock } from "@chimera/core/supervisor";
+import { AgentSupervisor, CAPABILITY_BLOCK_TOOLS, buildCapabilityBlock, SHARED_MEMORY_POLICY } from "@chimera/core/supervisor";
 
 // CAPABILITY-BLOCK-DRIFT: the supervisor's spawn-time AWARENESS capability block used to be
 // a hand-written prose literal (packages/core/src/supervisor.ts) naming specific tools from
@@ -43,6 +43,38 @@ describe("supervisor — capability block drift guard", () => {
     expect(block).toContain("never access the daemon socket directly");
     expect(block.length).toBeLessThan(1_000);
     expect(block).toContain("do not copy these shared instructions");
+  });
+});
+
+describe("shared memory priority at the provider boundary", () => {
+  it.each(["claude", "codex", "kimi", "openai"].flatMap(provider =>
+    [true, false].map(allow => ({ provider, allow })),
+  ))("reapplies shared-first policy for $provider with orchestration=$allow on spawn and resume", async ({ provider, allow }) => {
+    const home = mkdtempSync(join(tmpdir(), "chimera-memory-priority-"));
+    const backend = new FakeAgentBackend([], provider);
+    const sup = new AgentSupervisor({
+      registry: new AccountRegistry(ChimeraConfigSchema.parse({
+        accounts: [{ name: "test", provider, auth: { type: "keychain", service: "test", injectAs: "TEST_KEY" } }],
+        autoOrder: ["test"],
+      })),
+      credentials: new CredentialResolver(async () => ({ stdout: "test-key", code: 0 })),
+      backends: new Map([[provider, backend]]), events: new EventLog(home), mailboxes: new MailboxStore(home),
+      cooldowns: new CooldownTracker(60_000), permissionTimeoutMs: 100,
+    });
+    const agent = await sup.spawn({ prompt: "recurring task", instructions: "role instructions", cwd: home, isolation: "none", orchestration: { allow } });
+    await sup.waitFor(agent.agentId, 1000);
+    // Model a persisted provider session from before the shared policy existed.
+    sup.status(agent.agentId).sessionId = "existing-session";
+    const resumed = await sup.resume(agent.agentId, { prompt: "continue" });
+    await sup.waitFor(resumed.agentId, 1000);
+    expect(backend.spawns).toHaveLength(2);
+    expect(backend.spawns[1]!.resume).toBe("existing-session");
+    for (const spawn of backend.spawns) {
+      expect(spawn.instructions!.split(SHARED_MEMORY_POLICY)).toHaveLength(2);
+      expect(spawn.instructions!.indexOf(SHARED_MEMORY_POLICY)).toBeLessThan(spawn.instructions!.indexOf("role instructions"));
+      expect(spawn.orchestration.allow).toBe(allow);
+    }
+    expect(sup.status(resumed.agentId).spec.instructions).toBe("role instructions");
   });
 });
 

@@ -3,7 +3,7 @@ import type { UiState } from "@chimera/ui-state";
 import { appStore } from "../state/store";
 import { useStore } from "../state/useStore";
 import { rpcCall } from "../rpc/bridge";
-import { displayChord, registerActionHandler } from "../keymap";
+import { registerActionHandler } from "../keymap";
 import { getCheckpointsCommands } from "../state/commands.checkpoints";
 import { checkpointLabel, latestCheckpointSeq, triggerLabel } from "../state/selectors.checkpoints";
 import { fmtClock } from "../state/selectors";
@@ -53,33 +53,8 @@ export function CheckpointStrip() {
   if (!state.supported || !state.latest) return null;
   const latest = state.latest;
 
-  return (
-    <div className={styles.strip} data-checkpoint-strip onClick={() => cmds.toggle()}>
-      <span className={styles.mark}>⚑</span>
-      <span className={styles.id}>checkpoint {checkpointLabel(latest.id)}</span>
-      <span className={styles.trigger}>{triggerLabel(latest)}</span>
-      <span className={styles.rule} />
-      <span className={styles.ts}>{fmtClock(latest.ts)}</span>
-      <span
-        className={styles.chip}
-        onClick={(ev) => {
-          ev.stopPropagation();
-          cmds.requestRevert(latest.id);
-        }}
-        data-checkpoint-revert
-      >
-        <span className={styles.chipKey}>{displayChord("mod+shift+r")}</span> revert
-      </span>
-      <span
-        className={styles.chip}
-        onClick={(ev) => {
-          ev.stopPropagation();
-          if (selectedId) void cmds.createManual(selectedId);
-        }}
-        data-checkpoint-new
-      >
-        <span className={styles.chipKey}>{displayChord("mod+k")}</span> new
-      </span>
-    </div>
-  );
+  return <button type="button" className={styles.checkpoint} data-checkpoint-strip
+    aria-label={`Checkpoints — ${checkpointLabel(latest.id)}`} aria-expanded={state.open} aria-pressed={state.open}
+    title={`${checkpointLabel(latest.id)} · ${triggerLabel(latest)} · ${fmtClock(latest.ts)} — open checkpoints`}
+    onClick={() => cmds.toggle()}><span className={styles.mark} aria-hidden="true">⚑</span> {checkpointLabel(latest.id)}</button>;
 }

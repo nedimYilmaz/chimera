@@ -6,6 +6,8 @@ import { TaskRecordSchema, TaskSummarySchema } from "@chimera/protocol";
 // can't silently drift apart — a family-grouping regression and a plain contract-membership
 // regression would otherwise need two separate hand-edits to stay in sync.
 const ALL_METHODS = [
+  "queue.completeTask",
+  "agent.shellStart", "agent.shellStatus", "agent.shellCancel",
   // Workspace evolution: typed RPCs for groups, branching, layout, remote operator,
   // context links, worktree editing, issue sources and local speech.
   "agent.setGroups", "agent.addGroups", "agent.removeGroups", "agent.forkCapabilities", "agent.fork", "agent.resources",

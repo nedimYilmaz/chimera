@@ -1,0 +1,104 @@
+{
+  "_note": "Official PyPI 0.4.8 artifact metadata fetched 2026-10-16; GitHub v0.4.8 stable verified. Includes 0.4.7 metadata for replay after pin changes.",
+  "info": {
+    "version": "0.4.8"
+  },
+  "releases": {
+    "0.4.8": [
+      {
+        "comment_text": null,
+        "core-metadata": {
+          "sha256": "b5bba9207754781ef00fdea09d99ac8605276d70e69ee3608e1b471aa8484e8a"
+        },
+        "digests": {
+          "blake2b_256": "b8cc6f7d1ec516a450c42b2ad4c164e9cdbacac509bc808a187ec62e99be81ca",
+          "md5": "6b7599e9892897f0765a947a758ad8f2",
+          "sha256": "05064d8b949803af8cb173561ed0b24d6be5b62cb86d8d319321577c630d0288"
+        },
+        "downloads": -1,
+        "filename": "laya-0.4.8-py3-none-any.whl",
+        "has_sig": false,
+        "md5_digest": "6b7599e9892897f0765a947a758ad8f2",
+        "packagetype": "bdist_wheel",
+        "python_version": "py3",
+        "requires_python": ">=3.10",
+        "size": 405303,
+        "upload_time": "2026-10-15T10:52:24",
+        "upload_time_iso_8601": "2026-10-15T10:52:24.584506Z",
+        "url": "https://files.pythonhosted.org/packages/b8/cc/6f7d1ec516a450c42b2ad4c164e9cdbacac509bc808a187ec62e99be81ca/laya-0.4.8-py3-none-any.whl",
+        "yanked": false,
+        "yanked_reason": null
+      },
+      {
+        "comment_text": null,
+        "core-metadata": false,
+        "digests": {
+          "blake2b_256": "4e2da0d23f625a04f8962aa44dfb0a6748243233504510b87f84796cb9b8c7e2",
+          "md5": "b68e88e36e7e010cb5d9c49679bd28cc",
+          "sha256": "979d240d4681a1bf06dda347b55fdb2875bfd2f733779305feb425130ddcac84"
+        },
+        "downloads": -1,
+        "filename": "laya-0.4.8.tar.gz",
+        "has_sig": false,
+        "md5_digest": "b68e88e36e7e010cb5d9c49679bd28cc",
+        "packagetype": "sdist",
+        "python_version": "source",
+        "requires_python": ">=3.10",
+        "size": 1213210,
+        "upload_time": "2026-10-15T10:52:26",
+        "upload_time_iso_8601": "2026-10-15T10:52:26.897486Z",
+        "url": "https://files.pythonhosted.org/packages/4e/2d/a0d23f625a04f8962aa44dfb0a6748243233504510b87f84796cb9b8c7e2/laya-0.4.8.tar.gz",
+        "yanked": false,
+        "yanked_reason": null
+      }
+    ],
+    "0.4.7": [
+      {
+        "comment_text": null,
+        "core-metadata": {
+          "sha256": "63ec3f5094ac666e75ce43b2fe6ce14003fc0b53b266c7c5ae76c838d09ee531"
+        },
+        "digests": {
+          "blake2b_256": "3e6e4034dff73797ebe6ed7f0ae55bc85d866a6daa4778fdcad25a83827cc353",
+          "md5": "027ddf2dcfe03ed05dcec3dd81109755",
+          "sha256": "c16f6e8b124baefa0d3d08a4eeb72c72ac54b06281155f383f7c8b7f37b91b50"
+        },
+        "downloads": -1,
+        "filename": "laya-0.4.7-py3-none-any.whl",
+        "has_sig": false,
+        "md5_digest": "027ddf2dcfe03ed05dcec3dd81109755",
+        "packagetype": "bdist_wheel",
+        "python_version": "py3",
+        "requires_python": ">=3.10",
+        "size": 400060,
+        "upload_time": "2026-10-14T05:27:56",
+        "upload_time_iso_8601": "2026-10-14T05:27:56.774165Z",
+        "url": "https://files.pythonhosted.org/packages/3e/6e/4034dff73797ebe6ed7f0ae55bc85d866a6daa4778fdcad25a83827cc353/laya-0.4.7-py3-none-any.whl",
+        "yanked": false,
+        "yanked_reason": null
+      },
+      {
+        "comment_text": null,
+        "core-metadata": false,
+        "digests": {
+          "blake2b_256": "edba477174d38f2acc252cb1414499369b2127cf74784a5ffaf51e8743400c82",
+          "md5": "de70c03684fbb5c28d90e22940fe1fb4",
+          "sha256": "c3f567f21ce9860eb063c67b35316d5498881e6856f6d58f2b05ce4311e8b2c9"
+        },
+        "downloads": -1,
+        "filename": "laya-0.4.7.tar.gz",
+        "has_sig": false,
+        "md5_digest": "de70c03684fbb5c28d90e22940fe1fb4",
+        "packagetype": "sdist",
+        "python_version": "source",
+        "requires_python": ">=3.10",
+        "size": 1194323,
+        "upload_time": "2026-10-14T05:27:58",
+        "upload_time_iso_8601": "2026-10-14T05:27:58.872534Z",
+        "url": "https://files.pythonhosted.org/packages/ed/ba/477174d38f2acc252cb1414499369b2127cf74784a5ffaf51e8743400c82/laya-0.4.7.tar.gz",
+        "yanked": false,
+        "yanked_reason": null
+      }
+    ]
+  }
+}

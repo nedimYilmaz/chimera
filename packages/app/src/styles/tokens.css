@@ -41,6 +41,7 @@
   --user-turn: var(--user-turn-green);
   --success: #79c58c;
   --warn: #d6b06a;
+  --mode-auto: #d99b62;
   --danger: #e2766f;
   --danger-soft: #e2b0ac;
   --info: #6a8fd8;          /* done state, delivered-from */
@@ -107,7 +108,12 @@
   --space-unit: 4px;
   --screen-gutter: 12px;
   --section-gap: 12px;
-  --control-h: 28px;
+  --control-h: 30px;
+  --control-pad-y: 3px;
+  --control-pad-x: 8px;
+  --control-action-pad-x: 10px;
+  --control-disabled-opacity: 0.55;
+  --control-select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='m3 4.5 3 3 3-3' fill='none' stroke='%23a9b0bc' stroke-width='1.25' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   --row-h: 28px;
   --heading-h: 32px;
   --content-pad: 16px;

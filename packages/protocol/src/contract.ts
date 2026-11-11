@@ -79,9 +79,14 @@ export function defineRpc<Req extends z.ZodType, Res extends z.ZodType>(
 // (engine.ts:1152) — folding that into the request schema changes WHERE that same validation
 // error surfaces, not WHETHER it does.
 const QueueCreateRequestSchema = z.object({ spec: QueueSpecSchema }).strict();
+const QueueCompleteRequestSchema = z.object({
+  taskId: z.string().min(1), callerAgentId: z.string().min(1).optional(),
+  result: z.string().trim().min(1).max(16000), success: z.boolean().default(true),
+}).strict();
 const QueueUpdateRequestSchema = z.object({
   name: z.string().min(1),
   patch: z.object({
+    existingAgentId: z.string().min(1).nullable().optional(),
     retryLimit: z.number().int().min(0).optional(),
     workflow: z.string().nullable().optional(),   // D12: the queue's default workflow binding
     retryPolicy: RetryPolicySchema.optional(),   // RETRY-BACKOFF
@@ -319,7 +324,7 @@ const RoleUpdateRequestSchema = z.object({
     effort: EffortLevelSchema.optional(),
     instructions: z.string().optional(),
     resultSchema: z.record(z.string(), z.unknown()).optional(),
-    executionMode: z.enum(["plan", "execute", "auto"]).optional(),
+    executionMode: z.enum(["plan", "execute", "auto", "bypassPermissions"]).optional(),
     permissionProfile: z.enum(["readOnly", "acceptEdits", "full"]).optional(),
     autonomy: z.enum(["ask", "full"]).optional(),
     acknowledgeCodexFullAccessRisk: z.boolean().optional(),
@@ -757,7 +762,21 @@ const WorktreeExplainWriteRequestSchema = z.object({
   callerAgentId: z.string().min(1).optional(),
 }).strict();
 
+export const ShellCommandRecordSchema = z.object({
+  agentId: z.string(), requestId: z.string().uuid(), command: z.string(), cwd: z.string(),
+  state: z.enum(["running", "done", "failed", "cancelled", "interrupted"]),
+  output: z.string(), truncated: z.boolean(), startedAt: z.number(), finishedAt: z.number().optional(),
+  exitCode: z.number().nullable(), error: z.string().optional(), deliveryError: z.string().optional(),
+});
+export type ShellCommandRecord = z.infer<typeof ShellCommandRecordSchema>;
+const ShellStartSchema = z.object({ agentId: z.string().min(1), requestId: z.string().uuid(), command: z.string().trim().min(1).max(16384).refine(s => !s.includes("\0"), "Command cannot contain NUL") }).strict();
+const ShellCancelSchema = z.object({ agentId: z.string().min(1), requestId: z.string().uuid() }).strict();
+const ShellStatusSchema = z.object({ agentId: z.string().min(1) }).strict();
+
 export const RPC_CONTRACT = {
+  "agent.shellStart": defineRpc(ShellStartSchema, ShellCommandRecordSchema),
+  "agent.shellCancel": defineRpc(ShellCancelSchema, ShellCommandRecordSchema),
+  "agent.shellStatus": defineRpc(ShellStatusSchema, ShellCommandRecordSchema.nullable()),
   "canvas.get": defineRpc(canvas.CanvasGetSchema, canvas.CanvasGetResponseSchema),
   "canvas.saveLayout": defineRpc(canvas.CanvasSaveLayoutSchema, canvas.CanvasSaveResponseSchema),
   "group.list": defineRpc(z.object({}).strict(), GroupListResultSchema),
@@ -793,6 +812,7 @@ export const RPC_CONTRACT = {
   "issues.sync": defineRpc(IssueSyncRequestSchema, IssueSyncResultSchema),
   "issues.linkList": defineRpc(IssueLinkListRequestSchema, z.array(IssueBoardLinkSchema)),
   "issues.postComment": defineRpc(IssuePostCommentRequestSchema, IssuePostCommentResultSchema),
+  "queue.completeTask": defineRpc(QueueCompleteRequestSchema, TaskRecordSchema),
   "queue.create": defineRpc(QueueCreateRequestSchema, QueueSpecSchema),
   "queue.list": defineRpc(z.object({}).strict(), z.array(QueueSpecSchema)),
   "queue.update": defineRpc(QueueUpdateRequestSchema, QueueSpecSchema),

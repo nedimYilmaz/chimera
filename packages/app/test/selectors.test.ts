@@ -1195,6 +1195,9 @@ describe("agentDetailView (AGENT-INFO-PANEL)", () => {
 // line and pushed the agent-NAME column off the row entirely — 21 rows all reading "daemon
 // restarted — resume to continue" while showing no names at all. The benign holds are glyph-only.
 describe("pauseSummary — row badge noise", () => {
+  it("keeps operator holds glyph-only", () => {
+    expect(pauseSummary({ pauseReason: "operator-hold" })).toBe("");
+  });
   it("says nothing for the restart hold — identical on every row, so it is pure width", () => {
     expect(pauseSummary({ pauseReason: "daemon-restart", resumeAt: undefined })).toBe("");
   });

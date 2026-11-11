@@ -1,0 +1,103 @@
+{
+  "info": {
+    "version": "0.4.14"
+  },
+  "releases": {
+    "0.4.13": [
+      {
+        "comment_text": null,
+        "core-metadata": {
+          "sha256": "24099a7f63b615c9c82bb416090c50ef2246a8a086bd329014213dfa2e0191d6"
+        },
+        "digests": {
+          "blake2b_256": "1ba687551a0d2a7eb8161d25a3bbf33c7de60d6926201000648606b8d9128c17",
+          "md5": "3c4a794a3da5812cc1d9ecd6306ad692",
+          "sha256": "0ce3a444821b62ae9a452f922156e08d99b6c6d625e3fa590e84177eb3e980a8"
+        },
+        "downloads": -1,
+        "filename": "laya-0.4.13-py3-none-any.whl",
+        "has_sig": false,
+        "md5_digest": "3c4a794a3da5812cc1d9ecd6306ad692",
+        "packagetype": "bdist_wheel",
+        "python_version": "py3",
+        "requires_python": ">=3.10",
+        "size": 439568,
+        "upload_time": "2026-10-21T13:42:48",
+        "upload_time_iso_8601": "2026-10-21T13:42:48.284616Z",
+        "url": "https://files.pythonhosted.org/packages/1b/a6/87551a0d2a7eb8161d25a3bbf33c7de60d6926201000648606b8d9128c17/laya-0.4.13-py3-none-any.whl",
+        "yanked": false,
+        "yanked_reason": null
+      },
+      {
+        "comment_text": null,
+        "core-metadata": false,
+        "digests": {
+          "blake2b_256": "3553b3758436ed9db7eeec138dc66999afa0b2c2f135046da1dbd373b6164958",
+          "md5": "0e903b23b96df6ada7e79f04eb03e8fb",
+          "sha256": "d3c138a257f96aff3d3812ff7b50d5afbb987c278bde7067f82afc81cbceb7e3"
+        },
+        "downloads": -1,
+        "filename": "laya-0.4.13.tar.gz",
+        "has_sig": false,
+        "md5_digest": "0e903b23b96df6ada7e79f04eb03e8fb",
+        "packagetype": "sdist",
+        "python_version": "source",
+        "requires_python": ">=3.10",
+        "size": 1323084,
+        "upload_time": "2026-10-21T13:42:50",
+        "upload_time_iso_8601": "2026-10-21T13:42:50.164676Z",
+        "url": "https://files.pythonhosted.org/packages/35/53/b3758436ed9db7eeec138dc66999afa0b2c2f135046da1dbd373b6164958/laya-0.4.13.tar.gz",
+        "yanked": false,
+        "yanked_reason": null
+      }
+    ],
+    "0.4.14": [
+      {
+        "comment_text": null,
+        "core-metadata": {
+          "sha256": "186a20c1d363896695a1cc8df5a16b3b148822dfca0115f1886156d18a766d5e"
+        },
+        "digests": {
+          "blake2b_256": "896ae8fd7c88ba87cec0896bf1edb9742f512c7dc79d7107270e88e624785f45",
+          "md5": "e89d7a22c60b192df171a33e6e21b6e4",
+          "sha256": "e547dd6670528114458355f66666b1e5f23e481361ba658a7e8a635e8b080e8a"
+        },
+        "downloads": -1,
+        "filename": "laya-0.4.14-py3-none-any.whl",
+        "has_sig": false,
+        "md5_digest": "e89d7a22c60b192df171a33e6e21b6e4",
+        "packagetype": "bdist_wheel",
+        "python_version": "py3",
+        "requires_python": ">=3.10",
+        "size": 442980,
+        "upload_time": "2026-10-23T12:50:28",
+        "upload_time_iso_8601": "2026-10-23T12:50:28.096150Z",
+        "url": "https://files.pythonhosted.org/packages/89/6a/e8fd7c88ba87cec0896bf1edb9742f512c7dc79d7107270e88e624785f45/laya-0.4.14-py3-none-any.whl",
+        "yanked": false,
+        "yanked_reason": null
+      },
+      {
+        "comment_text": null,
+        "core-metadata": false,
+        "digests": {
+          "blake2b_256": "5f47dbbd333bf4920fddee23d250e167820760e9db3eec081145f424cff4a0a1",
+          "md5": "35818a5b886389efeb31302660b9ef21",
+          "sha256": "3218cc4fb5fe8905f78a54a3d91feba7bfb0e939ae87fa7956929b7fbed268db"
+        },
+        "downloads": -1,
+        "filename": "laya-0.4.14.tar.gz",
+        "has_sig": false,
+        "md5_digest": "35818a5b886389efeb31302660b9ef21",
+        "packagetype": "sdist",
+        "python_version": "source",
+        "requires_python": ">=3.10",
+        "size": 1332291,
+        "upload_time": "2026-10-23T12:50:29",
+        "upload_time_iso_8601": "2026-10-23T12:50:29.659599Z",
+        "url": "https://files.pythonhosted.org/packages/5f/47/dbbd333bf4920fddee23d250e167820760e9db3eec081145f424cff4a0a1/laya-0.4.14.tar.gz",
+        "yanked": false,
+        "yanked_reason": null
+      }
+    ]
+  }
+}

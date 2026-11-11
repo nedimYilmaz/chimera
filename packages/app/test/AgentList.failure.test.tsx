@@ -3,7 +3,7 @@ import * as React from "react";
 import { act, create } from "react-test-renderer";
 
 // F08: the fleet list's failure badge — a failed row's state cell already carries the ✗ glyph,
-// this is the trailing text that says WHY (rate-limited vs bad credential vs unretryable request).
+// the compact indicator keeps the explanation in its tooltip.
 // Same plain-node harness as AgentList.seen.test.tsx (no jsdom — window/localStorage are shimmed).
 if (typeof window === "undefined") {
   (globalThis as unknown as { window: unknown }).window = {
@@ -66,7 +66,10 @@ describe("AgentList failure badge (F08)", () => {
       });
     });
     mount();
-    expect(rowText("a1")).toContain("⚠ account capped");
+    expect(rowText("a1")).not.toContain("account capped");
+    const warning = mounted!.root.find(n => n.props["data-agent-failure"] === "account-cap");
+    expect(warning.props.title).toContain("account capped");
+    expect(warning.props.role).toBe("img");
   });
 
   it("a failed row with no failure record shows no badge", () => {

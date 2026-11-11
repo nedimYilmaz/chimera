@@ -166,8 +166,6 @@ describe("TranscriptPanel — TRANSCRIPT-WINDOWING (part C): search reaches non-
 
     // open search, type a query, get back a hit for turn 1 (seq 1 — deep
     // before anything resident: 500 turns short of the current historyMinSeq).
-    const toggle = findByAttr("data-transcript-search-toggle")!;
-    act(() => { (toggle.props["onClick"] as () => void)(); });
     searchHitsToReturn.current = [
       { engineId: "local", seq: 1, ts: 1001, agentId, kind: "message_complete", score: 1, fields: [], snippet: "turn 1", correlation: { taskId: null, workflow: null, stepId: null, toolId: null, artifactId: null, traceId: null, spanId: null, parentAgentId: null } },
     ];
@@ -209,8 +207,6 @@ describe("TranscriptPanel — TRANSCRIPT-WINDOWING (part C): search reaches non-
     resetBodyEl(400, 20000, 20000);
     mountAgent(agentId);
 
-    const toggle = findByAttr("data-transcript-search-toggle")!;
-    act(() => { (toggle.props["onClick"] as () => void)(); });
     searchHitsToReturn.current = [
       { engineId: "local", seq: 200, ts: 1200, agentId, kind: "message_complete", score: 1, fields: [], snippet: "turn 200", correlation: { taskId: null, workflow: null, stepId: null, toolId: null, artifactId: null, traceId: null, spanId: null, parentAgentId: null } },
     ];

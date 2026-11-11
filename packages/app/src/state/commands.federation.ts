@@ -224,11 +224,11 @@ export function createFederationCommands(store: UiStore, request: RequestFn) {
     }
   };
 
-  // ---- self-refresh (peer_paired / network_changed / config_changed) ------
+  // ---- self-refresh (peer_paired / config_changed) ------
 
   const onDaemonEvent = (kind: string): void => {
     if (kind === "peer_paired") { void loadPeers(); void loadInvites(); return; }
-    if (kind === "network_changed" || kind === "config_changed") { void loadPeers(); }
+    if (kind === "config_changed") { void loadPeers(); }
   };
 
   return {

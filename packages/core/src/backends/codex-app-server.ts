@@ -6,6 +6,7 @@ import type { CodexInput } from "./codex-input.js";
 import type { DialogDecider, PermissionDecider, NativeVoiceHandle } from "../backend.js";
 import { CodexRpcError, CodexRpc, codexConfigArgs, type RpcProcessFactory } from "./codex-rpc.js";
 import { resolveCodexBinary } from "../providers/codex-cli-models.js";
+import type { CollaborationMode } from "./codex-mode.generated.js";
 import type { InitializeParams, UserInput, TurnStartParams, ThreadResumeParams, SandboxPolicy, ToolRequestUserInputResponse } from "./codex-wire.generated.js";
 import type { CompactResult } from "@chimera/protocol";
 import type { RemoteControlHandleResult } from "../backend.js";
@@ -56,6 +57,7 @@ export class CodexAppServer implements CodexLike {
   private workspacePolicy?: Extract<SandboxPolicy, { type: "workspaceWrite" }>;
   private startingPosture?: Promise<boolean>;
   onPermissionApplied?: (options: Row) => void;
+  onExecutionModeApplied?: (mode: string) => void;
   onPermissionFailed?: (error: unknown) => void;
 
   // Grant alone never changes the acknowledged posture of an in-flight turn.
@@ -348,8 +350,12 @@ export class CodexAppServer implements CodexLike {
         };
         signal?.addEventListener("abort", abort, { once: true });
         try {
-          const params: TurnStartParams = {
+          const params: TurnStartParams & { collaborationMode?: CollaborationMode } = {
             clientUserMessageId, threadId: owner.threadId!, input: wireInput(input), effort: invocationOptions.modelReasoningEffort, approvalPolicy: invocationOptions.approvalPolicy, sandboxPolicy: owner.sandboxPolicy(invocationOptions), ...(turnOptions?.outputSchema ? { outputSchema: turnOptions.outputSchema } : {}) };
+          if (invocationOptions.chimeraExecutionMode) params.collaborationMode = {
+            mode: invocationOptions.chimeraExecutionMode === "plan" ? "plan" : "default",
+            settings: { model: invocationOptions.model, reasoning_effort: invocationOptions.modelReasoningEffort ?? null, developer_instructions: null },
+          };
           // Requests may arrive before the response. Wait for this exact turn's
           // acceptance rather than borrowing the preceding turn's full bypass.
           let resolvePosture!: (full: boolean) => void;
@@ -357,6 +363,7 @@ export class CodexAppServer implements CodexLike {
           try {
             const result = await owner.rpc.request("turn/start", params);
             owner.turnId = result.turn.id;
+            if (invocationOptions.chimeraExecutionMode) owner.onExecutionModeApplied?.(invocationOptions.chimeraExecutionMode);
             if (params.sandboxPolicy?.type === "workspaceWrite") owner.workspacePolicy = { ...params.sandboxPolicy, writableRoots: [...params.sandboxPolicy.writableRoots] };
             resolvePosture(invocationOptions.sandboxMode === undefined ? owner.fullAccess : owner.acknowledgePermission(invocationOptions));
             if (interrupted) abort();

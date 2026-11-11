@@ -100,8 +100,8 @@ export interface AgentHandle {
   readonly processPid?: number | null;
   command?(text: string): Promise<string>;
   isTurnActive?(): boolean;
-  updatePermission?(request: { version: number; permissionProfile: AgentSpec["permissionProfile"]; permissionRequest: AgentSpec["on"]["permissionRequest"]; acknowledgeCodexFullAccessRisk?: boolean }): PermissionApplication;
-  setExecutionMode?(mode: "plan" | "execute" | "auto", profile: AgentSpec["permissionProfile"]): Promise<void>;
+  updatePermission?(request: { version: number; permissionProfile: AgentSpec["permissionProfile"]; permissionRequest: AgentSpec["on"]["permissionRequest"]; acknowledgeCodexFullAccessRisk?: boolean }): PermissionApplication | undefined;
+  setExecutionMode?(mode: "plan" | "execute" | "auto" | "bypassPermissions", profile: AgentSpec["permissionProfile"], acknowledgeFullAccess?: boolean): Promise<void | { pending: boolean }>;
   validateSlash?(text: string): Promise<void>;
   readonly nativeVoice?: NativeVoiceHandle;
   // content: additive (D9) — ordered blocks that, when present, take over building
@@ -158,6 +158,7 @@ export interface AgentBackend {
   /** Reject unsupported content before it can enter a durable inbox. */
   validateInput?(content: ContentBlock[]): void;
   readonly provider: string;
+  readonly executionModes?: readonly NonNullable<AgentSpec["executionMode"]>[];
   readonly capabilities: BackendCapabilities;
   // Only advertise after proving a bounded fork can resume from another worktree.
   forkConversation?(input: { sessionId: string; boundaryId: string; cwd: string }): Promise<{ sessionId: string; discard: () => Promise<void> }>;

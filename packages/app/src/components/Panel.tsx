@@ -8,12 +8,14 @@ import styles from "./Panel.module.css";
 export function Panel({
   label,
   focused = false,
+  embedded = false,
   className,
   style,
   children,
 }: {
   label: ReactNode;
   focused?: boolean;
+  embedded?: boolean;
   className?: string;
   // PANE-RESIZE: lets a caller hand the panel a live custom property (--pane-w) without this
   // component learning anything about panes. Deliberately narrow — a full style passthrough would
@@ -21,10 +23,10 @@ export function Panel({
   style?: CSSProperties;
   children?: ReactNode;
 }) {
-  const cls = [styles.panel, focused ? styles.focused : "", className ?? ""].filter(Boolean).join(" ");
+  const cls = [styles.panel, embedded ? styles.embedded : "", focused ? styles.focused : "", className ?? ""].filter(Boolean).join(" ");
   return (
     <section className={cls} {...(style ? { style } : {})}>
-      <div className={styles.label}>{label}</div>
+      {!embedded && label != null ? <div className={styles.label}>{label}</div> : null}
       {children}
     </section>
   );

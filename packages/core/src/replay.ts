@@ -64,9 +64,10 @@ function applyEventToRecord(record: AgentRecord, e: NormalizedEvent): void {
     }
 
     const mode = e.data["executionMode"];
-    if (mode === "plan" || mode === "execute" || mode === "auto" || mode === null) record.executionMode = mode ?? undefined;
+    if (mode === "plan" || mode === "execute" || mode === "auto" || mode === "bypassPermissions" || mode === null) record.executionMode = mode ?? undefined;
+    if (typeof e.data["executionModePending"] === "boolean") record.executionModePending = e.data["executionModePending"];
     const requested = e.data["requestedExecutionMode"];
-    if (requested === "plan" || requested === "execute" || requested === "auto") record.spec.executionMode = requested;
+    if (requested === "plan" || requested === "execute" || requested === "auto" || requested === "bypassPermissions") record.spec.executionMode = requested;
   }
   switch (e.kind) {
     case "agent_started":

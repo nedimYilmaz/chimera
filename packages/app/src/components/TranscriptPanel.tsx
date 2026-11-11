@@ -1,3 +1,4 @@
+import { openConversationFork } from "../state/conversationFork";
 import { BranchNotice } from "./ForkAgentOverlay";
 import { onOpenBookmark } from "../state/workspaceTools";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -46,12 +47,14 @@ import {
   useTranscriptRawRegistry,
   useTranscriptScroll,
 } from "./TranscriptSegment";
+import { useInspectorFrame } from "./InspectorFrame";
 import { TranscriptHeader } from "./TranscriptHeader";
 import { AgentTerminal } from "./AgentTerminal";
 import { WorkflowFlowBar } from "./WorkflowFlowBar";
 import { ComputerUseMonitor } from "./ComputerUseMonitor";
-import { useSystemLocal } from "../state/commands.system";
+import { systemCommands, useSystemLocal } from "../state/commands.system";
 import { runAction } from "../keymap";
+import { terminalDockForAgent } from "../state/selectors.terminal";
 import styles from "./TranscriptPanel.module.css";
 import { registerActionHandler } from "../keymap";
 import { setHighlightQuery } from "../state/transcriptHighlight";
@@ -279,14 +282,12 @@ export type TranscriptWorkflowData = {
 // per-step transcripts are each their own agent id anyway, so searching from
 // here already covers them individually once selected.
 function TranscriptSearchBar({ agentId, onJumpTo }: { agentId: string; onJumpTo: (hit: ChronicleSearchHit) => void }) {
-  const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<ChronicleSearchHit[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [searching, setSearching] = useState(false);
+  const searchGeneration = useRef(0);
   const [error, setError] = useState<string | null>(null);
-  const toggleButtonRef = useRef<HTMLButtonElement>(null);
-  const wasOpenRef = useRef(false);
   // TRANSCRIPT-FIND: the count and the cursor over the matches RENDERED IN THE TRANSCRIPT — a
   // different question from `hits` above, which is the history index's answer. The bar used to
   // show the latter and read "0 hits" with the word marked a dozen times on screen.
@@ -299,24 +300,16 @@ function TranscriptSearchBar({ agentId, onJumpTo }: { agentId: string; onJumpTo:
   // already open is what a second ⌘F should do.
   const inputRef = useRef<HTMLInputElement | null>(null);
   useEffect(() => registerActionHandler("transcript.search", () => {
-    setOpen(true);
-    // A microtask, not a layout effect: the input does not exist yet on the frame that opens it.
-    queueMicrotask(() => inputRef.current?.select());
+    inputRef.current?.focus();
+    inputRef.current?.select();
   }), []);
 
   // TRANSCRIPT-HIGHLIGHT: publish what the transcript should mark. Cleared on close and on unmount
   // — a highlight left behind after the box is gone is a mark with nothing to explain it.
   useEffect(() => {
-    setHighlightQuery(open ? query : "");
+    setHighlightQuery(query);
     return () => setHighlightQuery("");
-  }, [open, query]);
-
-  // Closing must return focus somewhere sane, not strand it on the input
-  // that's about to unmount — send it back to the toggle that reopens search.
-  useEffect(() => {
-    if (!open && wasOpenRef.current) toggleButtonRef.current?.focus();
-    wasOpenRef.current = open;
-  }, [open]);
+  }, [query]);
 
   // The transcript scroller — looked up rather than passed, because this bar renders inside the
   // panel header while the marks live in the body below it.
@@ -329,7 +322,7 @@ function TranscriptSearchBar({ agentId, onJumpTo }: { agentId: string; onJumpTo:
   // an expanded fold or an older page loading all change how many matches exist, and a tally that
   // silently goes stale is the bug this replaced.
   useEffect(() => {
-    if (!open || !query.trim()) { setMatchTotal(0); setMatchAt(-1); return undefined; }
+    if (!query.trim()) { setMatchTotal(0); setMatchAt(-1); return undefined; }
     const root = scrollRoot();
     if (!root) return undefined;
     let frame = 0;
@@ -346,7 +339,7 @@ function TranscriptSearchBar({ agentId, onJumpTo }: { agentId: string; onJumpTo:
     });
     obs.observe(root as Node, { subtree: true, childList: true, characterData: true });
     return () => { obs.disconnect(); if (frame) cancelAnimationFrame(frame); };
-  }, [open, query, scrollRoot]);
+  }, [query, scrollRoot]);
 
   /** Step the cursor and bring that match into view. Enter goes UP (toward older turns): reading
    *  back through a transcript is what searching one is for. */
@@ -361,42 +354,31 @@ function TranscriptSearchBar({ agentId, onJumpTo }: { agentId: string; onJumpTo:
   const runSearch = useCallback((cursor?: string): void => {
     const q = query.trim();
     if (!q) return;
+    const generation = ++searchGeneration.current;
     setSearching(true); setError(null);
     void rpcCall<ChronicleSearchResponse>("events.search", {
       query: q, scope: { agentIds: [agentId] }, limit: 20, ...(cursor ? { cursor } : {}),
     })
-      .then((res) => { setHits((old) => (cursor ? [...old, ...res.hits] : res.hits)); setNextCursor(res.nextCursor); })
-      .catch((err: unknown) => setError(errorText(err)))
-      .finally(() => setSearching(false));
+      .then((res) => { if (generation !== searchGeneration.current) return; setHits((old) => (cursor ? [...old, ...res.hits] : res.hits)); setNextCursor(res.nextCursor); })
+      .catch((err: unknown) => { if (generation === searchGeneration.current) setError(errorText(err)); })
+      .finally(() => { if (generation === searchGeneration.current) setSearching(false); });
   }, [query, agentId]);
 
   useEffect(() => {
-    if (!open) return undefined;
-    if (!query.trim()) { setHits([]); setNextCursor(null); setError(null); return undefined; }
+    searchGeneration.current++;
+    setHits([]); setNextCursor(null); setError(null);
+    if (!query.trim()) { setSearching(false); return undefined; }
     const timer = setTimeout(() => runSearch(), 180);
-    return () => clearTimeout(timer);
-  }, [query, open, runSearch]);
+    return () => { clearTimeout(timer); searchGeneration.current++; };
+  }, [query, runSearch]);
 
-  if (!open) {
-    return (
-      <button
-        ref={toggleButtonRef}
-        type="button"
-        className={styles.searchToggle}
-        onClick={() => setOpen(true)}
-        data-transcript-search-toggle
-      >
-        ⌕ search this agent's history
-      </button>
-    );
-  }
   return (
     <div className={styles.searchBar} data-transcript-search-bar>
       <SearchBox
         inputRef={inputRef}
         value={query}
         onChange={setQuery}
-        placeholder="search this agent's full history — including evicted/never-loaded content"
+        placeholder="Search history…"
         // "3 of 12 matches" — the cursor within what is on screen. Before any step it reads the
         // bare total, so an unstepped search does not claim to be sitting on a match.
         count={query.trim() ? (matchAt >= 0
@@ -408,10 +390,10 @@ function TranscriptSearchBar({ agentId, onJumpTo }: { agentId: string; onJumpTo:
           step(e.shiftKey ? 1 : -1);
         }}
         dataAttr="transcript-search"
-        autoFocus
       >
-        <button type="button" onClick={() => { setOpen(false); setQuery(""); }} aria-label="close search">✕</button>
+        {query && <button type="button" onClick={() => { setQuery(""); inputRef.current?.focus(); }} aria-label="clear search">✕</button>}
       </SearchBox>
+      {query.trim() && <div className={styles.searchResults} role="region" aria-label="History search results">
       {error ? <div className={styles.emptyHint}>{error}</div> : null}
       {query.trim() && !searching && hits.length === 0 && matchTotal === 0 && !error
         ? <div className={styles.emptyHint}>no matches</div> : null}
@@ -432,14 +414,18 @@ function TranscriptSearchBar({ agentId, onJumpTo }: { agentId: string; onJumpTo:
       {nextCursor ? (
         <button type="button" onClick={() => runSearch(nextCursor)} disabled={searching}>load more results</button>
       ) : null}
+      </div>}
     </div>
   );
 }
 
 const groupsCmd = getGroupsCommands(appStore, rpcCall);
 
-export function TranscriptPanel({ agent: liveAgent, workflow }: { agent: AgentView | undefined; workflow?: TranscriptWorkflowData }) {
+export function TranscriptPanel({ agent: liveAgent, workflow, controlsHost }: { agent: AgentView | undefined; workflow?: TranscriptWorkflowData; controlsHost?: HTMLElement | null }) {
+  const embedded = useInspectorFrame();
+  const connected = useStore(s => s.connected);
   const replay = useSystemLocal((state) => state.replay);
+  const terminals = useStore(state => state.terminals);
   const agentKey = liveAgent?.agentId ?? "";
   const agent = replay.active && replay.projection && agentKey ? replay.projection.agents[agentKey] : liveAgent;
   const isTaskMode = workflow !== undefined;
@@ -665,7 +651,7 @@ export function TranscriptPanel({ agent: liveAgent, workflow }: { agent: AgentVi
   if (isTaskMode) {
     if (!raw) {
       return (
-        <Panel label="transcript" className={styles.pane}>
+        <Panel label="transcript" embedded={embedded} className={styles.pane}>
           <div className={styles.taskEmptyPane}>
             <div className={styles.taskEmptyHint}>task not found — it may have drained out of the queue view</div>
           </div>
@@ -674,7 +660,7 @@ export function TranscriptPanel({ agent: liveAgent, workflow }: { agent: AgentVi
     }
   } else if (!agent) {
     return (
-      <Panel label="transcript" className={styles.pane}>
+      <Panel label="transcript" embedded={embedded} className={styles.pane}>
         <div className={styles.emptyPane}>
           <div className={styles.emptyGlyph}>◆</div>
           <div className={styles.emptyHint}>select an agent</div>
@@ -716,11 +702,12 @@ export function TranscriptPanel({ agent: liveAgent, workflow }: { agent: AgentVi
     headerCostUsd = agent!.costUsd;
   }
 
-  return (
-    <div className={styles.transcriptShell}>
-    <div className={styles.transcriptLayout}>
-    <Panel label={panelLabel} className={styles.pane}>
+  const controls = (
       <TranscriptHeader
+        provider={currentAgent?.provider}
+        controlsHost={controlsHost}
+        hideName={embedded && !isTaskMode}
+        onBranch={currentAgentId ? () => openConversationFork(currentAgentId) : undefined}
         resourceAgentId={replay.active ? undefined : currentAgentId ?? undefined}
         metricsAttribution={isTaskMode ? `Context, tokens and OS resources: ${currentAgentId ?? "no selected agent"}. Cost covers the workflow.` : undefined}
         name={headerName}
@@ -734,6 +721,8 @@ export function TranscriptPanel({ agent: liveAgent, workflow }: { agent: AgentVi
         permissionProfile={currentAgent?.permissionProfile}
         permissionRequest={currentAgent?.permissionRequest}
         executionMode={currentAgent?.executionMode}
+        requestedExecutionMode={currentAgent?.requestedExecutionMode}
+        executionModePending={currentAgent?.executionModePending}
         permissionAppliedToRunningProcess={currentAgent?.permissionAppliedToRunningProcess}
         permissionApplication={currentAgent?.permissionApplication}
         toolPolicyDenied={currentAgent?.toolPolicyDenied}
@@ -755,16 +744,39 @@ export function TranscriptPanel({ agent: liveAgent, workflow }: { agent: AgentVi
           if (!currentAgentId) return;
           composerLocal.set({ agentDetail: agentDetailOpen ? null : { agentId: currentAgentId } });
         }}
-        onAction={(actionId) => runAction(actionId, appStore)}
+        onAction={(actionId) => {
+          if (actionId === "system.compact" && currentAgentId) return systemCommands(appStore, rpcCall).applyCompact(currentAgentId);
+          if (actionId === "system.remoteControl" && currentAgentId && currentAgent) {
+            const enable = !currentAgent.remoteControl?.enabled;
+            const transition = enable && currentAgent.provider === "codex" && (currentAgent.codexTransport ?? currentAgent.permissionApplication?.transport) !== "app-server";
+            return systemCommands(appStore, rpcCall).applyRemoteControl(currentAgentId, enable, transition);
+          }
+          runAction(actionId, appStore);
+        }}
         chipsInteractive={!isTaskMode || liveTaskStepAgentId(raw) !== null}
+        lifecycleState={currentAgent?.state}
+        lifecycleDisabled={!connected || replay.active || !currentAgentId || !!currentAgent?.shadow}
+        search={!isTaskMode && agentKey ? <TranscriptSearchBar key={agentKey} agentId={agentKey} onJumpTo={jumpToHit} /> : null}
         voiceHistoryOpen={voiceHistoryOpen}
+        remoteControlEnabled={!!currentAgent?.remoteControl?.enabled}
+        remoteControlDisabled={currentAgent?.state !== "running" || !["claude", "codex"].includes(currentAgent?.provider ?? "") || !!(currentAgent?.provider === "codex" && !currentAgent.remoteControl?.enabled && (currentAgent.codexTransport ?? currentAgent.permissionApplication?.transport) !== "app-server" && currentAgent.busy)}
+        remoteControlActive={!!currentAgent?.remoteControl?.enabled && currentAgent.remoteControl.connectionStatus !== "errored" && currentAgent.remoteControl.connectionStatus !== "disabled"}
+        terminalOpen={terminalDockForAgent(terminals, currentAgentId ?? null).open}
         onToggleVoiceHistory={!isTaskMode && currentAgent?.provider === "codex" && currentAgentId
           ? () => setVoiceHistoryOpenFor(voiceHistoryOpen ? null : currentAgentId) : undefined}
       />
+  );
+
+  return (
+    <div className={styles.transcriptShell}>
+    <div className={styles.transcriptLayout}>
+    <Panel label={panelLabel} embedded={embedded} className={styles.pane}>
+      {controls}
       {currentAgentId && <BranchNotice agentId={currentAgentId} />}
       <Collapse open={agentDetailOpen}>
         {agentDetailOpen && currentAgent ? (
           <AgentDetailPanel
+            showBranchAction={controlsHost === undefined}
             agent={currentAgent}
             status={agentStatus.status}
             loading={agentStatus.loading}
@@ -804,7 +816,6 @@ export function TranscriptPanel({ agent: liveAgent, workflow }: { agent: AgentVi
         />
       ) : (
       <>
-      {!isTaskMode && agentKey ? <TranscriptSearchBar agentId={agentKey} onJumpTo={jumpToHit} /> : null}
       <div className={styles.bodyFrame}>
       {/* DESKTOP-PREVIEW: floats over the scroll area (not the header chips or composer) and renders
           only while THIS transcript's agent holds the desktop lease. A task shows it for its live
@@ -894,7 +905,7 @@ export function TranscriptPanel({ agent: liveAgent, workflow }: { agent: AgentVi
       </div>
       </>
       )}
-      {currentAgent?.busy ? <StreamGlow /> : null}
+      {currentAgent?.busy || currentAgent?.compacting ? <StreamGlow compacting={!!currentAgent?.compacting} /> : null}
     </Panel>
     {!isTaskMode && currentAgent?.provider === "codex" && currentAgentId ? <VoiceConversationPanel key={currentAgentId} agentId={currentAgentId} open={voiceHistoryOpen} onClose={() => setVoiceHistoryOpenFor(null)} /> : null}
     </div>

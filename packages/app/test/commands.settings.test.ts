@@ -4,7 +4,7 @@ import { createSettingsCommands } from "../src/state/commands.settings";
 
 // W9 (F09 · coverage B15/B16) — the Settings command layer: it sends EXACTLY the
 // params the engine expects (accounts.add/setKey/remove/test, config.get/patch,
-// fed.network/up/setAuthKey), never retains a secret, reconciles reads after a
+// fed.cloudflare/up), never retains a secret, reconciles reads after a
 // write, and self-refreshes the right section off a daemon event.
 
 type Call = { method: string; params: unknown };
@@ -21,7 +21,6 @@ function harness(handlers: Record<string, (params: unknown) => unknown> = {}) {
     if (method === "accounts.list") return Promise.resolve([] as unknown as T);
     if (method === "config.get") return Promise.resolve({ autoOrder: [], dailyCapUsd: null } as unknown as T);
     if (method === "daemon.status") return Promise.resolve({ engineId: "mbp", dailyCapUsd: null } as unknown as T);
-    if (method === "fed.network") return Promise.resolve({ installed: true, loggedIn: true, ip4: "100.1.1.1", magicDNS: true, tailscaleSSH: true } as unknown as T);
     if (method === "mcpstore.list") return Promise.resolve([] as unknown as T);
     if (method === "mcpstore.importables") return Promise.resolve({ importables: [] } as unknown as T);
     return Promise.resolve({} as T);
@@ -278,23 +277,7 @@ describe("F23-2B: setProviderOverride", () => {
   });
 });
 
-describe("network writes", () => {
-  it("setAuthKey forwards the key, flags stored, and retains no secret", async () => {
-    const h = harness({ "fed.tailscale.setAuthKey": () => ({ ok: true }) });
-    const ok = await h.cmds.setAuthKey("tskey-auth-SECRET");
-    expect(ok).toBe(true);
-    expect(h.cmds.getState().authKeyStored).toBe(true);
-    expect(JSON.stringify(h.cmds.getState())).not.toContain("SECRET");
-  });
-  it("networkUp stores the returned authUrl and re-probes", async () => {
-    const h = harness({ "fed.network.up": () => ({ authUrl: "https://login.tailscale.com/a/abc" }) });
-    await h.cmds.networkUp();
-    expect(h.cmds.getState().authUrl).toBe("https://login.tailscale.com/a/abc");
-    expect(h.calls.some((c) => c.method === "fed.network")).toBe(true);
-  });
-});
-
-// CLOUDFLARE-APP-SURFACE — mirrors the "network writes" block above: the apiToken
+// CLOUDFLARE-APP-SURFACE — the apiToken
 // handed to fed.cloudflare.up is write-only (a bare RPC argument, dropped once the
 // call returns) and the shared state built off the response is an explicit pick of
 // the known CloudflareProvisionStatus fields, never a raw spread — so nothing
@@ -813,12 +796,6 @@ describe("self-refresh via daemon events (no refresh button)", () => {
     expect(methods).toContain("accounts.list");
     expect(methods).toContain("daemon.status"); // general read
   });
-  it("network_changed refetches fed.network", async () => {
-    const h = harness();
-    h.cmds.onDaemonEvent("network_changed", {});
-    await settle();
-    expect(h.calls.some((c) => c.method === "fed.network")).toBe(true);
-  });
   it("config_error is a toast, not a refresh", async () => {
     const h = harness();
     h.cmds.onDaemonEvent("config_error", { message: "invalid config: caps" });
@@ -827,26 +804,6 @@ describe("self-refresh via daemon events (no refresh button)", () => {
     const err = h.dispatched.find((a) => a["type"] === "commandError");
     expect(err).toBeTruthy();
     expect(String(err!["message"])).toContain("config:");
-  });
-});
-
-// loadNetwork is the direct read behind the network section (and the re-probe after
-// networkUp): it folds fed.network into state and only THEN flags loaded.network, so a
-// failed probe leaves the section explicitly un-loaded rather than falsely "ready".
-describe("loadNetwork", () => {
-  it("folds fed.network into state.network and flags loaded.network", async () => {
-    const h = harness({
-      "fed.network": () => ({ installed: true, loggedIn: true, ip4: "100.2.2.2", magicDNS: false, tailscaleSSH: false }),
-    });
-    await h.cmds.loadNetwork();
-    expect(h.cmds.getState().network).toMatchObject({ ip4: "100.2.2.2", loggedIn: true });
-    expect(h.cmds.getState().loaded.network).toBe(true);
-  });
-  it("a failing fed.network surfaces a commandError and keeps loaded.network false", async () => {
-    const h = harness({ "fed.network": () => { throw new Error("tailscale not installed"); } });
-    await h.cmds.loadNetwork();
-    expect(h.cmds.getState().loaded.network).toBe(false);
-    expect(h.dispatched.some((a) => a["type"] === "commandError")).toBe(true);
   });
 });
 

@@ -20,6 +20,7 @@ vi.mock("../src/rpc/bridge", () => ({
   setDockBadge: vi.fn(async () => {}),
 }));
 
+import { rpcCall } from "../src/rpc/bridge";
 import { AgentList } from "../src/components/AgentList";
 import { registerActionHandler } from "../src/keymap";
 import { appStore } from "../src/state/store";
@@ -91,3 +92,24 @@ describe("a marked agent stays visibly marked when it is not the selected row", 
   });
 });
 
+
+describe("row hold action", () => {
+  it("holds the running row itself, then offers release only once paused", async () => {
+    const records = [{ agentId: "hold-row", state: "running", accountName: "main", provider: "claude", costUsd: 0, createdAt: 1 }];
+    act(() => {
+      appStore.dispatch({ type: "connected", connected: true });
+      appStore.dispatch({ type: "agentRecords", records });
+      appStore.dispatch({ type: "selectAgent", agentId: "hold-row" });
+      mounted = create(<AgentList />);
+    });
+    vi.mocked(rpcCall).mockImplementation(async method => method === "agent.hold" ? { held: ["hold-row"], skipped: [] } : method === "agent.list" ? [{ ...records[0], state: "paused", pauseReason: "operator-hold" }] : []);
+    const button = mounted!.root.findByProps({ "data-agent-action": "agents.hold" });
+    expect(button.props.disabled).toBe(false);
+    await act(async () => button.props.onClick({ stopPropagation() {} }));
+    expect(rpcCall).toHaveBeenCalledWith("agent.hold", { agentIds: ["hold-row"] });
+    // Fleet snapshots paint on a bounded throttle.
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 120)); });
+    expect(mounted!.root.findAllByProps({ "data-agent-action": "agents.hold" })).toHaveLength(0);
+    expect(mounted!.root.findByProps({ "data-agent-action": "agents.resume" }).props["aria-label"]).toBe("release held agent");
+  });
+});

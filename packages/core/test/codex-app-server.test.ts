@@ -1224,3 +1224,36 @@ it("retains acknowledged workspace restrictions and keeps readOnly network acces
     expect(mock.messages.filter(m => m.method === "turn/start")[1].params.sandboxPolicy).toEqual({ type: "readOnly", networkAccess: false });
   } finally { client.close(); }
 });
+
+it("operator modes apply to the next acknowledged Codex turn in the same session", async () => {
+  const mock = server({}, new Set(["turn/start"])); const events: BackendEvent[] = [];
+  const backend = new CodexAgentBackend({ appServerProcess: mock.factory, validateModel: async () => {} });
+  const handle = backend.spawn(cxSpec({ persistent: true, permissionProfile: "acceptEdits", executionMode: "auto", providerOptions: { codexTransport: "app-server" } }), e => events.push(e), async () => false);
+  const turns = () => mock.messages.filter(m => m.method === "turn/start");
+  const ack = (n: number) => { mock.send({ method: "turn/started", params: { threadId: "thread-a", turn: { id: "turn-a" } } }); mock.send({ id: turns()[n].id, result: { turn: { id: "turn-a" } } }); };
+  try {
+    await vi.waitFor(() => expect(turns()).toHaveLength(1));
+    expect(events.some(e => e.data.executionMode)).toBe(false);
+    ack(0);
+    await vi.waitFor(() => expect(events.filter(e => e.data.executionMode).at(-1)?.data.executionMode).toBe("auto"));
+    await expect(handle.setExecutionMode!("bypassPermissions", "full")).rejects.toThrow("risk grant");
+    expect(await handle.setExecutionMode!("plan", "readOnly")).toEqual({ pending: true });
+    expect(turns()).toHaveLength(1);
+    await handle.send("inspect"); mock.complete();
+    await vi.waitFor(() => expect(turns()).toHaveLength(2));
+    expect(turns()[1].params).toMatchObject({ threadId: "thread-a", sandboxPolicy: { type: "readOnly" }, collaborationMode: { mode: "plan", settings: { developer_instructions: null } } });
+    expect(turns()[1].params.collaborationMode.settings.model).toBeTruthy();
+    expect(events.filter(e => e.data.executionMode).at(-1)?.data.executionMode).toBe("auto");
+    ack(1);
+    await vi.waitFor(() => expect(events.filter(e => e.data.executionMode).at(-1)?.data.executionMode).toBe("plan"));
+    await handle.setExecutionMode!("bypassPermissions", "full", true);
+    await handle.send("continue"); mock.complete();
+    await vi.waitFor(() => expect(turns()).toHaveLength(3));
+    expect(turns()[2].params).toMatchObject({ threadId: "thread-a", approvalPolicy: "never", sandboxPolicy: { type: "dangerFullAccess" }, collaborationMode: { mode: "default" } });
+    // A native refusal never attests the requested mode.
+    mock.send({ id: turns()[2].id, error: { code: -32600, message: "policy refused" } });
+    await vi.waitFor(() => expect(events.some(e => e.data.permissionApplication?.profileStatus === "failed")).toBe(true));
+    expect(events.filter(e => e.data.executionMode).at(-1)?.data.executionMode).toBe("plan");
+    expect(mock.messages.filter(m => m.method === "thread/start")).toHaveLength(1);
+  } finally { await handle.kill(); }
+});

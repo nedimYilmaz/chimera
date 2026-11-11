@@ -3,7 +3,6 @@ import * as React from "react";
 import { act, create, type ReactTestInstance } from "react-test-renderer";
 
 import { TranscriptHeader } from "../src/components/TranscriptHeader";
-import { displayChord } from "../src/keymap";
 
 // WORKFLOW-UI-2 (header parity) — TranscriptHeader is the SHARED component
 // extracted verbatim out of TranscriptPanel.tsx's former inline header
@@ -55,14 +54,8 @@ function byClass(renderer: ReturnType<typeof create>, pattern: RegExp): ReactTes
 }
 
 describe("TranscriptHeader — headerTop (name/id button + state chip)", () => {
-  it("shows only observed native mode and opens settings from its chip", () => {
-    const onAction = vi.fn();
-    const r = renderHeader({ executionMode: "plan", onAction });
-    const chip = r.root.findByProps({ "data-execution-mode": "plan" });
-    expect(chip.children).toEqual(["plan mode"]);
-    act(() => chip.props.onClick());
-    expect(onAction).toHaveBeenCalledWith("system.agentSettings");
-    act(() => r.update(<TranscriptHeader {...baseProps} />));
+  it("keeps execution mode in the composer rather than duplicating it in the header", () => {
+    const r = renderHeader({ executionMode: "plan" });
     expect(r.root.findAll(n => n.props["data-execution-mode"])).toHaveLength(0);
     act(() => r.unmount());
   });
@@ -76,6 +69,56 @@ describe("TranscriptHeader — headerTop (name/id button + state chip)", () => {
     act(() => renderer.update(<TranscriptHeader {...baseProps} voiceHistoryOpen onToggleVoiceHistory={onToggleVoiceHistory} />));
     expect(renderer.root.findByProps({ "aria-label": "Hide voice history" }).props["aria-pressed"]).toBe(true);
     act(() => renderer.unmount());
+  });
+  it("reflects the remote connection and toggles it without opening a panel", () => {
+    const onAction = vi.fn();
+    const r = renderHeader({ onAction });
+    const button = () => r.root.findByProps({ "aria-label": "remote control" });
+    expect(button().props["aria-pressed"]).toBe(false);
+    act(() => button().props.onClick());
+    expect(onAction).toHaveBeenCalledWith("system.remoteControl");
+    act(() => r.update(<TranscriptHeader {...baseProps} remoteControlEnabled remoteControlActive />));
+    expect(button().props["aria-expanded"]).toBeUndefined();
+    expect(button().props["aria-pressed"]).toBe(true);
+    expect(button().props.title).toContain("Disable");
+    act(() => r.unmount());
+  });
+  it("blocks repeated remote requests until acknowledgement", async () => {
+    let finish!: () => void;
+    const onAction = vi.fn(() => new Promise<void>(resolve => { finish = resolve; }));
+    const r = renderHeader({ onAction, resourceAgentId: "pending-agent" });
+    const button = () => r.root.findByProps({ "aria-label": "remote control" });
+    act(() => { button().props.onClick(); button().props.onClick(); });
+    expect(onAction).toHaveBeenCalledTimes(1);
+    expect(button().props.disabled).toBe(true);
+    await act(async () => { finish(); });
+    expect(button().props.disabled).toBe(false);
+    act(() => r.unmount());
+  });
+  it("reflects the selected agent's terminal dock and dispatches the existing toggle", () => {
+    const onAction = vi.fn();
+    const r = renderHeader({ terminalOpen: true, onAction });
+    const button = () => r.root.findByProps({ "aria-label": "toggle terminal" });
+    expect(button().props["aria-pressed"]).toBe(true);
+    expect(button().props.title).toContain("Hide terminal");
+    act(() => button().props.onClick());
+    expect(onAction).toHaveBeenCalledWith("terminal.toggle");
+    act(() => r.update(<TranscriptHeader {...baseProps} terminalOpen={false} />));
+    expect(button().props["aria-expanded"]).toBe(false);
+    expect(button().props["aria-pressed"]).toBe(false);
+    act(() => r.unmount());
+  });
+  it("shows compaction only while busy and prevents duplicate submissions", () => {
+    const r = renderHeader({ compacting: true });
+    const button = () => r.root.findByProps({ "aria-label": "compact context now" });
+    expect(button().props.disabled).toBe(true);
+    expect(button().props["aria-busy"]).toBe(true);
+    expect(button().props["data-active"]).toBe(true);
+    expect(button().props["aria-pressed"]).toBeUndefined();
+    act(() => r.update(<TranscriptHeader {...baseProps} compacting={false} />));
+    expect(button().props.disabled).toBe(false);
+    expect(button().props["data-active"]).toBe(false);
+    act(() => r.unmount());
   });
   it("renders the name, full id, and a collapsed detail glyph", () => {
     const renderer = renderHeader();
@@ -98,21 +141,12 @@ describe("TranscriptHeader — headerTop (name/id button + state chip)", () => {
     expect(onToggleDetail).toHaveBeenCalledTimes(1);
   });
 
-  it("state chip renders the caller-composed glyph+label text, toned by `tone`", () => {
-    const renderer = renderHeader({ state: "● done", tone: "info" });
-    const [chip] = byClass(renderer, /stateChip/);
-    expect(chip!.children.join("")).toBe("● done");
-    expect(chip!.props["className"] as string).toMatch(/toneInfo/);
-  });
-
-  it("overBudget preserves running tone and renders a separate warning", () => {
-    const renderer = renderHeader({ state: "◐ running", tone: "success", overBudget: true });
-    const [chip] = byClass(renderer, /stateChip/);
-    expect(chip!.children.join("")).toBe("◐ running");
-    const warning = renderer.root.findByProps({ "data-soft-limit-warning": true });
-    expect(warning.children.join("")).toContain("soft limit");
-    expect(chip!.props["className"] as string).toMatch(/toneSuccess/);
-    expect(chip!.props["className"] as string).not.toMatch(/toneWarn/);
+  it("omits duplicate lifecycle status while retaining the soft-limit warning", () => {
+    const r = renderHeader({ state: "◐ running", overBudget: true, search: <input aria-label="History search" /> });
+    expect(byClass(r, /stateChip/)).toHaveLength(0);
+    expect(r.root.findByProps({ "aria-label": "History search" })).toBeDefined();
+    expect(r.root.findByProps({ "data-soft-limit-warning": true }).children.join("")).toContain("soft limit");
+    act(() => r.unmount());
   });
 });
 
@@ -251,52 +285,12 @@ describe("TranscriptHeader — chipRow (model/account/cost/ctx meter + sparkline
     expect(r.root.findAllByProps({ "data-token-rate": true })).toHaveLength(0);
   });
 });
-
-// CONDUCTOR-FULL-ACCESS: the live permission chip (`profile·requestMode`, e.g.
-// `full·auto`). It is warn-toned ONLY when a full-access agent runs unattended
-// (`profile === "full" && request === "auto"`) — a full conductor is intentional,
-// so any other combination stays neutral, never danger — and it is hidden entirely
-// until a snapshot/event carries `permissionProfile` (an older daemon renders as
-// before). The chip is located by its stable `title` (the CSS-module class is a
-// build-time hash, so warn-tone is matched by the `toneWarn` substring exactly as
-// the stateChip tests above do).
-describe("TranscriptHeader — CONDUCTOR-FULL-ACCESS permission chip", () => {
-  const PERM_TITLE = `permission scope (change via agent_set_permission or ${displayChord("mod+p")})`;
-  function permChips(renderer: ReturnType<typeof create>): ReactTestInstance[] {
-    return renderer.root.findAllByProps({ title: PERM_TITLE });
-  }
-
-  it("hides the permission chip entirely when permissionProfile is undefined", () => {
-    const renderer = renderHeader({ permissionProfile: undefined, permissionRequest: undefined });
-    expect(permChips(renderer)).toHaveLength(0);
-  });
-
-  it("warn-tones the chip when a full-access agent runs auto (unattended)", () => {
-    const renderer = renderHeader({ permissionProfile: "full", permissionRequest: "auto" });
-    const [chip] = permChips(renderer);
-    expect(chip!.children.join("")).toBe("full·auto");
-    expect(chip!.props["className"] as string).toMatch(/toneWarn/);
-  });
-
-  it("stays neutral (no warn) for a full profile that is NOT auto-routed", () => {
-    const renderer = renderHeader({ permissionProfile: "full", permissionRequest: "tui" });
-    const [chip] = permChips(renderer);
-    expect(chip!.children.join("")).toBe("full·tui");
-    expect(chip!.props["className"] as string).not.toMatch(/toneWarn/);
-  });
-
-  it("stays neutral for a non-full profile even when auto-routed", () => {
-    const renderer = renderHeader({ permissionProfile: "acceptEdits", permissionRequest: "auto" });
-    const [chip] = permChips(renderer);
-    expect(chip!.children.join("")).toBe("acceptEdits·auto");
-    expect(chip!.props["className"] as string).not.toMatch(/toneWarn/);
-  });
-
-  it("renders the bare profile with no ·request suffix when permissionRequest is absent", () => {
-    const renderer = renderHeader({ permissionProfile: "readOnly", permissionRequest: undefined });
-    const [chip] = permChips(renderer);
-    expect(chip!.children.join("")).toBe("readOnly");
-    expect(chip!.props["className"] as string).not.toMatch(/toneWarn/);
+describe("TranscriptHeader permission summary", () => {
+  it.each(["full", "acceptEdits", "readOnly"])("keeps normal %s permission in details without a duplicate chip", permissionProfile => {
+    const r = renderHeader({ permissionProfile, permissionRequest: "auto" });
+    expect(r.root.findAll(n => n.props["data-permission-tone"])).toHaveLength(0);
+    expect(JSON.stringify(r.toJSON())).toContain(`Permissions: `);
+    act(() => r.unmount());
   });
 });
 
@@ -329,10 +323,15 @@ it.each(["pending", "failed", "unverified", "applied"] as const)("renders truthf
   const renderer = renderHeader({ permissionProfile: "readOnly", permissionRequest: "tui", permissionAppliedToRunningProcess: false,
     permissionApplication: { version: 1, requestedProfile: "readOnly", effectiveProfile: "full", profileStatus, requestedRouting: "tui", routingStatus: profileStatus === "applied" ? "applied" : "bypassed", transport: "app-server", nativeApprovals: true, ...(profileStatus === "failed" ? { error: "policy rejected" } : {}) } });
   const chip = renderer.root.findAllByType("span").find(node => typeof node.props.title === "string" && node.props.title.startsWith("Requested:"))!;
+  if (profileStatus === "applied") {
+    expect(chip).toBeUndefined();
+    act(() => renderer.unmount());
+    return;
+  }
   expect(chip.props.title).toContain("effective: full");
   expect(chip.props.title).not.toContain("respawn required");
-  expect(chip.children.join("")).toContain(profileStatus === "pending" ? "next turn pending" : profileStatus === "failed" ? "apply failed" : profileStatus === "unverified" ? "profile unverified" : "readOnly·tui");
-  if (profileStatus === "applied") expect(chip.children.join("")).not.toContain("⚠");
+  expect(chip.children.join("")).toContain(profileStatus === "pending" ? "next turn pending" : profileStatus === "failed" ? "apply failed" : profileStatus === "unverified" ? "profile unverified" : "");
+  act(() => renderer.unmount());
 });
 
 it("exec submitted copy keeps effective policy unknown and routing unavailable", () => {
@@ -356,4 +355,17 @@ it("fresh exec full/auto profile uncertainty is neutral and still inspectable", 
   expect(chip.props.title).toContain("effective: unknown");
   expect(chip.props.title).toContain("Exec submitted full (generation 0)");
   act(() => r.unmount());
+});
+
+
+describe("conversation control placement", () => {
+  it("keeps lifecycle controls and duplicate paused status out of the conversation header", () => {
+    const r = renderHeader({ lifecycleState: "running" });
+    expect(r.root.findAll(n => n.props["data-agent-lifecycle"])).toHaveLength(0);
+    expect(r.root.findByProps({ "data-agent-detail-toggle": true })).toBeTruthy();
+    act(() => r.update(<TranscriptHeader {...baseProps} state="⏸ paused" lifecycleState="paused" />));
+    expect(r.root.findAllByProps({ "aria-label": "⏸ paused" })).toHaveLength(0);
+    expect(r.root.findByProps({ "aria-label": "remote control" }).findByType("svg")).toBeTruthy();
+    act(() => r.unmount());
+  });
 });

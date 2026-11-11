@@ -10,15 +10,16 @@ import styles from "./QueueFormCard.module.css";
 // W16 (F15/D11 CRUD completion, coverage B9) — the create/edit-queue form,
 // structurally a copy of TeamFormCard's field-walk convention (OverlayCard
 // center 620). Fields: name* (locked once editing — identity field) /
-// retryLimit. Create calls queue.create{spec}; edit calls queue.update{patch}
-// (only retryLimit is patchable); esc cancels, mod+o re-toggles.
+// existingAgentId / retryLimit. Create calls queue.create{spec}; edit calls
+// queue.update{patch}; esc cancels, mod+o re-toggles.
 
 type FieldKey = keyof QueueFormValues;
-const FIELD_ORDER: readonly FieldKey[] = ["name", "retryLimit"];
+const FIELD_ORDER: readonly FieldKey[] = ["name", "existingAgentId", "retryLimit"];
 
-export function QueueFormCard({ mode = "create", initial, onSubmit, onClose }: {
+export function QueueFormCard({ mode = "create", initial, agents = [], onSubmit, onClose }: {
   mode?: "create" | "edit";
   initial?: QueueFormValues;
+  agents?: Array<{ id: string; name: string }>;
   onSubmit: (payload: Record<string, unknown>) => Promise<void>;
   onClose: () => void;
 }) {
@@ -27,7 +28,7 @@ export function QueueFormCard({ mode = "create", initial, onSubmit, onClose }: {
   const dirty = JSON.stringify(values) !== JSON.stringify(initialValuesRef.current);
   const [confirmClose, setConfirmClose] = useState(false);
   const requestClose = (): void => { if (dirty) setConfirmClose(true); else onClose(); };
-  // name (index 0) is locked in edit mode — start the walk on retryLimit.
+  // name (index 0) is locked in edit mode — start on the target agent.
   const [fieldIndex, setFieldIndex] = useState(() => (mode === "edit" ? 1 : 0));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -51,7 +52,7 @@ export function QueueFormCard({ mode = "create", initial, onSubmit, onClose }: {
     const invalid = validateQueueForm(values);
     if (invalid) {
       setError(invalid);
-      setFieldIndex(invalid.startsWith("name") ? 0 : 1);
+      setFieldIndex(invalid.startsWith("name") ? 0 : FIELD_ORDER.indexOf("retryLimit"));
       return;
     }
     const payload = editing ? buildQueueUpdatePatch(values) : buildQueueSpec(values);
@@ -78,7 +79,8 @@ export function QueueFormCard({ mode = "create", initial, onSubmit, onClose }: {
       <input
         ref={(el) => { inputRefs.current[key] = el; }}
         className={key === activeKey ? styles.inputActive : styles.input}
-        value={values[key]}
+        value={values[key] ?? ""}
+        list={key === "existingAgentId" ? "queue-existing-agents" : undefined}
         placeholder={placeholder}
         disabled={locked}
         onChange={(e) => set(key)(e.target.value)}
@@ -97,7 +99,10 @@ export function QueueFormCard({ mode = "create", initial, onSubmit, onClose }: {
         />
         <div className={styles.fields}>
           {field("name", "name", "", editing)}
+          {field("existingAgentId", "existing agent", "Blank: use team workers; otherwise select or paste an agent ID")}
           {field("retryLimit", "retry limit")}
+          <datalist id="queue-existing-agents">{agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</datalist>
+          <p>Bind to one persistent agent to process tasks in the same conversation. Tasks run serially and remain in progress until the agent records their result. Agent settings and budget apply; no replacement agent is spawned.</p>
         </div>
         <div className={styles.footer}>
           <ChipButton className={styles.submitChip} onClick={submit} disabled={busy} data-queue-submit>

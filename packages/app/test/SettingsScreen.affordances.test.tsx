@@ -13,6 +13,7 @@ vi.mock("../src/rpc/bridge", () => ({
   rpcCall: vi.fn(async (method: string) => {
     if (method === "daemon.status") return { agents: {}, accounts: [], peers: [] };
     if (method === "config.get") return {};
+    if (method === "operatorweb.status") return { enabled: false, sessions: [], settings: { publicOrigin: null, idleMin: 15, absoluteH: 8 } };
     return [];
   }),
   subscribeEvents: vi.fn(async () => {}),
@@ -59,5 +60,20 @@ describe("SettingsScreen custom provider entry", () => {
 
     expect(mounted!.root.findAllByProps({ "data-custom-provider-form": true })).toHaveLength(1);
     expect(mounted!.root.findAllByProps({ "data-add-form": true })).toHaveLength(0);
+  });
+});
+
+describe("SettingsScreen network services", () => {
+  it("keeps federation and network services without probing or offering Tailscale", async () => {
+    vi.mocked(rpcCall).mockClear();
+    getSettingsCommands(appStore, rpcCall).setSection("network");
+    await act(async () => { mounted = create(React.createElement(SettingsScreen)); });
+
+    expect(mounted!.root.findAllByProps({ "data-cloudflare-block": true })).toHaveLength(1);
+    expect(mounted!.root.findAllByProps({ "data-mcp-listener": true })).toHaveLength(1);
+    expect(mounted!.root.findAllByProps({ "data-federation-pairing-seam": true })).toHaveLength(1);
+    expect(mounted!.root.findAllByProps({ "data-tailscale-block": true })).toHaveLength(0);
+    expect(mounted!.root.findAllByProps({ "data-auth-key": true })).toHaveLength(0);
+    expect(vi.mocked(rpcCall).mock.calls.some(([method]) => method.startsWith("fed.network") || method.startsWith("fed.tailscale"))).toBe(false);
   });
 });

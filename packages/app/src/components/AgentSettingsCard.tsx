@@ -127,7 +127,7 @@ export function AgentSettingsCard({ agentId, onClose }: { agentId: string; onClo
     setPatch((p) => ({ ...p, ...(k === "account" && accounts.find((a) => a.name === v)?.provider !== targetProvider ? { model: "", effort: "" } : {}), [k]: v }));
   };
 
-  const needsRiskGrant = targetProvider === "codex" && live.permissionProfile === "full"
+  const needsRiskGrant = targetProvider === "codex" && (live.permissionProfile === "full" || live.executionMode === "bypassPermissions")
     && (targetProvider !== agent?.provider || spec?.["acknowledgeCodexFullAccessRisk"] !== true);
 
   const submit = async (): Promise<void> => {
@@ -158,7 +158,7 @@ export function AgentSettingsCard({ agentId, onClose }: { agentId: string; onClo
 
     const livePatch: Live = {};
     const liveMoved = (k: keyof Live): boolean => ((live[k] ?? "") as string) !== ((baseline.live[k] ?? "") as string);
-    if (targetProvider === "claude" && agent?.provider === "claude" && spec?.runtime !== "terminal"
+    if (targetProvider === agent?.provider && spec?.runtime !== "terminal"
       && liveMoved("executionMode") && live.executionMode) livePatch.executionMode = live.executionMode;
     if (liveMoved("permissionProfile") && live.permissionProfile) livePatch.permissionProfile = live.permissionProfile;
     if (liveMoved("permissionRequest") && live.permissionRequest) livePatch.permissionRequest = live.permissionRequest;
@@ -196,7 +196,7 @@ export function AgentSettingsCard({ agentId, onClose }: { agentId: string; onClo
       {opts ? (
         <select className={`${styles.inputBox} ${own.nativeField}`} value={patch[key] ?? ""} onChange={(e) => set(key, e.target.value)} data-settings-field={key}>
           <option value="">—</option>
-          {opts.map((o) => <option key={o} value={o}>{o}</option>)}
+          {opts.map((o) => <option key={o} value={o}>{key === "executionMode" && o === "bypassPermissions" ? "Full access (bypass permissions)" : o}</option>)}
         </select>
       ) : (
         <input className={`${styles.inputBox} ${own.nativeField}`} value={patch[key] ?? ""} onChange={(e) => set(key, e.target.value)} data-settings-field={key} />
@@ -211,17 +211,17 @@ export function AgentSettingsCard({ agentId, onClose }: { agentId: string; onClo
         <select
           className={`${styles.inputBox} ${own.nativeField}`}
           value={(live[key] as string) ?? ""}
-          onChange={(e) => { if (key === "permissionProfile") setAcknowledgeRisk(false); setLive((l) => ({ ...l, [key]: e.target.value })); }}
+          onChange={(e) => { if (key === "permissionProfile" || key === "executionMode") setAcknowledgeRisk(false); setLive((l) => ({ ...l, [key]: e.target.value })); }}
           data-settings-field={key}
         >
           <option value="">—</option>
-          {opts.map((o) => <option key={o} value={o}>{o}</option>)}
+          {opts.map((o) => <option key={o} value={o}>{key === "executionMode" && o === "bypassPermissions" ? "Full access (bypass permissions)" : o}</option>)}
         </select>
       ) : (
         <input
           className={`${styles.inputBox} ${own.nativeField}`}
           value={(live[key] as string) ?? ""}
-          onChange={(e) => { if (key === "permissionProfile") setAcknowledgeRisk(false); setLive((l) => ({ ...l, [key]: e.target.value })); }}
+          onChange={(e) => { if (key === "permissionProfile" || key === "executionMode") setAcknowledgeRisk(false); setLive((l) => ({ ...l, [key]: e.target.value })); }}
           data-settings-field={key}
         />
       )}
@@ -260,7 +260,7 @@ export function AgentSettingsCard({ agentId, onClose }: { agentId: string; onClo
           </div>
           <div className={`${styles.pair} ${own.pair}`}>
             {field("maxBudgetUsd", "budget $")}
-            {field("autonomy", "autonomy", ["ask", "full"])}
+            {field("autonomy", "decision autonomy", ["ask", "full"])}
           </div>
           {/* The context window this agent compacts against, NOT the model's native one. The CLI
               fires at ~90% of it, so 500000 compacts near 450k — the point being that a 1M agent
@@ -291,13 +291,13 @@ export function AgentSettingsCard({ agentId, onClose }: { agentId: string; onClo
 
           <div className={styles.fieldHint}>applies live — no restart, no interrupted turn</div>
           {liveField("displayLabel", "name")}
-          {targetProvider === "claude" && agent?.provider === "claude" && spec?.runtime !== "terminal" && <>
-            {liveField("executionMode", "execution mode", ["auto", "execute", "plan"])}
-            <div className={`${styles.fieldHint} ${styles.wrapHint}`}>Auto explicitly selects Claude’s automatic permission review, independently of the role default. Plan prevents execution. Execute uses the configured native mode. Changes apply after Claude acknowledges them; Chimera permission restrictions still apply.</div>
+          {targetProvider === agent?.provider && spec?.runtime !== "terminal" && <>
+            {liveField("executionMode", "execution mode", targetProvider === "kimi" ? ["auto", "execute", "bypassPermissions"] : ["auto", "execute", "plan", "bypassPermissions"])}
+            <div className={`${styles.fieldHint} ${styles.wrapHint}`}>Auto selects the provider’s normal working mode. Plan restricts execution where supported. Full access requests unrestricted operation; provider policy may refuse it. Codex applies on the next turn; Claude and Kimi acknowledge native mode changes. API providers use Chimera-managed tool controls. Execute retains configured defaults.</div>
           </>}
           <div className={`${styles.pair} ${own.pair}`}>
-            {liveField("permissionProfile", "permission", PROFILES)}
-            {liveField("permissionRequest", "ask routing", REQUESTS)}
+            {liveField("permissionProfile", "Chimera tool access", PROFILES)}
+            {liveField("permissionRequest", "Chimera approval routing", REQUESTS)}
           </div>
         </div>
         <div className={styles.footer}>

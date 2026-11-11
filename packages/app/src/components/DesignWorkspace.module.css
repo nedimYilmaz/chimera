@@ -24,3 +24,16 @@
   .panes[data-view="split"] { flex-direction: column; overflow: auto; }
   .panes[data-view="split"] > .conversation, .panes[data-view="split"] > .panel { flex: 1 0 400px; }
 }
+
+.workspace { padding-bottom:0; }
+.workspace > div:first-child { padding:0 14px; }
+.switches { padding:0; gap:20px; border:0; min-height:38px; }
+.switches button { border:0; border-radius:0; border-bottom:2px solid transparent; padding:9px 2px; background:none; color:var(--muted); cursor:pointer; }
+.switches button[aria-selected="true"] { color:var(--accent); border-bottom-color:var(--accent); }
+.switches button:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
+.switches button:disabled { opacity:.5; cursor:default; }
+.panes { padding-top:0; gap:0; }
+.conversation[hidden] { display:none; }
+.designPane { display:flex; flex:1; min-width:0; min-height:0; }
+
+.switches [data-agent-detail-toggle] { max-width:min(70%, 420px); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }

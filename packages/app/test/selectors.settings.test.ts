@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AccountStatus, AgentCapStatus } from "@chimera/ui-state";
-import { CONFIG_PATCH_NULL, type McpOAuthGateway, type TailscaleNetworkStatus, type CloudflareProvisionStatus, type DynamicCapConfig } from "@chimera/protocol";
+import { CONFIG_PATCH_NULL, type McpOAuthGateway, type CloudflareProvisionStatus, type DynamicCapConfig } from "@chimera/protocol";
 import {
   SETTINGS_SECTIONS,
   stepSection,
@@ -20,9 +20,7 @@ import {
   reorderAutoOrder,
   type ProviderCatalogItem,
   maskKey,
-  networkView,
   cloudflareView,
-  authKeyBadge,
   parseDailyCap,
   dailyCapPatch,
   fmtDailyCap,
@@ -244,38 +242,6 @@ describe("maskKey (write-only field never echoes the secret)", () => {
   });
 });
 
-describe("networkView (fed.network state)", () => {
-  it("null → loading placeholders", () => {
-    const v = networkView(null);
-    expect(v.loaded).toBe(false);
-    expect(v.statusLabel).toBe("…");
-  });
-  it("installed:false → install path (mock)", () => {
-    const v = networkView({ installed: false, loggedIn: false, ip4: null, magicDNS: false, tailscaleSSH: false });
-    expect(v.statusLabel).toBe("not installed");
-    expect(v.statusTone).toBe("danger");
-    expect(v.installHint).not.toBeNull();
-    // coverage B15: the installed:false path shows an ACTUAL install command + URL
-    expect(v.installCmd).toBe("curl -fsSL https://tailscale.com/install.sh | sh");
-    expect(v.installUrl).toBe("https://tailscale.com/download");
-  });
-  it("logged in → connected + ip/magicdns/ssh labels", () => {
-    const status: TailscaleNetworkStatus = { installed: true, loggedIn: true, ip4: "100.101.5.12", magicDNS: true, tailscaleSSH: true };
-    const v = networkView(status);
-    expect(v.statusLabel).toBe("connected");
-    expect(v.statusTone).toBe("success");
-    expect(v.ip4).toBe("100.101.5.12");
-    expect(v.magicDnsLabel).toBe("on");
-    expect(v.sshLabel).toBe("tailscale ssh — keyless mode");
-  });
-  it("installed but logged out → warn", () => {
-    const v = networkView({ installed: true, loggedIn: false, ip4: null, magicDNS: false, tailscaleSSH: false });
-    expect(v.statusLabel).toBe("logged out");
-    expect(v.statusTone).toBe("warn");
-    expect(v.sshLabel).toBe("off");
-  });
-});
-
 describe("cloudflareView (fed.cloudflare state) — CLOUDFLARE-APP-SURFACE", () => {
   const base: CloudflareProvisionStatus = {
     installed: false, provisioned: false, hostname: null,
@@ -308,7 +274,7 @@ describe("cloudflareView (fed.cloudflare state) — CLOUDFLARE-APP-SURFACE", () 
     expect(v.statusTone).toBe("success");
     expect(v.hostname).toBe("peer.example.com");
   });
-  it("null → loading placeholder, same convention as networkView", () => {
+  it("null → loading placeholder", () => {
     const v = cloudflareView(null);
     expect(v.loaded).toBe(false);
     expect(v.statusLabel).toBe("…");
@@ -322,13 +288,6 @@ describe("cloudflareView (fed.cloudflare state) — CLOUDFLARE-APP-SURFACE", () 
     ]);
     expect(labels.size).toBe(4);
     for (const l of labels) expect(l.length).toBeGreaterThan(0);
-  });
-});
-
-describe("authKeyBadge", () => {
-  it("reflects only this-session storage (daemon never reports presence)", () => {
-    expect(authKeyBadge(true)).toEqual({ label: "▪ set", tone: "success" });
-    expect(authKeyBadge(false)).toEqual({ label: "not set", tone: "danger" });
   });
 });
 
@@ -706,10 +665,6 @@ describe("F39.QA-A: compactionThresholdLabel", () => {
 describe("sectionsForEvent (self-refresh mapping — no refresh button)", () => {
   it("config_changed refreshes providers + general (both live in config)", () => {
     expect(sectionsForEvent("config_changed")).toEqual(["providers", "general"]);
-  });
-  it("network_changed refreshes network + cloudflare (CLOUDFLARE-APP-SURFACE); peer_paired refreshes network only", () => {
-    expect(sectionsForEvent("network_changed")).toEqual(["network", "cloudflare"]);
-    expect(sectionsForEvent("peer_paired")).toEqual(["network"]);
   });
   it("config_error is NOT a refresh (it is a toast)", () => {
     expect(sectionsForEvent("config_error")).toEqual([]);

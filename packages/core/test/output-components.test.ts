@@ -8,7 +8,7 @@ import { EventLog } from "@chimera/core/events";
 import { MailboxStore } from "@chimera/core/mailbox";
 import { CooldownTracker } from "@chimera/core/failover";
 import { FakeAgentBackend } from "@chimera/core/backends/fake";
-import { AgentSupervisor } from "@chimera/core/supervisor";
+import { AgentSupervisor, SHARED_MEMORY_POLICY } from "@chimera/core/supervisor";
 import { Engine } from "@chimera/core/engine";
 import type { AgentBackend } from "@chimera/core/backend";
 import { CLIENT_CAP_UI_COMPONENTS } from "@chimera/protocol";
@@ -33,22 +33,22 @@ function makeGatedSupervisor(uiComponentsEnabled?: () => boolean) {
 }
 
 describe("AgentSupervisor: F21/D17 output-components cheatsheet gate", () => {
-  it("omits the cheatsheet when uiComponentsEnabled is absent (byte-identical to pre-D17)", async () => {
+  it("omits the cheatsheet when uiComponentsEnabled is absent", async () => {
     const { sup, fake } = makeGatedSupervisor();
     await sup.spawn({ prompt: "hi", cwd: "/tmp", isolation: "none" });
-    expect(fake.spawns[0]!.instructions).toBeUndefined();
+    expect(fake.spawns[0]!.instructions).toBe(SHARED_MEMORY_POLICY);
   });
 
   it("omits the cheatsheet when uiComponentsEnabled returns false", async () => {
     const { sup, fake } = makeGatedSupervisor(() => false);
     await sup.spawn({ prompt: "hi", cwd: "/tmp", isolation: "none" });
-    expect(fake.spawns[0]!.instructions).toBeUndefined();
+    expect(fake.spawns[0]!.instructions).toBe(SHARED_MEMORY_POLICY);
   });
 
   it("appends the cheatsheet verbatim when uiComponentsEnabled returns true", async () => {
     const { sup, fake } = makeGatedSupervisor(() => true);
     await sup.spawn({ prompt: "hi", cwd: "/tmp", isolation: "none" });
-    expect(fake.spawns[0]!.instructions).toBe(OUTPUT_COMPONENTS_CHEATSHEET);
+    expect(fake.spawns[0]!.instructions).toBe(`${SHARED_MEMORY_POLICY}\n\n${OUTPUT_COMPONENTS_CHEATSHEET}`);
   });
 
   it("is read fresh per launch, not snapshotted at supervisor construction", async () => {
@@ -57,10 +57,10 @@ describe("AgentSupervisor: F21/D17 output-components cheatsheet gate", () => {
     // Distinct accounts (not sequencing/timing) keep this deterministic regardless of
     // how fast the fake backend's default scenario settles the first agent to "done".
     await sup.spawn({ prompt: "first", cwd: "/tmp", isolation: "none", account: "main" });
-    expect(fake.spawns[0]!.instructions).toBeUndefined();
+    expect(fake.spawns[0]!.instructions).toBe(SHARED_MEMORY_POLICY);
     enabled = true;
     await sup.spawn({ prompt: "second", cwd: "/tmp", isolation: "none", account: "second" });
-    expect(fake.spawns[1]!.instructions).toBe(OUTPUT_COMPONENTS_CHEATSHEET);
+    expect(fake.spawns[1]!.instructions).toBe(`${SHARED_MEMORY_POLICY}\n\n${OUTPUT_COMPONENTS_CHEATSHEET}`);
   });
 
   // TOKEN-OPT-CACHE-PREFIX: the SHARED blocks lead and the caller's own instructions follow.
@@ -96,10 +96,10 @@ describe("AgentSupervisor: F21/D17 output-components cheatsheet gate", () => {
     expect(preamble).not.toContain("/tmp");
   });
 
-  it("existing makeSupervisor() callers (no uiComponentsEnabled dep at all) stay byte-identical", async () => {
+  it("existing makeSupervisor() callers (no uiComponentsEnabled dep at all) receive only shared memory policy", async () => {
     const { sup, fake } = makeSupervisor([]);
     await sup.spawn({ prompt: "hi", cwd: "/tmp", isolation: "none" });
-    expect(fake.spawns[0]!.instructions).toBeUndefined();
+    expect(fake.spawns[0]!.instructions).toBe(SHARED_MEMORY_POLICY);
   });
 });
 
@@ -144,14 +144,14 @@ describe("Engine: F21/D17 client capability registry", () => {
     expect(e.hasClientCap(CLIENT_CAP_UI_COMPONENTS)).toBe(false);
   });
 
-  it("end-to-end: a fresh spawn on an Engine with the capability declared carries the cheatsheet; without it, byte-identical", async () => {
+  it("end-to-end: a fresh spawn on an Engine with the capability declared carries the cheatsheet; without it, only memory policy", async () => {
     const fake = new FakeAgentBackend([]);
     const e = new Engine({ home: makeEngineHome(), backends: new Map<string, AgentBackend>([["claude", fake]]) });
     await e.handle("agent.spawn", { spec: { prompt: "hello", cwd: "/tmp", isolation: "none" } });
-    expect(fake.spawns[0]!.instructions).toBeUndefined();
+    expect(fake.spawns[0]!.instructions).toBe(SHARED_MEMORY_POLICY);
 
     e.declareClientCaps({}, [CLIENT_CAP_UI_COMPONENTS]);
     await e.handle("agent.spawn", { spec: { prompt: "hello again", cwd: "/tmp", isolation: "none" } });
-    expect(fake.spawns[1]!.instructions).toBe(OUTPUT_COMPONENTS_CHEATSHEET);
+    expect(fake.spawns[1]!.instructions).toBe(`${SHARED_MEMORY_POLICY}\n\n${OUTPUT_COMPONENTS_CHEATSHEET}`);
   });
 });

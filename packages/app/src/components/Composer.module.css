@@ -162,17 +162,6 @@
   color: var(--faint);
 }
 
-/* F13: "N/8 lines · grows with content" — shown only while the input has
-   content, self-aligned to the input row's bottom like the mock. */
-.growHint {
-  align-self: flex-end;
-  color: var(--ghost);
-  font-size: var(--fs-meta);
-  white-space: nowrap;
-  line-height: var(--lh);
-  flex-shrink: 0;
-}
-
 .strip { container-type:inline-size; container-name:composer; min-width:0; }
 .row { flex-wrap:wrap; min-width:0; }
 .chipWrap { max-width:100%; }
@@ -181,5 +170,28 @@
 @container composer (max-width:650px) {
   .row { gap:8px; }
   .inputWrap { order:1; flex-basis:100%; }
-  .growHint { order:2; white-space:normal; }
 }
+
+.shellStatus { padding: 4px 10px; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.shellStatus pre { max-height: 180px; overflow: auto; white-space: pre-wrap; }
+.shellStatus button { color: inherit; background: var(--panel); border: 1px solid var(--line-soft); border-radius: 4px; cursor: pointer; }
+
+.actionBar { display:flex; flex-shrink:0; align-items:center; justify-content:flex-start; min-width:0; margin:4px 0 6px; padding:6px 8px; background:var(--panel); border:1px solid var(--line-soft); border-radius:var(--radius-panel); }
+.actionBar:empty { display:none; }
+
+.composeFrame { flex-shrink:0; min-width:0; border:1px solid var(--line-strong); border-radius:var(--radius-panel); background:var(--panel); }
+.composeFrame .strip { border:0; border-radius:0 0 var(--radius-panel) var(--radius-panel); }
+.composeFrame .actionBar { margin:0; padding:5px 8px 3px; border:0; border-radius:var(--radius-panel) var(--radius-panel) 0 0; gap:5px; flex-wrap:wrap; background:transparent; }
+.actionHost { display:contents; }
+.actionBar:not(:has(button,select)) { display:none; }
+
+/* Share the first column across the mode and recipient rows. */
+.composeFrame { --composer-selector-width:150px; }
+.composeFrame .strip { padding-inline:8px; }
+.composeFrame .chipWrap { flex:0 0 var(--composer-selector-width); width:var(--composer-selector-width); }
+.composeFrame .targetChip { display:flex; align-items:center; gap:5px; width:100%; height:30px; box-sizing:border-box; padding:3px 10px; border:1px solid var(--line-strong); color:var(--fg-soft); overflow:hidden; white-space:nowrap; }
+.composeFrame .chipCaret { margin-left:auto; }
+.composeFrame [data-agent-permission] { flex:0 0 var(--composer-selector-width); width:var(--composer-selector-width); margin-right:0; }
+.composeFrame [data-agent-permission] select { height:30px; box-sizing:border-box; }
+
+.targetLabel { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }

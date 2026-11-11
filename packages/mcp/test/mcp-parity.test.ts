@@ -70,8 +70,8 @@ const DYNAMIC_OR_ALIAS_COVERED = new Set([
   "memory.search",
 ]);
 
-// Federation (Phase 5) network/credential administration -- pairing, invites, tailscale
-// auth keys, ssh key provisioning, peer grants. Deliberately kept OFF the MCP agent-tool
+// Federation (Phase 5) network/credential administration -- pairing, invites,
+// SSH key provisioning, peer grants. Deliberately kept OFF the MCP agent-tool
 // surface: every one of these either mutates machine-level network/credential state or
 // grants a REMOTE engine capability, which is a human/CLI/TUI decision (`chimera
 // federation init` et al, README "Federation" section), not something an orchestrated
@@ -79,6 +79,8 @@ const DYNAMIC_OR_ALIAS_COVERED = new Set([
 // case in handle() at all -- it lives only in handlePeer(), the peer-authenticated wire
 // entrypoint, so it never reaches this scan.
 const INTENTIONALLY_EXCLUDED_RPCS = new Set([
+  // Explicit operator shell input is not a model tool or a permission bypass.
+  "agent.shellStart", "agent.shellCancel", "agent.shellStatus",
   "canvas.saveLayout", // Cosmetic private operator layout; agents read the graph only.
   "agent.remotePair", // Device pairing credentials belong only to the requesting desktop operator.
   "job.sudoPlan", // Per-command root authorization previews are reviewed by the operator in the UI.
@@ -110,7 +112,7 @@ const INTENTIONALLY_EXCLUDED_RPCS = new Set([
   // both ways round: claiming focus would let it redirect its own default write target, and
   // renaming would let it move a name out from under the operator.
   "terminal.tabState",
-  "fed.network", "fed.network.up", "fed.tailscale.setAuthKey", "fed.sshkey.ensure",
+  "fed.sshkey.ensure",
   "fed.accept", "fed.invite.create", "fed.invite.list", "fed.invite.revoke",
   "fed.join", "fed.peer.grant",
   // Read-only diagnostic RPCs are MCP-facing. Human review decisions, UI state,

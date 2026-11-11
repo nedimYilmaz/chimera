@@ -1,3 +1,4 @@
+import { OperatorShell } from "./operator-shell.js";
 import { planJobSudo } from "./job-sudo.js";
 import { JobSudoPlanParams, JobSudoPlanResultSchema } from "@chimera/protocol";
 import { CanvasRpc } from "./rpc/canvas-rpc.js";
@@ -122,10 +123,10 @@ import { CapabilityBroker } from "./broker.js";
 import { AuditLedger } from "./audit-ledger.js";
 import { WorktreeLeaseStore } from "./worktree-lease.js";
 import {
-  NetworkManager, ensureFedSshKey, acceptFedKey, removeFedKey, retagFedKey,
+  ensureFedSshKey, acceptFedKey, removeFedKey, retagFedKey,
   mintInviteKeypair, writeIdentityKeyFile, removeIdentityKeyFile,
   realReadHostKeys, materializeKnownHosts, removeKnownHostsEntries,
-  type NetExecFn, type PathExistsFn, type ReadHostKeysFn,
+  type NetExecFn, type ReadHostKeysFn,
 } from "./network.js";
 import { QueueScheduler, type GateExecFn } from "./scheduler.js";
 import { JobScheduler } from "./jobs.js";
@@ -422,11 +423,6 @@ const AccountSetKeyParams = z.object({ name: AccountName, key: z.string().min(1)
 // immediate flows resolve on their own and ignore a code if one is passed).
 const AccountsOAuthStartParams = z.object({ provider: z.string().min(1) });
 const AccountsOAuthFinishParams = z.object({ pendingId: z.string().min(1), code: z.string().min(1).optional() });
-// D6 (Network & tailscale, coverage C6 · B15). `key` is min(1) and NEVER echoed back (it goes
-// straight to the Keychain). `fed.accept` binds a peer's PUBLIC key (shape-validated in
-// network.ts's validateSshPublicKey, not here) under an engineId whose chars can never inject
-// into the authorized_keys comment field.
-const SetAuthKeyParams = z.object({ key: z.string().min(1) });
 const FedAcceptParams = z.object({
   publicKey: z.string().min(1),
   engineId: z.string().regex(/^[A-Za-z0-9._-]+$/, "letters, digits, ., _ and - only"),
@@ -629,6 +625,7 @@ export class Engine {
   // annotation stays here so its shape is still checked against ContractHandlers at a
   // single, easy-to-find declaration site.
   private readonly contractHandlers: ContractHandlers;
+  readonly operatorShell: OperatorShell;
   private readonly teamRpc: TeamRpc;
   private readonly roleRpc: RoleRpc;
   private readonly roles: RoleStore;
@@ -788,9 +785,6 @@ export class Engine {
   private readonly voiceRpc: VoiceRpc;
   private readonly nativeVoiceRpc: NativeVoiceRpc;
   private readonly voiceRoomRpc: VoiceRoomRpc;
-  // D6 (Network & tailscale, coverage C6 · B15): the tailscale probe/up/auth-key seam. Emits
-  // network_changed/network_error into the shared event log (agentId "network").
-  readonly network: NetworkManager;
   readonly engineId: string;
   // DAEMON-RUNS-FROM-DELETED-WORKTREE: see the constructor opt doc comment above.
   readonly codeRoot: string;
@@ -863,7 +857,7 @@ export class Engine {
   // local-file-backed, no init()/refresh() split needed (mirrors ConfigStore's construction-
   // time load, not modelCatalogService's async one, since there's no remote source).
   private groupStore: GroupStore;
-  private netExec?: NetExecFn;   // D6: injectable ssh-keygen/tailscale seam (shared with NetworkManager)
+  private netExec?: NetExecFn;   // Injectable ssh-keygen seam for federation keys.
   // §13 addendum: injectable seam over /etc/ssh/ssh_host_*.pub — NEVER read for real under test.
   private readHostKeys: ReadHostKeysFn;
   // §13c: injectable seam over the "user" acceptFedKey target's ssh dir (default ~/.ssh) — every
@@ -953,11 +947,8 @@ export class Engine {
     // The daemon reads the effective config once for backend selection, then hands that
     // same store in so boot doesn't parse config.json + config.d/* twice.
     configStore?: ConfigStore;
-    // D6 test seams (absent ⇒ real behavior): a fake NetExecFn (no `tailscale`/`ssh-keygen`
-    // subprocess) + a fake clock so the fed.network 5s cache is driven deterministically, and a
-    // fake `existsSync` so the off-PATH tailscale-binary resolver doesn't depend on whatever the
-    // test/CI machine actually has installed at the known absolute paths.
-    netExec?: NetExecFn; netNow?: () => number; netCacheMs?: number; netPathExists?: PathExistsFn;
+    // Injectable SSH key generation; absent means the real ssh-keygen process.
+    netExec?: NetExecFn;
     // §13 addendum test seam (absent ⇒ realReadHostKeys, i.e. real /etc/ssh reads in prod):
     // a fake sshd host-public-key reader so tests never touch a real /etc/ssh.
     readHostKeys?: ReadHostKeysFn;
@@ -986,10 +977,10 @@ export class Engine {
     probeKimiModels?: () => Promise<ModelOption[]>;
     // FEATURE-7 test seams (absent ⇒ real behavior): otelFetch replaces the OTLP exporter's
     // POST call (no real network, mirrors oauthFetch/notifyFetch); otelNow pins span
-    // start/end timestamps for deterministic duration assertions (mirrors netNow).
+    // start/end timestamps for deterministic duration assertions.
     otelFetch?: typeof fetch; otelNow?: () => number;
     // R2 (self-healing supervision) test seam (absent ⇒ DEFAULT_CRASH_LOOP_POLICY, real
-    // behavior) — mirrors otelNow/netCacheMs above: forwarded verbatim to AgentSupervisor so a
+    // behavior) — mirrors otelNow above: forwarded verbatim to AgentSupervisor so a
     // deterministic daemon-level blackbox test can drive a crash-loop backoff+recovery cycle
     // fast instead of waiting on the multi-second real default.
     crashLoopPolicy?: CrashLoopPolicy;
@@ -1212,17 +1203,9 @@ export class Engine {
     this.mcpImports = opts.mcpImportScanner ?? new McpImportScanner();
     this.mcpStoreDetectAuthFn = opts.mcpStoreDetectAuth ?? detectMcpStoreOAuth;
     this.hostTools = new HostToolsScanner({ exec: opts.hostExec, staleMs: opts.hostToolsStaleMs });
-    // D6: the tailscale/network seam. Shares the keychain (auth-key storage) and the event log
-    // (network_changed/network_error under agentId "network"). netExec is retained for the
-    // fed.sshkey.ensure ssh-keygen path below (same injectable seam).
     this.netExec = opts.netExec;
     this.readHostKeys = opts.readHostKeys ?? realReadHostKeys;
     this.userSshDir = opts.userSshDir;
-    this.network = new NetworkManager({
-      home: opts.home, engineId: cfg.engine?.id ?? "local", keychain: this.keychain,
-      emit: (kind, data) => this.events.append({ agentId: "network", kind, data }),
-      exec: opts.netExec, now: opts.netNow, cacheMs: opts.netCacheMs, pathExists: opts.netPathExists,
-    });
     // D16: constructed BEFORE the supervisor so its checkpointCreate seam below can close
     // over it — isRepoBusy itself closes over `this.supervisor`, assigned right after
     // (same "lazy closure, order doesn't matter for calls after construction" trick
@@ -1663,7 +1646,26 @@ export class Engine {
       prepare: (id, acknowledged) => this.supervisor.prepareNativeVoice(id, acknowledged),
       current: (id) => this.supervisor.currentNativeVoice(id),
     });
+    this.operatorShell = new OperatorShell({
+      home: opts.home,
+      target: agentId => {
+        const r = this.supervisor.status(agentId);
+        if (r.state !== "running" || agentId.startsWith("shadow:") || r.spec.runtime === "terminal") throw new Error("Select a running managed agent before executing a shell command");
+        // Never fall back to the project root if the agent's isolated worktree disappeared.
+        const cwd = r.spec.isolation === "worktree" ? worktreePath({ ...r.spec, agentId }) : r.spec.cwd;
+        return { cwd };
+      },
+      emit: (agentId, kind, data) => this.events.append({ agentId, kind, data }),
+      deliver: async (agentId, text, messageId) => {
+        const r = this.supervisor.status(agentId);
+        if (r.state !== "running" && !(r.state === "paused" && r.pauseReason === "operator-hold")) throw new Error("Agent is no longer running; shell output is retained in the conversation");
+        await this.supervisor.send(agentId, text, "app", undefined, false, undefined, { messageId });
+      },
+    });
     this.contractHandlers = {
+      "agent.shellStart": p => this.operatorShell.start(p.agentId, p.requestId, p.command),
+      "agent.shellCancel": p => this.operatorShell.cancel(p.agentId, p.requestId),
+      "agent.shellStatus": p => this.operatorShell.status(p.agentId),
       "group.list": () => ({ groups: this.groupStore.list() }),
       "group.create": (p) => {
         const group = this.groupStore.create({ ...p, now: Date.now() });
@@ -1685,13 +1687,22 @@ export class Engine {
       "agent.addGroups": async (p) => { await this.supervisor.changeAgentGroups(p.agentId, p.groups, "add"); return { ok: true }; },
       "agent.removeGroups": async (p) => { await this.supervisor.changeAgentGroups(p.agentId, p.groups, "remove"); return { ok: true }; },
       "queue.create": (p) => {
+        if (p.spec.existingAgentId) this.scheduler.validateExistingAgent(p.spec.existingAgentId);
         if (p.spec.workflow !== null) this.workflows.get(p.spec.workflow);   // UnknownWorkflowError BEFORE anything persists
         return this.queues.create(p.spec);
       },
       "queue.list": () => this.queues.list(),
-      "queue.update": (p) => {
+      "queue.update": async (p) => {
+        if (p.patch.existingAgentId) this.scheduler.validateExistingAgent(p.patch.existingAgentId);
         if (p.patch.workflow !== undefined && p.patch.workflow !== null) this.workflows.get(p.patch.workflow);
-        return this.queues.update(p.name, p.patch);
+        const updated = this.queues.update(p.name, p.patch);
+        await this.scheduler.tick();
+        return updated;
+      },
+      "queue.completeTask": async (p) => {
+        const task = this.queues.completeExistingTask(p.taskId, p.callerAgentId, p.result, p.success);
+        await this.scheduler.tick();
+        return task;
       },
       "queue.delete": (p) => ({ deleted: this.queues.delete(p.name) }),
       "queue.push": async (p) => {
@@ -2278,6 +2289,9 @@ export class Engine {
 
   async handle(method: string, params: unknown, route?: { trustedLocalClient: true }): Promise<unknown> {
     try {
+      if (["agent.shellStart", "agent.shellCancel", "agent.shellStatus"].includes(method) && !route?.trustedLocalClient) {
+        throw rpcError("forbidden", "Operator shell requires the trusted desktop connection");
+      }
       // Listener/session administration belongs to the local socket route, never an
       // agent tool or authenticated browser session. New management methods fail closed.
       const agentIdentified = params && typeof params === "object"
@@ -3169,7 +3183,7 @@ export class Engine {
           // The settings acknowledgment accompanies the live profile, before its guard.
           // Consume it here so a permission-only save does not restart the agent.
           const permissionRiskGrant = this.supervisor.status(p.agentId).provider === "codex"
-            && p.live.permissionProfile === "full" && p.patch.acknowledgeCodexFullAccessRisk === true;
+            && (p.live.permissionProfile === "full" || p.live.executionMode === "bypassPermissions") && p.patch.acknowledgeCodexFullAccessRisk === true;
           if (permissionRiskGrant) delete p.patch.acknowledgeCodexFullAccessRisk;
           if (p.live.displayLabel !== undefined) {
             await this.supervisor.renameAgent(p.agentId, p.live.displayLabel, { byOperator: true });
@@ -3187,8 +3201,9 @@ export class Engine {
             });
             applied.push("permission");
           }
+          let executionModePending = false;
           if (p.live.executionMode !== undefined) {
-            await this.supervisor.setExecutionMode(p.agentId, p.live.executionMode);
+            executionModePending = (await this.supervisor.setExecutionMode(p.agentId, p.live.executionMode, permissionRiskGrant)).pending;
             applied.push("executionMode");
           }
           // cwd LAST among the no-respawn group and before the patch: rebind respawns too, so
@@ -3204,7 +3219,7 @@ export class Engine {
             const rec = await this.supervisor.reconfigure(p.agentId, p.patch);
             if (rec.spec !== before) { respawned = true; applied.push(...Object.keys(p.patch)); }
           }
-          return { ok: true, applied: [...new Set(applied)], respawned, state: this.supervisor.status(p.agentId).state };
+          return { ok: true, applied: [...new Set(applied)], respawned, ...(p.live.executionMode !== undefined ? { executionModePending } : {}), state: this.supervisor.status(p.agentId).state };
         }
         case "agent.setTurnLimit": {
           const p = SetTurnLimitParams.parse(params);
@@ -4205,21 +4220,6 @@ export class Engine {
           const p = AccountsOAuthFinishParams.parse(params);
           return await this.accountsOAuthFinish(p.pendingId, p.code);
         }
-        // ---------- D6: network & tailscale (coverage C6 · B15) ----------
-        // Local-only (absent from PEER_METHODS): a peer can never probe our network, run
-        // `tailscale up`, store an auth key, or touch authorized_keys.
-        case "fed.network":
-          // `tailscale status --json` (5s-cached); installed:false when the binary is absent.
-          return await this.network.status();
-        case "fed.network.up":
-          // `tailscale up` → {authUrl} (tailscale's interactive-login URL when a login is needed).
-          return await this.network.up();
-        case "fed.tailscale.setAuthKey": {
-          const p = SetAuthKeyParams.parse(params);
-          // Keychain ONLY — never echoed, never in config. Auto-join on the NEXT daemon startup.
-          await this.network.setAuthKey(p.key);
-          return { ok: true };
-        }
         case "fed.cloudflare":
           // No API call — reflects the last fed.cloudflare.up outcome (or "never attempted").
           return this.cloudflareStatus ?? {
@@ -4359,14 +4359,6 @@ export class Engine {
       if (typeof e.code === "string" && typeof e.message === "string") throw rpcError(e.code, e.message);
       throw rpcError("unknown", String((err as Error).message ?? err));
     }
-  }
-
-  // ---------- D6: startup tailscale auto-join ----------
-  // Called once at daemon boot. If tailscale is not logged in AND a stored auth key exists, run
-  // `tailscale up --auth-key`; the key is BURNED on success, a network_error is emitted on failure
-  // (message scrubbed of the key). Never throws — a network hiccup must not crash the daemon.
-  async autoJoinNetwork(): Promise<void> {
-    try { await this.network.autoJoin(); } catch { /* best-effort; never crash-loop boot */ }
   }
 
   // ---------- D7 helpers: config diff-apply + accounts ----------

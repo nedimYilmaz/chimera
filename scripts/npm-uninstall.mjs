@@ -141,8 +141,6 @@ export async function credentialRefs(io, home, platform) {
     if (!mcpName.test(name)) throw new Error('Invalid MCP-store name');
     if (s.auth !== undefined) { if (s.type !== 'http' || !['bearer', 'oauth'].includes(s.auth?.kind ?? 'bearer') || s.auth.keychainRef !== `chimera:mcp:${name}`) throw new Error('Foreign MCP credential reference'); refs.add(s.auth.keychainRef); }
   }
-  // The fixed network key can be shared by two homes even without an explicit config ref.
-  if (await stat(io, home)) refs.add('chimera:tailscale-authkey');
   return refs;
 }
 

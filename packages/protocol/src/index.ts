@@ -97,7 +97,7 @@ export const AgentReconfigureParamsSchema = z.object({
   patch: z.record(z.string(), z.unknown()).default({}),
   // The no-respawn half, each already served by its own live setter.
   live: z.object({
-    executionMode: z.enum(["plan", "execute", "auto"]).optional(),
+    executionMode: z.enum(["plan", "execute", "auto", "bypassPermissions"]).optional(),
     permissionProfile: z.enum(["readOnly", "acceptEdits", "full"]).optional(),
     permissionRequest: z.enum(["auto", "poke:caller", "tui"]).optional(),
     groups: z.array(z.string()).optional(),
@@ -1655,9 +1655,9 @@ export const AgentSpecSchema = z.object({
   // dependency anywhere in this repo — out of scope here). Omitted ⇒ today's free-text result,
   // byte-identical.
   resultSchema: z.record(z.string(), z.unknown()).optional(),
-  // Claude SDK planning is independent of tool permissions and autonomy. Omitted resolves
-  // to execute at launch; only an explicit plan request persists as a startup choice.
-  executionMode: z.enum(["plan", "execute", "auto"]).optional(),
+  // Provider execution mode is independent of decision autonomy; native or Chimera-managed by backend.
+  // Explicit modes persist across launches; execute retains configured-mode compatibility.
+  executionMode: z.enum(["plan", "execute", "auto", "bypassPermissions"]).optional(),
   permissionProfile: z.enum(["readOnly", "acceptEdits", "full"]).default("acceptEdits"),
   // AGENT-AUTONOMY: "full" means the agent gets no human to ask, ever — it silences the
   // ask_human/ask_agent/ask_team MCP tools (not just registered-but-refusing: absent, so the
@@ -1945,19 +1945,6 @@ export const EventKindSchema = z.enum([
   // disproved it — together they are the whole audit answer to "why did this account come back
   // early?", which a bare status event could not give.
   "account_cooldown_cleared",
-  // D6 (Network & tailscale, coverage C6 · B15 · F09/F10): the NetworkManager's signals.
-  // ADDITIVE — data stays a loose z.record; documented (not schema-enforced) shapes:
-  //   network_changed { installed, loggedIn, ip4, magicDNS, tailscaleSSH } — the freshly-probed
-  //     tailscale state, emitted whenever it differs from the last emitted state (the fed.network
-  //     5s-cached probe, `fed.network.up`, or a successful startup auto-join drive this). The UI
-  //     refreshes the network block + IP chip off it. Carries NO secret (it is the same shape
-  //     fed.network returns).
-  //   network_error { message } — a startup auto-join (`tailscale up --auth-key`) failed. The
-  //     message is SCRUBBED of secret-shaped substrings before it is emitted so the auth key
-  //     (tskey-…) can never reach the log (D0). The daemon never crashes on a failed join.
-  // Both carry agentId "network" (mirrors the "config"/"project:" system-event namespacing).
-  "network_changed",
-  "network_error",
   // D8 (pairing + multi-peer mesh, coverage C7 · B15 · F10): emitted when a new peer is
   // PINNED into the config.d overlay — on the RESPONDER when an unknown peer presents a
   // valid unburned invite token (TOFU auto-pin + token burn), and on the JOINER when
@@ -2390,22 +2377,6 @@ export const EventKindSchema = z.enum([
   "mcp_listener_rejected",
 ]);
 export type EventKind = z.infer<typeof EventKindSchema>;
-
-// ---------- D6 network & tailscale (coverage C6 · B15) ----------
-// The `fed.network` RPC response + the `network_changed` event payload: the probed tailscale
-// state. `installed:false` is the machine-has-no-tailscale case (the UI shows the install
-// command). No field carries a secret — a tailscale AUTH KEY lives only in the Keychain.
-export type TailscaleNetworkStatus = {
-  installed: boolean;      // the `tailscale` binary is present (false ⇒ ENOENT on probe)
-  loggedIn: boolean;       // BackendState === "Running" (authenticated + data-plane up)
-  ip4: string | null;      // the node's tailnet IPv4 (Self.TailscaleIPs), null when not up
-  magicDNS: boolean;       // MagicDNS enabled on the tailnet
-  tailscaleSSH: boolean;   // Tailscale SSH advertised for this node ⇒ KEYLESS pairing
-};
-
-// `fed.network.up` response: tailscale's interactive-login URL when a login is needed
-// (the UI displays it), else null (already logged in). Never carries the raw command output.
-export type NetworkUpResult = { authUrl: string | null };
 
 // ---------- interactive agent dialogs (native-CLI-parity Phase 2, Task DLG1) ----------
 // The dialog→decision round-trip for native interactive dialogs (AskUserQuestion/elicitation),
@@ -2986,6 +2957,8 @@ export function computeRetryDelayMs(policy: RetryPolicy, attemptNumber: number, 
 
 export const QueueSpecSchema = z.object({
   name: CoordName,
+  // Pin a managed conversation instead of spawning workers from a team.
+  existingAgentId: z.string().min(1).nullable().optional(),
   retryLimit: z.number().int().min(0).default(2),   // N retries; failover attempts count as retries (spec §4)
   // D12 (task workflows, coverage C14): the DEFAULT workflow name new tasks in this
   // queue are gated by (a per-task `workflow` override at push wins — see
@@ -4323,6 +4296,7 @@ export const JobAgentTargetSchema = AgentSpecSchema.omit({ prompt: true });
 // on. Deliberately the SAME three agent-bearing shapes a job target already accepts, so "who runs
 // this" means one thing across the whole job surface rather than two similar-but-different unions.
 export const JobDispatchSchema = z.union([
+  z.object({ queue: z.string().min(1) }).strict(),
   z.object({ team: z.string().min(1), role: z.string().min(1).optional() }).strict(),
   z.object({ agentSpec: JobAgentTargetSchema }).strict(),
   RoleBindingSchema,

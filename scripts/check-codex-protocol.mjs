@@ -202,12 +202,12 @@ export async function checkCodexProtocol(options = {}) {
 
     generatedDirectory = await mkdtemp(join(tempParent, "chimera-codex-schema-"));
     options.onTempDirectory?.(generatedDirectory);
-    await runSubprocess(codexCommand, ["app-server", "generate-ts", "--out", generatedDirectory], {
+    await runSubprocess(codexCommand, ["app-server", "generate-ts", ...(options.experimental ? ["--experimental"] : []), "--out", generatedDirectory], {
       env: options.env ?? process.env,
       signal: options.signal,
       timeoutMs,
     });
-    const generated = await runSubprocess(process.execPath, [subsetScript, generatedDirectory], {
+    const generated = await runSubprocess(process.execPath, [subsetScript, generatedDirectory, ...(options.roots ?? [])], {
       env: options.env ?? process.env,
       signal: options.signal,
       timeoutMs,
@@ -245,6 +245,9 @@ export async function runCodexProtocolCli(options = {}) {
 
   try {
     await checkCodexProtocol({ ...options, signal: controller.signal });
+    if (!options.expectedFile && !options.subsetScript) await checkCodexProtocol({ ...options, signal: controller.signal,
+      experimental: true, roots: ["CollaborationMode"], expectedFile: join(repositoryRoot, "packages/core/src/backends/codex-mode.generated.ts"),
+    });
     return 0;
   } catch (error) {
     stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);

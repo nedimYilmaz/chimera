@@ -1,3 +1,5 @@
+import { settingsErrorMessage } from "./AgentSettingsCard";
+import { OperatorShellStatus } from "./OperatorShellStatus";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { ImageMediaType, SlashCommandView, UiState } from "@chimera/ui-state";
@@ -45,7 +47,6 @@ import { projectsLocal } from "../state/commands.projects";           // W7: see
 import { projectCommandEntries } from "../state/selectors.projects";  // W7: see buildSlashMatches
 import { ArtifactsStrip } from "./ArtifactsStrip";
 import { CheckpointStrip } from "./CheckpointStrip";
-import { PushToTalkControl } from "./PushToTalkControl";
 import { NativeVoiceControl } from "./NativeVoiceControl";
 import { QueuedBar } from "./QueuedBar";
 import { QuoteBand } from "./QuoteBand";
@@ -174,7 +175,7 @@ export function executeSlashEntry(commands: AgentCommands, entry: SlashEntry, ar
   composerLocal.set({ composeText: "", slashIndex: 0, slashDismissed: false });
 }
 
-export function Composer() {
+export function Composer({ voiceHost, controlsRef }: { voiceHost?: HTMLElement | null; controlsRef?: (host: HTMLDivElement | null) => void } = {}) {
   const commands = agentCommands(appStore, rpcCall);
   const local = useComposerLocal((s) => s);
   const permissionMode = useStore((s: UiState) => s.permissionMode);
@@ -237,6 +238,12 @@ export function Composer() {
       : "main";
   const chipTarget = targetLabel(local.target, resolvedSelectedLabel);
   const modeGlyph = permissionMode === "ask" ? "◇" : "◆";
+
+  const shellSending = useRef(false);
+  const shellAttempt = useRef<{ agentId: string; command: string; requestId: string } | null>(null);
+  const shellMode = /^!(?:\s|$)/.test(local.composeText.trimStart());
+  const shellTargetIds = resolveActiveTargets(appStore.getState(), local.target);
+  const shellAgentId = shellTargetIds.length === 1 ? shellTargetIds[0] : undefined;
 
   const setText = (composeText: string): void => {
     composerLocal.set({ composeText, slashDismissed: false, slashIndex: 0 });
@@ -311,18 +318,14 @@ export function Composer() {
   // "auto" so the browser lays out the TRUE scrollHeight (a shrink needs this
   // too, not just growth), read the live line-height (honors a token/font
   // change), then set the box height from autosizeInput's pure arithmetic.
-  // `rows` here is display-only (the "N/8 lines" hint) — the box's real
-  // height rides the imperative style.height set below, not this state.
-  const [rows, setRows] = useState(1);
   useLayoutEffect(() => {
     const el = inputRef.current;
     if (!el) return;
     el.style.height = "auto";
     const parsed = parseFloat(getComputedStyle(el).lineHeight);
-    const { heightPx, scroll, rows: r } = autosizeInput(el.scrollHeight, parsed, MAX_ROWS);
+    const { heightPx, scroll } = autosizeInput(el.scrollHeight, parsed, MAX_ROWS);
     el.style.height = `${heightPx}px`;
     el.style.overflowY = scroll ? "auto" : "hidden";
-    setRows(r);
   }, [local.composeText]);
 
   // FORCE-SEND-MIDTURN: `force` (opt+enter) bypasses the busy-hold outbox and
@@ -349,6 +352,33 @@ export function Composer() {
       isBuiltin: (name) => findBuiltin(name) !== undefined,
     });
     if (intent.kind === "noop") return;
+    if (intent.kind === "shell") {
+      const snapshot = composerLocal.getState();
+      const ids = resolveActiveTargets(appStore.getState(), snapshot.target);
+      const agentId = ids.length === 1 ? ids[0] : undefined;
+      const reject = (message: string): void => appStore.dispatch({ type: "commandError", message });
+      if (shellSending.current) return;
+      if (!intent.command) { reject("Write a Bash command after !"); return; }
+      if (snapshot.pendingImages.length || snapshot.quote) { reject("Send Bash commands without attachments or quoted messages"); return; }
+      if (!appStore.getState().connected || !agentId || agentId.startsWith("shadow:") || appStore.getState().agents[agentId]?.state !== "running") {
+        reject("Select one connected, running agent to execute a Bash command"); return;
+      }
+      const previous = shellAttempt.current;
+      const attempt = previous?.agentId === agentId && previous.command === intent.command ? previous : { agentId, command: intent.command, requestId: crypto.randomUUID() };
+      shellAttempt.current = attempt;
+      shellSending.current = true;
+      void rpcCall("agent.shellStart", attempt).then(() => {
+        shellAttempt.current = null;
+        const current = composerLocal.getState();
+        // A late acknowledgement must not erase a newly typed draft or another target's draft.
+        if (current.composeText === snapshot.composeText && current.target === snapshot.target
+          && resolveActiveTargets(appStore.getState(), current.target).join(",") === ids.join(",")) {
+          composerLocal.set({ composeText: "", slashIndex: 0 });
+        }
+      }).catch(e => reject(`Bash command was not acknowledged: ${settingsErrorMessage(e)}. The draft is retained; retrying it uses the same request id.`))
+        .finally(() => { shellSending.current = false; });
+      return;
+    }
     if (intent.kind === "builtin") {
       const cmd = findBuiltin(intent.name);
       if (cmd) void cmd.run({ store: appStore, commands, openSpawn: () => composerLocal.set({ spawnOpen: true }) });
@@ -712,6 +742,13 @@ export function Composer() {
   }, [selectedTaskId, tasksLocal]);
   const taskBlocked = local.target === "selected" && !!selectedTaskId && !taskLiveAgentId;
 
+  const voiceControls = <>
+          <NativeVoiceControl
+            agentId={resolveActiveTargets(appStore.getState(), local.target)[0] ?? null}
+            onSend={(text) => void commands.sendComposed(local.target, text)}
+          />
+  </>;
+
   return (
     <>
       {slashOpen ? (
@@ -723,11 +760,16 @@ export function Composer() {
       ) : null}
       {outboxItems.length > 0 ? <QueuedBar items={outboxItems} targetLabel={queuedLabel} onEdit={popIntoDraft} /> : null}
       {local.quote ? <QuoteBand quote={local.quote} agent={quoteAgent} onClear={() => composerLocal.set({ quote: null })} /> : null}
-      <CheckpointStrip />
       <ArtifactsStrip />
+      {shellAgentId && <OperatorShellStatus key={shellAgentId} agentId={shellAgentId} />}
+      {shellMode && <div className={styles.shellStatus} data-shell-mode>! Bash · runs directly on the daemon host in this agent’s working directory · Enter to run</div>}
+      <div className={styles.composeFrame}>
+      <div className={styles.actionBar} data-agent-control-bar aria-label="Conversation controls">
+        {controlsRef && <div ref={controlsRef} className={styles.actionHost} />}
+        <CheckpointStrip />
+      </div>
       <div className={styles.strip} data-composer>
         <div className={styles.row}>
-          <span className={styles.prompt}>❯</span>
           <span className={styles.chipWrap}>
             <button
               ref={chipRef}
@@ -737,8 +779,8 @@ export function Composer() {
               title={`permission: ${permissionMode} — ${displayChord("mod+p")} toggles (◆ bypass / ◇ ask). Spawning in bypass authorizes Codex without its sandbox or Chimera tool-policy guards.`}
               onClick={() => composerLocal.set({ targetMenuOpen: !local.targetMenuOpen })}
             >
-              → <span className={permissionMode === "ask" ? styles.modeAsk : styles.modeBypass}>{modeGlyph}</span>{" "}
-              {chipTarget} <span className={styles.chipCaret}>▾</span>
+              <span className={permissionMode === "ask" ? styles.modeAsk : styles.modeBypass}>{modeGlyph}</span>{" "}
+              <span className={styles.targetLabel}>{chipTarget}</span> <span className={styles.chipCaret}>▾</span>
             </button>
             {local.targetMenuOpen && menuAnchor
               ? createPortal(
@@ -754,7 +796,7 @@ export function Composer() {
                         className={[styles.targetOption, o.key === activeKey ? styles.targetOptionActive : ""].filter(Boolean).join(" ")}
                         onClick={() => composerLocal.set({ target: o.target, targetMenuOpen: false })}
                       >
-                        → {o.label}
+                        {o.label}
                       </button>
                     ))}
                   </div>,
@@ -808,26 +850,9 @@ export function Composer() {
             data-compose-input
           />
           </span>
-          {local.composeText.length > 0 ? (
-            <span className={styles.growHint}>{rows}/{MAX_ROWS} lines · grows with content</span>
-          ) : null}
-          <PushToTalkControl
-            draftOwner={draftOwner}
-            agentId={resolveActiveTargets(appStore.getState(), local.target)[0] ?? null}
-            onInsert={(text) => {
-              const current = composerLocal.getState().composeText;
-              const pos = inputRef.current?.selectionStart ?? current.length;
-              const end = inputRef.current?.selectionEnd ?? pos;
-              const next = current.slice(0, pos) + text + current.slice(end);
-              setText(next);
-              requestAnimationFrame(() => { inputRef.current?.focus(); inputRef.current?.setSelectionRange(pos + text.length, pos + text.length); });
-            }}
-          />
-          <NativeVoiceControl
-            agentId={resolveActiveTargets(appStore.getState(), local.target)[0] ?? null}
-            onSend={(text) => void commands.sendComposed(local.target, text)}
-          />
+          {voiceHost === undefined ? voiceControls : voiceHost ? createPortal(voiceControls, voiceHost) : null}
         </div>
+      </div>
       </div>
     </>
   );

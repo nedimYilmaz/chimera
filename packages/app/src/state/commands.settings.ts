@@ -6,14 +6,14 @@
 // through the existing commandError action (the Toast's danger channel), never a
 // crash.
 //
-// SECRET DISCIPLINE (F09): API keys and tailscale auth keys are WRITE-ONLY. They
-// are handed to addProvider/setAuthKey as bare arguments, forwarded to the RPC,
+// SECRET DISCIPLINE (F09): API keys are WRITE-ONLY. They
+// are handed to addProvider/cloudflareUp as bare arguments, forwarded to the RPC,
 // and NEVER retained — this store holds no key field, no selector reads one back,
 // and config.get is redacted daemon-side. The component clears its local draft on
 // submit; nothing here can echo a secret.
 import type { UiStore, AgentCapStatus } from "@chimera/ui-state";
 import type { McpPackageReview, McpPackageInstall } from "@chimera/protocol";
-import type { DynamicCapConfig, TailscaleNetworkStatus, CloudflareProvisionStatus, McpListenerStatus, McpOAuthGateway, McpStoreAuthStatus, McpStoreEntry, McpStoreImportable, McpStoreServerSpec, McpStoreToolInfo } from "@chimera/protocol";
+import type { DynamicCapConfig, CloudflareProvisionStatus, McpListenerStatus, McpOAuthGateway, McpStoreAuthStatus, McpStoreEntry, McpStoreImportable, McpStoreServerSpec, McpStoreToolInfo } from "@chimera/protocol";
 import {
   type AccountListItem,
   type McpToolsRow,
@@ -72,15 +72,7 @@ export type SettingsState = {
   /** F49.2: daemon.status's read-only mcp-listener passthrough — null before the first
    * read lands, or when the daemon predates the field. Never carries a grant's token. */
   mcpListener: McpListenerStatus | null;
-  // network & federation (fed.network / fed.network.up)
-  network: TailscaleNetworkStatus | null;
-  /** fed.network.up's interactive-login URL for the user to open (null = none). */
-  authUrl: string | null;
-  /** did THIS session store a tailscale auth key (write-only — the daemon never
-   * reports presence). Drives the auth-key row badge only. */
-  authKeyStored: boolean;
-  // CLOUDFLARE-APP-SURFACE (fed.cloudflare / fed.cloudflare.up): mirrors `network`
-  // above. `cloudflare` is ALWAYS built by explicit field-picking (pickCloudflareStatus)
+  // Cloudflare status is built by explicit field-picking (pickCloudflareStatus)
   // from the raw RPC response, never a spread — the apiToken sent to fed.cloudflare.up
   // (and any Access service-token secret the daemon might ever surface) must never land
   // in this shared/subscribable store (SECRET DISCIPLINE, same invariant as core/cloudflare.ts).
@@ -123,7 +115,7 @@ export type SettingsState = {
   /** MCP-OAUTH-GATEWAYS: config.get's `mcpOAuthGateways` — the add-remote form's scope catalog
    * source (see selectors.settings.ts's mcpOAuthScopeCatalog). Empty when none are configured. */
   mcpOAuthGateways: readonly McpOAuthGateway[];
-  loaded: { providers: boolean; network: boolean; general: boolean; mcpStore: boolean; cloudflare: boolean };
+  loaded: { providers: boolean; general: boolean; mcpStore: boolean; cloudflare: boolean };
 };
 
 export type McpOAuthStatus = "starting" | "awaiting" | "polling" | "connected" | "error";
@@ -151,9 +143,6 @@ const initial: SettingsState = {
   agentCap: null,
   agentsRunning: 0,
   mcpListener: null,
-  network: null,
-  authUrl: null,
-  authKeyStored: false,
   cloudflare: null,
   mcpServers: [],
   mcpImportables: [],
@@ -164,7 +153,7 @@ const initial: SettingsState = {
   mcpDetectedOAuth: {},
   mcpAuthStatus: {},
   mcpOAuthGateways: [],
-  loaded: { providers: false, network: false, general: false, mcpStore: false, cloudflare: false },
+  loaded: { providers: false, general: false, mcpStore: false, cloudflare: false },
 };
 
 const errMessage = (err: unknown): string => {
@@ -249,15 +238,6 @@ export function createSettingsCommands(store: UiStore, request: RequestFn) {
         mcpListener: status?.mcpListener ?? null,
         loaded: { ...state.loaded, general: true },
       });
-    } catch (err) {
-      fail(err);
-    }
-  };
-
-  const loadNetwork = async (): Promise<void> => {
-    try {
-      const network = await request<TailscaleNetworkStatus>("fed.network", {});
-      set({ network, loaded: { ...state.loaded, network: true } });
     } catch (err) {
       fail(err);
     }
@@ -566,33 +546,6 @@ export function createSettingsCommands(store: UiStore, request: RequestFn) {
     stopProviderOAuthPolling(providerId);
     const { [providerId]: _dropped, ...rest } = state.providerOAuth;
     set({ providerOAuth: rest });
-  };
-
-  // ---- network writes -----------------------------------------------------
-
-  /** masked auth-key entry → fed.tailscale.setAuthKey (Keychain; auto-join on
-   * next daemon restart). Write-only: the key is dropped after the RPC. */
-  const setAuthKey = async (key: string): Promise<boolean> => {
-    try {
-      await request("fed.tailscale.setAuthKey", { key });
-      set({ authKeyStored: true });
-      return true;
-    } catch (err) {
-      fail(err);
-      return false;
-    }
-  };
-
-  /** connect/login → fed.network.up → render the returned authUrl for the user
-   * to open. Follows with a network re-probe. */
-  const networkUp = async (): Promise<void> => {
-    try {
-      const res = await request<{ authUrl: string | null }>("fed.network.up", {});
-      set({ authUrl: res?.authUrl ?? null });
-      await loadNetwork();
-    } catch (err) {
-      fail(err);
-    }
   };
 
   /** configure/provision click → fed.cloudflare.up {apiToken?, domain}. `apiToken` is a
@@ -1034,13 +987,12 @@ export function createSettingsCommands(store: UiStore, request: RequestFn) {
     }
   };
 
-  // ---- self-refresh (config_changed / network_changed) --------------------
+  // ---- self-refresh (config_changed) --------------------
 
   const refresh = async (sections: readonly SettingsRefresh[]): Promise<void> => {
     const jobs: Array<Promise<void>> = [];
     if (sections.includes("providers")) jobs.push(loadProviders());
     if (sections.includes("general")) jobs.push(loadGeneral());
-    if (sections.includes("network")) jobs.push(loadNetwork());
     if (sections.includes("cloudflare")) jobs.push(loadCloudflare());
     await Promise.all(jobs);
   };
@@ -1066,7 +1018,6 @@ export function createSettingsCommands(store: UiStore, request: RequestFn) {
     setSection: (section: SettingsSection): void => set({ section }),
     loadProviders,
     loadGeneral,
-    loadNetwork,
     addProvider,
     addCustomProvider,
     removeProvider,
@@ -1078,8 +1029,6 @@ export function createSettingsCommands(store: UiStore, request: RequestFn) {
     connectProviderOAuth,
     cancelProviderOAuth,
     stopAllProviderOAuthPolling,
-    setAuthKey,
-    networkUp,
     loadCloudflare,
     cloudflareUp,
     setDailyCap,

@@ -7,7 +7,7 @@ import type { FedCloudflareUpStepResult } from "@chimera/protocol";
 // network.ts's shape: an injectable fetch seam drives every Cloudflare v4 API call so no
 // test ever touches the real network.
 //
-// SECURITY INVARIANTS (D0, same as network.ts's tailscale-authkey comment): the API token,
+// SECURITY INVARIANTS (D0): the API token,
 // the tunnel token, and the Access service-token secret live ONLY in the Keychain — never in
 // a state file, an RPC response, an event, or an error message.
 

@@ -133,9 +133,9 @@ describe("onDaemonEvent — self-refresh", () => {
     expect(h.calls.some((c) => c.method === "fed.invite.list")).toBe(true);
   });
 
-  it("network_changed refetches peers only", async () => {
+  it("config_changed refetches peers only", async () => {
     const h = harness({ "peer.status": () => ({ peers: [] }), "config.get": () => ({}) });
-    h.cmds.onDaemonEvent("network_changed");
+    h.cmds.onDaemonEvent("config_changed");
     await settle();
     expect(h.calls.some((c) => c.method === "peer.status")).toBe(true);
     expect(h.calls.some((c) => c.method === "fed.invite.list")).toBe(false);

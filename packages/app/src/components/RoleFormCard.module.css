@@ -45,7 +45,7 @@
   background: var(--input-bg);
   border: 1px solid var(--field-idle);
   border-radius: var(--radius-chip);
-  padding: 3px 8px;
+  padding: var(--control-pad-y) var(--control-pad-x);
   font: inherit;
   color: var(--fg-soft);
   outline: none;
@@ -101,7 +101,7 @@
   border: 1px solid var(--field-active);
   background: var(--sel-bg);
   border-radius: var(--radius-chip);
-  padding: 2px 10px;
+  padding: var(--control-pad-y) var(--control-action-pad-x);
   cursor: pointer;
 }
 
@@ -117,7 +117,7 @@
 .cancelChip {
   border: 1px solid var(--line);
   border-radius: var(--radius-chip);
-  padding: 2px 10px;
+  padding: var(--control-pad-y) var(--control-action-pad-x);
   color: var(--muted);
   cursor: pointer;
 }

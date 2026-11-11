@@ -1,3 +1,4 @@
+import { modeProfile } from "./execution-mode.js";
 import { codexTransportFor } from "./backends/codex-transport.js";
 import { voiceAgentName } from "@chimera/protocol/agent-name";
 import { chimeraAccess, coordinationPermission, chimeraToolRestrictions } from "@chimera/protocol/chimera-capabilities";
@@ -61,6 +62,12 @@ Discover unlisted tools with ${t.chimeraTools}; invoke them with ${t.chimeraCall
 Use Chimera tools before provider-native MCP; use a native fallback only if discovery finds no suitable tool, and report the gap. A denial, busy desktop lease, timeout or connection error is not a missing tool: resolve or report it, never bypass it. Keep desktop actions on Chimera; never access the daemon socket directly.
 Batch independent tool calls. Keep messages focused on outcomes; do not copy these shared instructions into roles or task briefs.${skills}`;
 }
+
+// Provider-neutral and rebuilt on resume: a role or native memory feature must not
+// make shared project knowledge disappear when the operator switches providers.
+export const SHARED_MEMORY_POLICY = `CHIMERA MEMORY FIRST
+For project history, preferences, prior decisions, lessons or recurring work, search Chimera memory before consulting Claude/Codex/other provider memory. Use a targeted memory_search at task start when that context matters, and again when a new question needs past knowledge; skip unrelated searches. Read relevant full notes with memory_get when available. Provider memory is secondary context after the shared search, not a replacement. Check stale or conflicting notes against current user instructions and live evidence.
+Save verified reusable decisions and lessons to Chimera memory with a title when authorized; update existing notes rather than duplicate them. Respect exposed tools and scope: if shared memory is unavailable or denied, report the limitation; never bypass it or claim it was checked. This policy grants no additional permissions.`;
 
 // AGENT-RECONFIGURE: the spec fields a live agent can be respawned-into-its-own-session with.
 // Deliberately an ALLOWLIST: AgentSpec carries identity and workspace facts beside its settings,
@@ -230,7 +237,8 @@ export type AgentRecord = {
   agentId: string; spec: AgentSpec; accountName: string; provider: string;
   // User-facing identity, separate from the execution account and shadow label. Duplicated
   // from spec at spawn so record snapshots expose it directly without overloading `name`.
-  executionMode?: "plan" | "execute" | "auto";
+  executionMode?: "plan" | "execute" | "auto" | "bypassPermissions";
+  executionModePending?: boolean;
   permissionApplication?: PermissionApplication;
   displayLabel?: string;
   // REBIND / rename_self one-shot guard: true once displayLabel is no longer free to move —
@@ -1509,9 +1517,8 @@ export class AgentSupervisor {
   protected async launch(record: AgentRecord, accountName: string, recoveryPrompt?: string): Promise<void> {
     const account = this.deps.registry.get(accountName);
     record.provider = record.spec.provider ?? account.provider;   // re-stamp per attempt: follow the account across a cross-provider failover
-    if (record.spec.executionMode && (record.provider !== "claude" || record.spec.runtime === "terminal"))
-      throw new Error("executionMode requires the Claude SDK runtime");
     record.executionMode = undefined;
+    record.executionModePending = !!record.spec.executionMode;
     // TERMINAL-RUNTIME: the runtime picks the backend, the account still picks the provider. A
     // terminal agent is the SAME claude/codex/kimi on the same account — only the surface it runs
     // on differs — so overriding `provider` here instead would have made every provider-keyed
@@ -1523,6 +1530,11 @@ export class AgentSupervisor {
       throw new UnknownAgentError(record.spec.runtime === "terminal"
         ? "no terminal backend registered — terminal-runtime agents are unavailable in this build"
         : `no backend registered for provider "${record.provider}"`);
+    }
+    if (record.spec.executionMode) {
+      if (!backend.executionModes?.includes(record.spec.executionMode) || record.provider === "codex" && codexTransportFor(record.spec) === "exec")
+        throw new Error(`Execution mode ${record.spec.executionMode} is not supported by this ${record.provider} runtime`);
+      record.spec.permissionProfile = modeProfile(record.provider, record.spec.executionMode, record.spec.permissionProfile);
     }
     // CODEX-GATE-EXPOSURE: codex has no decidePermission hook (backends/codex.ts) — "full"
     // maps to sandboxMode "danger-full-access", which disables the OS sandbox entirely (no
@@ -1628,7 +1640,7 @@ export class AgentSupervisor {
     }
 
     // Shared routing policy belongs to the session, not to individual messages.
-    // Discovery comes from tool schemas; memory usage is task-dependent.
+    // Discovery comes from tool schemas; memory priority also applies without orchestration.
     const leanSkillsCandidate = account.provider === "claude" && this.deps.leanAgentContext?.() === true;
     const skillsUsable = record.spec.skills !== undefined
       ? record.spec.skills.length > 0
@@ -1640,7 +1652,7 @@ export class AgentSupervisor {
     // the gate is live, so a deployment where no client ever declared "ui.components"
     // (uiComponentsEnabled absent, or present and false) stays byte-identical.
     const componentsBlock = this.deps.uiComponentsEnabled?.() ? OUTPUT_COMPONENTS_CHEATSHEET : null;
-    const extraBlocks = [capabilityBlock, componentsBlock].filter((b): b is string => b !== null);
+    const extraBlocks = [capabilityBlock, SHARED_MEMORY_POLICY, componentsBlock].filter((b): b is string => b !== null);
     // TOKEN-OPT-CACHE-PREFIX: shared blocks go FIRST, per-agent instructions after. Anthropic's
     // prompt cache matches on an exact PREFIX, so ordering decides whether shared policy is paid
     // once per daemon or once per agent. With the caller's own instructions in front — which is
@@ -1956,8 +1968,10 @@ export class AgentSupervisor {
     if (this.killingRecords.has(record) || record.state === "killed") return;
     if (this.agents.get(record.agentId) !== record) return;
     if (this.providerTransfers.get(record.agentId)?.source === record) return;
-    if (e.kind === "status" && (e.data.executionMode === "plan" || e.data.executionMode === "execute" || e.data.executionMode === "auto")) {
+    if (e.kind === "status" && (e.data.executionMode === "plan" || e.data.executionMode === "execute" || e.data.executionMode === "auto" || e.data.executionMode === "bypassPermissions")) {
       record.executionMode = e.data.executionMode;
+      record.executionModePending = record.executionModePending === true && record.spec.executionMode !== e.data.executionMode;
+      e = { ...e, data: { ...e.data, executionModePending: record.executionModePending } };
       // Provider observations are not operator intent; never persist native plan as the next launch choice.
     }
     if (e.data.permissionApplication) {
@@ -4230,26 +4244,44 @@ export class AgentSupervisor {
 
   private modeChanges = new Map<string, AgentRecord>();
 
-  async setExecutionMode(agentId: string, mode: "plan" | "execute" | "auto"): Promise<void> {
+  async setExecutionMode(agentId: string, mode: "plan" | "execute" | "auto" | "bypassPermissions", acknowledgeFullAccess = false): Promise<{ pending: boolean }> {
     const record = this.status(agentId);
-    if (mode !== "plan" && mode !== "execute" && mode !== "auto") throw new Error("Invalid execution mode");
-    if (record.provider !== "claude" || record.spec.runtime === "terminal") throw new Error("Execution mode control requires the Claude SDK runtime");
+    if (mode !== "plan" && mode !== "execute" && mode !== "auto" && mode !== "bypassPermissions") throw new Error("Invalid execution mode");
+    const backend = this.deps.backends.get(record.provider);
+    if (record.spec.runtime === "terminal" || !backend?.executionModes?.includes(mode) || record.provider === "codex" && codexTransportFor(record.spec) === "exec") throw new Error(`Execution mode ${mode} is not supported by this ${record.provider} runtime`);
+    if (record.provider === "codex" && mode === "bypassPermissions" && !record.spec.acknowledgeCodexFullAccessRisk && !acknowledgeFullAccess)
+      throw new Error("Full Codex access requires an explicit risk grant");
+    const profile = modeProfile(record.provider, mode, record.spec.permissionProfile);
     if (this.modeChanges.get(agentId) === record) throw new Error("An execution mode change is already pending");
     const handle = this.handles.get(agentId);
     const running = record.state === "running";
     if (running && !handle?.setExecutionMode) throw new Error("This running backend cannot change execution mode; update the daemon first");
     this.modeChanges.set(agentId, record);
     try {
+      let pending = !running;
       if (running) {
-        await handle!.setExecutionMode!(mode, record.spec.permissionProfile);
+        const result = await handle!.setExecutionMode!(mode, profile, acknowledgeFullAccess || record.spec.acknowledgeCodexFullAccessRisk);
+        pending = result?.pending === true;
         if (this.agents.get(agentId) !== record || this.handles.get(agentId) !== handle || record.state !== "running")
           throw new Error("Agent session changed while applying execution mode");
       }
+      if (!running && record.provider === "codex") record.permissionApplication = {
+        version: (record.permissionApplication?.version ?? -1) + 1,
+        requestedProfile: profile, requestedRouting: record.spec.on.permissionRequest,
+        profileStatus: "pending", routingStatus: "unsupported", nativeApprovals: false, transport: codexTransportFor(record.spec),
+      };
       record.spec.executionMode = mode;
-      record.executionMode = running ? mode : undefined;
+      record.executionModePending = pending;
+      if (record.provider !== "claude") record.spec.permissionProfile = profile;
+      if (record.provider === "codex" && mode === "bypassPermissions" && acknowledgeFullAccess) record.spec.acknowledgeCodexFullAccessRisk = true;
+      if (!pending) record.executionMode = mode;
+      else if (!running) record.executionMode = undefined;
       this.deps.events.append({ agentId, kind: "status", data: {
-        executionMode: running ? mode : null, requestedExecutionMode: mode,
+        ...(!pending ? { executionMode: mode } : {}), requestedExecutionMode: mode, executionModePending: pending,
+        ...(record.provider !== "claude" ? { permissionChanged: true, permissionProfile: profile, ...(record.permissionApplication ? { permissionApplication: record.permissionApplication } : {}) } : {}),
+        ...(record.provider === "codex" && mode === "bypassPermissions" && acknowledgeFullAccess ? { acknowledgeCodexFullAccessRisk: true } : {}),
       } });
+      return { pending };
     } finally { if (this.modeChanges.get(agentId) === record) this.modeChanges.delete(agentId); }
   }
 
@@ -5561,6 +5593,45 @@ export class AgentSupervisor {
   // an answer nobody reads; only the agent.send RPC asks for one.
   hasScheduledMessage(agentId: string, messageId: string): boolean {
     return this.deps.mailboxes.hasMessage(agentId, messageId);
+  }
+
+  /** Mailbox acceptance is not task completion. Recover an idle fixed-agent claim
+   * with an evidence-first reminder, never by blindly replaying its external actions. */
+  async recoverScheduledAssignment(agentId: string, assignmentId: string, text: string, from: string,
+    recoveryAfterMs: number, stillAssigned: () => boolean): Promise<"waiting" | "pending" | "busy" | "held" | "recovered"> {
+    let record = this.status(agentId);
+    const blocked = () => this.killingRecords.has(record) || this.providerTransfers.has(agentId)
+      || this.nativeVoiceChanges.has(agentId) || (record.state === "paused" && !isRevivableHold(record));
+    if (blocked() || !stillAssigned()) return "held";
+    const pending = this.deps.mailboxes.pending(agentId);
+    if (pending.length) {
+      // Keep the original durable input; waking it must not create a second copy.
+      this.wakeMailbox(agentId);
+      return "pending";
+    }
+    const active = () => this.handles.get(agentId)?.isTurnActive?.() || this.promptAck.isMidTurn(agentId)
+      || [...this.pendingQuestions.values(), ...this.pendingDialogs.values()].some(p => p.agentId === agentId);
+    if (active()) return "busy";
+    const mailboxHistory = this.deps.mailboxes.history(agentId);
+    const history = mailboxHistory.filter(m => {
+      const id = this.deps.mailboxes.envelope(m).id;
+      return id === assignmentId || id.startsWith(`${assignmentId}:recovery:`);
+    });
+    const latest = history.at(-1);
+    // A just-delivered unrelated input may be starting silently (before turn-start).
+    const lastInputAt = Math.max(latest?.ts ?? 0, mailboxHistory.at(-1)?.ts ?? 0);
+    if (!latest || this.now() - lastInputAt < recoveryAfterMs) return "waiting";
+    if (isRevivableHold(record)) {
+      await this.resumePaused(agentId, { resumedBy: "queue-recovery", from });
+      record = this.status(agentId);
+    }
+    // Resuming can race completion, a new operator turn, a hold, or another delivery.
+    if (!stillAssigned() || blocked() || record.state !== "running") return "held";
+    if (active() || this.deps.mailboxes.pending(agentId).length) return "busy";
+    const recoveryId = `${assignmentId}:recovery:${history.length}`;
+    await this.sendScheduled(agentId, text, from, recoveryId, 1);
+    this.deps.events.append({ agentId, kind: "status", data: { queueRecovery: { assignmentId, messageId: recoveryId } } });
+    return "recovered";
   }
 
   async sendScheduled(agentId: string, text: string, from: string, messageId: string, maxPendingMessages?: number): Promise<void> {

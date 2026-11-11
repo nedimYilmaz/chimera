@@ -45,7 +45,7 @@ export class CloudflaredTunnelSupervisor {
   start(): void {
     if (this.stopped || this.child) return;
     const spawnFn = this.opts.spawnFn ?? defaultSpawn;
-    // TUNNEL_TOKEN rides env, never argv — same discipline as the tailscale authkey.
+    // TUNNEL_TOKEN rides env so it never appears in process arguments.
     this.child = spawnFn("cloudflared", this.buildArgs(), { TUNNEL_TOKEN: this.opts.tunnelToken });
     this.childStartedAt = Date.now();
     this.child.on("exit", () => {

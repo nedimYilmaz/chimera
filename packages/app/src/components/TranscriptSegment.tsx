@@ -146,9 +146,9 @@ function useElapsedSec(since?: number): number {
   return Math.max(0, Math.floor((Date.now() - anchor) / 1000));
 }
 
-export function StreamGlow() {
+export function StreamGlow({ compacting = false }: { compacting?: boolean }) {
   return (
-    <div className={styles.glowTrack} data-stream-glow>
+    <div className={styles.glowTrack} data-stream-glow data-compacting={compacting}>
       <div className={styles.glowComet} />
     </div>
   );

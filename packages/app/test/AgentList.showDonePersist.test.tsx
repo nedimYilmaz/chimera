@@ -82,8 +82,7 @@ describe("AgentList showDone persistence (DONE-AGENTS-HIDDEN-AFTER-RESTART)", ()
 describe("the done toggle says which way it is", () => {
   const labelOf = (): string => {
     const t = mounted!.root.findByProps({ "data-agents-done-toggle": "" });
-    return (Array.isArray(t.props["children"]) ? t.props["children"] : [t.props["children"]])
-      .filter((c: unknown) => typeof c === "string").join("");
+    return t.props["aria-label"];
   };
 
   it("offers to SHOW while they are hidden, and to HIDE while they are shown — with a count either way", () => {

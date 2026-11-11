@@ -451,13 +451,15 @@ export function pathBasename(p: string): string {
 }
 
 export type ComposeIntent =
+  | { kind: "shell"; command: string }
   | { kind: "noop" }
   | { kind: "builtin"; name: string; args: string }
   | { kind: "slash"; name: string; args: string }
   | { kind: "imagePath"; path: string; caption: string; mediaType: ImageMediaType }
   | { kind: "text"; text: string };
 
-/** Interpret a submitted compose buffer (A1-2), mirroring the TUI ladder:
+/** Explicit ! + whitespace is operator Bash input (attachments are rejected by the UI).
+ * Interpret the remaining compose buffer (A1-2), mirroring the TUI ladder:
  *  1. leading "/" (not an image path, and NO pending images — a slash command
  *     carries no attachment, TUI parity) → builtin (runs locally) or slash
  *     (routes to the agent verbatim);
@@ -471,6 +473,7 @@ export function interpretCompose(
   opts: { hasPendingImages: boolean; isBuiltin: (name: string) => boolean },
 ): ComposeIntent {
   const trimmed = raw.trim();
+  if (/^!(?:\s|$)/.test(trimmed)) return { kind: "shell", command: trimmed.slice(1).trim() };
   if (/^\/[^\s/\\]+(?:\s|$)/.test(trimmed) && imagePathMediaType(trimmed) === null && !opts.hasPendingImages) {
     const rest = trimmed.slice(1);
     const sp = rest.indexOf(" ");
@@ -731,7 +734,7 @@ export type EscTier =
   // VOICE-STOP: tier -1, ABOVE every overlay — if the app is speaking at you, that's the thing
   // Esc must stop first; nothing else on screen is as intrusive as audio you can't turn off.
   | "voiceStopSpeaking"
-  | "palette" | "mcpPalette" | "accounts" | "result" | "model" | "plugins" | "hostTools"
+  | "palette" | "mcpPalette" | "accounts" | "result" | "model" | "effort" | "plugins" | "hostTools"
   | "help" | "toolDetail" | "agentDetail" | "slash" | "targetMenu" | "spawn" | "dialog"
   | "question" | "permission" | "clearCompose" | "dropQueued" | "interrupt";
 
@@ -745,6 +748,7 @@ export type EscSnapshot = {
   accountsOpen: boolean;
   resultOpen: boolean;
   modelOpen: boolean;
+  effortOpen?: boolean;
   pluginsOpen: boolean;
   hostToolsOpen: boolean;
   helpOpen: boolean;
@@ -768,6 +772,7 @@ export function resolveEscTier(s: EscSnapshot): EscTier | null {
   if (s.accountsOpen) return "accounts";
   if (s.resultOpen) return "result";
   if (s.modelOpen) return "model";
+  if (s.effortOpen) return "effort";
   if (s.pluginsOpen) return "plugins";
   if (s.hostToolsOpen) return "hostTools";
   if (s.helpOpen) return "help";
@@ -976,7 +981,7 @@ export type SpawnInput = {
   // SpawnCard "auto" chip) defers to the spawn's resolved project's own loadProjectSettings
   // toggle, or the picked role's own value — see AgentSpecSchema's own comment, index.ts.
   loadSettings?: boolean;
-  executionMode?: "plan" | "execute" | "auto";
+  executionMode?: "plan" | "execute" | "auto" | "bypassPermissions";
   strictMcpConfig?: boolean;
   // CROSS-PROVIDER-MCP-STORE: the spawn form's own control for AgentSpec.orchestration.allow —
   // previously reachable ONLY via agent_spawn's raw `orchestrationAllow` MCP param or a role
@@ -1006,8 +1011,8 @@ export class AgentCommands {
   private forcedSends = new Map<string, Promise<void>>();
 
   private serializeForcedSend(agentId: string, send: () => Promise<void>): Promise<void> {
-    // Draining an older outbox item awaits an RPC. Another force-send must not
-    // overtake the first in that gap, including sends via the main-conductor route.
+    // Serialize forced RPCs across selected-agent and main-conductor routes
+    // without touching messages held for the next completed turn.
     const previous = this.forcedSends.get(agentId);
     const operation = previous ? previous.then(send, send) : send();
     const settled = operation.then(() => {}, () => {});
@@ -1133,9 +1138,8 @@ export class AgentCommands {
    * FORCE-SEND-MIDTURN: `force` (opt+enter) skips the busy-hold and delivers
    * NOW via `agent.send` with explicit force intent. App-server steers the
    * running turn; exec interrupts and resumes the saved session with queued input.
-   * Ordering rule: force never jumps ahead of messages the operator
-   * already committed to sending — deliverOneQueued drains this agent's
-   * existing outbox FIRST, oldest-first, before the forced message itself. */
+   * Only this message bypasses the hold; existing outbox items remain FIFO
+   * until the running turn actually completes. */
   sendToAgent(agentId: string, text: string, images?: Image[], slash = false, content?: ContentBlock[], force = false): Promise<void> {
     const send = () => this.sendToAgentNow(agentId, text, images, slash, content, force);
     return force ? this.serializeForcedSend(agentId, send) : send();
@@ -1158,11 +1162,6 @@ export class AgentCommands {
           },
         });
         return;
-      }
-      if (busy && force) {
-        while (this.store.getState().outbox.some((o) => o.agentId === agentId)) {
-          await this.deliverOneQueued(agentId);
-        }
       }
       const imgs = images && images.length > 0 ? images : undefined;
       const blocks = content && content.length > 0 ? content : undefined;
@@ -1212,8 +1211,7 @@ export class AgentCommands {
       const id = state.mainConductorId;
       const view = id !== null ? state.agents[id] : undefined;
       // Hold-while-busy: a live, WORKING conductor queues the message (A1-4) —
-      // unless `force` skips the hold (ordering rule: drain this conductor's
-      // existing outbox first, oldest-first, THEN deliver the forced message).
+      // unless `force` skips the hold for this message only.
       if (id !== null && view?.busy === true && view.state === "running") {
         if (!force) {
           this.store.dispatch({
@@ -1221,9 +1219,6 @@ export class AgentCommands {
             item: { id: `q${this.outboxSeq++}`, agentId: id, text: trimmed, ...(images && images.length > 0 ? { images } : {}), ...(blocks ? { content: blocks } : {}) },
           });
           return;
-        }
-        while (this.store.getState().outbox.some((o) => o.agentId === id)) {
-          await this.deliverOneQueued(id);
         }
         await sendMidSession(id, true);
         return;
@@ -1400,11 +1395,8 @@ export class AgentCommands {
     if (last) this.store.dispatch({ type: "outboxRemove", id: last.id });
   }
 
-  // Send the HEAD queued item for `agentId` (oldest first), if any. Shared by
-  // flushOutbox (one per busy→idle transition) and the FORCE-SEND-MIDTURN
-  // ordering rule (drain the whole outbox up front, oldest-first, before a
-  // forced message) — a failed send is surfaced + dropped so it is never
-  // silently retried forever.
+  // Send the HEAD queued item for `agentId` once per completed turn.
+  // A failed send is surfaced + dropped so it is never silently retried forever.
   //
   // A1 (coverage §A1 ordering): the optimistic echo + outboxRemove + busy=true
   // (userSent sets busy) are applied SYNCHRONOUSLY, BEFORE the agent.send await

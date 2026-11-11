@@ -34,6 +34,7 @@ vi.mock("../src/rpc/bridge", () => ({
 }));
 
 import { CheckpointStrip } from "../src/components/CheckpointStrip";
+import { runAction } from "../src/keymap";
 import { appStore } from "../src/state/store";
 
 const flush = () => act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
@@ -45,7 +46,7 @@ afterEach(() => {
 });
 
 describe("CheckpointStrip", () => {
-  it("the mod+k new chip calls createManual for the selected agent", async () => {
+  it("opens checkpoints from one button and retains the new checkpoint shortcut", async () => {
     calls.length = 0;
     act(() => {
       appStore.dispatch({
@@ -58,8 +59,12 @@ describe("CheckpointStrip", () => {
     await flush();
     await flush();
 
-    const chip = mounted!.root.findByProps({ "data-checkpoint-new": true });
-    act(() => chip.props["onClick"]({ stopPropagation: vi.fn() }));
+    const chip = mounted!.root.findByProps({ "data-checkpoint-strip": true });
+    expect(chip.type).toBe("button");
+    expect(chip.props["aria-label"]).toContain("cp-1");
+    act(() => chip.props.onClick());
+    expect(mounted!.root.findByProps({ "data-checkpoint-strip": true }).props["aria-expanded"]).toBe(true);
+    act(() => runAction("agents.checkpoint", appStore));
     await flush();
 
     expect(calls).toContainEqual({

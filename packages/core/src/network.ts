@@ -3,29 +3,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, unlinkSyn
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import type { Keychain } from "./keychain.js";
-import { scrubSecretShapes } from "./configstore.js";
-import type { TailscaleNetworkStatus } from "@chimera/protocol";
 
-// D6 (Network & tailscale, coverage C6 · B15 · F09/F10). Everything here is behind an
-// injectable exec seam (same shape rationale as hosttools.ts / credentials.ts) so the real
-// `tailscale`/`ssh-keygen` binaries NEVER run under test — a fake exec drives every path.
-//
-// SECURITY INVARIANTS (D0, non-negotiable):
-//   * A tailscale AUTH KEY (tskey-…) lives ONLY in the Keychain — never in a state file, an
-//     RPC response, an event, or an error message. `fed.network.up`'s auth-URL capture pulls
-//     ONLY the https login URL out of tailscale's output and echoes nothing else; a failed
-//     auto-join emits an error message SCRUBBED of secret-shaped substrings.
-//   * A remote peer can never trigger any of this — these are all local-only engine methods
-//     (absent from PEER_METHODS).
-
-// The tailscale auth key's Keychain service — parallel to accounts' `chimera:<name>`.
-export const TAILSCALE_AUTHKEY_SERVICE = "chimera:tailscale-authkey";
-
-// A richer exec result than ExecFn: we must tell "binary absent" (ENOENT → installed:false)
-// apart from "binary present but errored" (e.g. `tailscale status` exits non-zero while logged
-// out, yet still prints JSON). stderr is kept separate because `tailscale up` prints the auth
-// URL there. `errno` is the spawn-level error string ("ENOENT") when the process never ran.
 export type NetExecResult = { stdout: string; stderr: string; code: number; errno?: string };
 export type NetExecFn = (cmd: string, args: string[]) => Promise<NetExecResult>;
 
@@ -33,9 +11,7 @@ export const realNetExec: NetExecFn = (cmd, args) =>
   new Promise((resolve) => {
     execFile(cmd, args, { timeout: 10_000 }, (err, stdout, stderr) => {
       const e = err as (NodeJS.ErrnoException & { code?: number | string }) | null;
-      // A spawn failure (missing binary) sets a STRING code ("ENOENT"); a non-zero EXIT sets a
-      // NUMBER code. Distinguish so parseTailscaleStatus can report installed:false only for the
-      // former and still parse JSON from a logged-out (exit-1) tailscale.
+      // Spawn errors use string codes; process exit statuses use numeric codes.
       const errno = e && typeof e.code === "string" ? e.code : undefined;
       const code = e ? (typeof e.code === "number" ? e.code : 1) : 0;
       resolve({ stdout: stdout ?? "", stderr: stderr ?? "", code, errno });
@@ -43,183 +19,7 @@ export const realNetExec: NetExecFn = (cmd, args) =>
   });
 
 // ---------------------------------------------------------------------------
-// tailscale binary resolution — PATH is not reliable: the standalone macOS app (and a
-// launchd/GUI-started daemon's narrow PATH) leaves `tailscale` off PATH even when installed,
-// which would otherwise misreport installed:false. `pathExists` is a seam (default `existsSync`)
-// so tests can fake "the binary lives at a known absolute path" without touching real fs.
-// ---------------------------------------------------------------------------
-
-export type PathExistsFn = (path: string) => boolean;
-
-// Checked, in order, ONLY when the bare "tailscale" spawn fails with ENOENT (i.e. not on PATH).
-// The macOS standalone app ships its CLI inside the .app bundle (capital "Tailscale", no `.app`
-// PATH symlink by default); the others cover common Homebrew/Linux installs.
-export const KNOWN_TAILSCALE_PATHS = [
-  "/Applications/Tailscale.app/Contents/MacOS/Tailscale",
-  "/usr/local/bin/tailscale",
-  "/opt/homebrew/bin/tailscale",
-  "/usr/bin/tailscale",
-];
-
-export function resolveTailscaleFallback(pathExists: PathExistsFn): string | null {
-  return KNOWN_TAILSCALE_PATHS.find((p) => pathExists(p)) ?? null;
-}
-
-// ---------------------------------------------------------------------------
-// tailscale status probe (fed.network)
-// ---------------------------------------------------------------------------
-
-// Pure parse of a `tailscale status --json` result into the wire status. ENOENT (binary
-// absent) → the installed:false shape; anything else parses the JSON best-effort (a peer
-// that is logged out still yields valid JSON with BackendState "NeedsLogin"). Never throws.
-export function parseTailscaleStatus(res: NetExecResult): TailscaleNetworkStatus {
-  const ABSENT: TailscaleNetworkStatus = { installed: false, loggedIn: false, ip4: null, magicDNS: false, tailscaleSSH: false };
-  if (res.errno === "ENOENT") return ABSENT;
-  let doc: Record<string, unknown>;
-  try {
-    doc = JSON.parse(res.stdout) as Record<string, unknown>;
-  } catch {
-    // Binary ran (installed) but emitted no parseable JSON — treat as installed-but-unknown.
-    return { installed: true, loggedIn: false, ip4: null, magicDNS: false, tailscaleSSH: false };
-  }
-  const self = (doc["Self"] ?? {}) as Record<string, unknown>;
-  const backend = typeof doc["BackendState"] === "string" ? (doc["BackendState"] as string) : "";
-  // loggedIn === "Running": authenticated AND the tailscaled data-plane is up (so an IP exists).
-  // "NeedsLogin"/"NoState"/"Stopped" all mean we should (re)join if a stored auth key exists.
-  const loggedIn = backend === "Running";
-  const ips = Array.isArray(self["TailscaleIPs"]) ? (self["TailscaleIPs"] as unknown[]) : [];
-  const ip4 = ips.find((v): v is string => typeof v === "string" && /^\d+\.\d+\.\d+\.\d+$/.test(v)) ?? null;
-  // MagicDNS: the tailnet flag when present, else inferred from a non-empty MagicDNSSuffix.
-  const tailnet = (doc["CurrentTailnet"] ?? {}) as Record<string, unknown>;
-  const magicDNS = tailnet["MagicDNSEnabled"] === true
-    || (typeof doc["MagicDNSSuffix"] === "string" && (doc["MagicDNSSuffix"] as string) !== "");
-  // Tailscale SSH (best-effort, documented): the SSH capability advertised for this node. When
-  // present, pairing is KEYLESS (no fed_ssh_key/authorized_keys work). Checked in both the legacy
-  // Capabilities array and the newer CapMap object so either tailscale version is detected.
-  const SSH_CAP = "https://tailscale.com/cap/ssh";
-  const caps = Array.isArray(self["Capabilities"]) ? (self["Capabilities"] as unknown[]) : [];
-  const capMap = (self["CapMap"] ?? {}) as Record<string, unknown>;
-  const tailscaleSSH = caps.includes(SSH_CAP) || Object.prototype.hasOwnProperty.call(capMap, SSH_CAP);
-  return { installed: true, loggedIn, ip4, magicDNS, tailscaleSSH };
-}
-
-// Extract tailscale's interactive-login URL from `tailscale up` output. tailscale prints
-// "To authenticate, visit:\n\n\thttps://login.tailscale.com/a/…" (usually on stderr). We pull
-// ONLY that URL and echo nothing else — the raw output is never stored or logged (it could
-// otherwise carry environment detail). Returns null when tailscale needed no login (already up).
-export function parseAuthUrl(combined: string): string | null {
-  const m = combined.match(/https:\/\/login\.tailscale\.com\/[^\s'"]+/);
-  return m ? m[0] : null;
-}
-
-function statusEqual(a: TailscaleNetworkStatus | null, b: TailscaleNetworkStatus): boolean {
-  return a !== null && a.installed === b.installed && a.loggedIn === b.loggedIn
-    && a.ip4 === b.ip4 && a.magicDNS === b.magicDNS && a.tailscaleSSH === b.tailscaleSSH;
-}
-
-export type NetworkEmit = (kind: "network_changed" | "network_error", data: Record<string, unknown>) => void;
-
-// The network manager: the fed.network probe (5s cache + network_changed on change), fed.network.up,
-// the tailscale auth-key seam, and startup auto-join with key-burn. Fully injectable for tests.
-export class NetworkManager {
-  private exec: NetExecFn;
-  private now: () => number;
-  private cacheMs: number;
-  private pathExists: PathExistsFn;
-  private cache: { at: number; status: TailscaleNetworkStatus } | null = null;
-  private inflight: Promise<TailscaleNetworkStatus> | null = null;
-  private lastEmitted: TailscaleNetworkStatus | null = null;
-  // Once a PATH-absent fallback binary is found to actually run, remember it so later calls skip
-  // the doomed bare-"tailscale" attempt. `undefined` = not yet resolved (still try PATH first).
-  private resolvedBinary: string | undefined;
-
-  constructor(private opts: {
-    home: string; engineId: string; keychain: Keychain; emit: NetworkEmit;
-    exec?: NetExecFn; now?: () => number; cacheMs?: number; pathExists?: PathExistsFn;
-  }) {
-    this.exec = opts.exec ?? realNetExec;
-    this.now = opts.now ?? Date.now;
-    this.cacheMs = opts.cacheMs ?? 5_000;
-    this.pathExists = opts.pathExists ?? existsSync;
-  }
-
-  // Run a tailscale subcommand, resolving the binary robustly: PATH first (or the cached
-  // fallback, once one has been proven to run), then — ONLY on ENOENT — the known absolute
-  // install locations (see resolveTailscaleFallback). Never throws; ENOENT with no fallback
-  // found falls through unchanged so parseTailscaleStatus still reports installed:false.
-  private async execTailscale(args: string[]): Promise<NetExecResult> {
-    const res = await this.exec(this.resolvedBinary ?? "tailscale", args);
-    if (res.errno !== "ENOENT" || this.resolvedBinary !== undefined) return res;
-    const fallback = resolveTailscaleFallback(this.pathExists);
-    if (!fallback) return res;
-    const res2 = await this.exec(fallback, args);
-    if (res2.errno !== "ENOENT") this.resolvedBinary = fallback;   // proven to run — cache it
-    return res2;
-  }
-
-  // fed.network: `tailscale status --json`, 5s result cache. Emits network_changed when the
-  // freshly-probed state differs from the last EMITTED state (a cache hit re-emits nothing).
-  async status(): Promise<TailscaleNetworkStatus> {
-    if (this.cache && this.now() - this.cache.at < this.cacheMs) return this.cache.status;
-    this.inflight ??= this.probe().finally(() => { this.inflight = null; });
-    return this.inflight;
-  }
-
-  private async probe(): Promise<TailscaleNetworkStatus> {
-    const res = await this.execTailscale(["status", "--json"]);
-    const status = parseTailscaleStatus(res);
-    this.cache = { at: this.now(), status };
-    if (!statusEqual(this.lastEmitted, status)) {
-      this.lastEmitted = status;
-      this.opts.emit("network_changed", { ...status });
-    }
-    return status;
-  }
-
-  private invalidate(): void { this.cache = null; }
-
-  // fed.network.up: `tailscale up`. When tailscale needs an interactive login it prints an auth
-  // URL (captured and returned so the UI can display it); otherwise authUrl is null. The raw
-  // command output is NEVER stored/logged — only the extracted URL crosses this boundary.
-  async up(): Promise<{ authUrl: string | null }> {
-    const res = await this.execTailscale(["up"]);
-    this.invalidate();
-    void this.status().catch(() => {});   // refresh + emit network_changed if the up() changed state
-    return { authUrl: parseAuthUrl(`${res.stdout}\n${res.stderr}`) };
-  }
-
-  // fed.tailscale.setAuthKey: the key goes ONLY to the Keychain. Never echoed, never in config.
-  async setAuthKey(key: string): Promise<void> {
-    await this.opts.keychain.set(TAILSCALE_AUTHKEY_SERVICE, key);
-  }
-
-  // Startup auto-join (called once at daemon boot): if we are NOT logged in AND a key is stored,
-  // run `tailscale up --auth-key <key>`. On success the key is BURNED (deleted from the Keychain —
-  // tailscaled keeps its own state, so it is never needed again). On failure a network_error event
-  // is emitted with a message SCRUBBED of any secret-shaped substring (the key never appears).
-  // Returns what happened so tests (and callers) can assert without reading the log.
-  async autoJoin(): Promise<"joined" | "already-logged-in" | "no-key" | "failed"> {
-    const status = await this.status();
-    if (status.loggedIn) return "already-logged-in";
-    const key = await this.opts.keychain.get(TAILSCALE_AUTHKEY_SERVICE);
-    if (!key) return "no-key";
-    const res = await this.execTailscale(["up", "--auth-key", key]);
-    this.invalidate();
-    if (res.code === 0) {
-      await this.opts.keychain.delete(TAILSCALE_AUTHKEY_SERVICE);   // burn on success
-      void this.status().catch(() => {});                          // re-probe → network_changed with the new IP
-      return "joined";
-    }
-    // Failure: the message must NOT carry the key. tailscale echoes the key back in some error
-    // strings, so scrub the combined output before it reaches the event log.
-    const raw = `${res.stdout}\n${res.stderr}`.trim() || `tailscale up --auth-key exited ${res.code}`;
-    this.opts.emit("network_error", { message: scrubSecretShapes(raw).slice(0, 500) });
-    return "failed";
-  }
-}
-
-// ---------------------------------------------------------------------------
-// SSH key mode (fed.sshkey.ensure + fed.accept) — used when Tailscale SSH is OFF
+// SSH federation keys (fed.sshkey.ensure + fed.accept)
 // ---------------------------------------------------------------------------
 // Rationale (documented design decision): the federation transport is
 // `ssh -N -L <localsock>:<remotesock> host` (see daemon ssh-tunnel.ts) — a `-N` session that

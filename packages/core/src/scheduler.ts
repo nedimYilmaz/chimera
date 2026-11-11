@@ -193,6 +193,8 @@ export type SchedulerDeps = {
   // GATE_EVAL_HARD_CEILING_MS); injectable so tests don't wait out the real cap.
   gateEvalHardCeilingMs?: number;
   backgroundTaskTimeoutMs?: number;
+  existingRecoveryAfterMs?: number;
+  existingRecoveryCheckMs?: number;
 };
 
 export class QueueScheduler {
@@ -261,17 +263,26 @@ export class QueueScheduler {
   private pendingRetries = new Map<string, number>();
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private unsub: (() => void) | null = null;
+  private existingRecoveryTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(private deps: SchedulerDeps) {
     deps.queues.setPrincipalResolver(from => deps.supervisor.principalFor(from));
   }
 
   attach(): void {
+    this.existingRecoveryTimer ??= setInterval(() => {
+      if (this.deps.queues.list().some(q => q.existingAgentId && !q.paused)) void this.tick().catch(() => {});
+    }, this.deps.existingRecoveryCheckMs ?? 30_000);
+    this.existingRecoveryTimer.unref?.();
     this.unsub ??= this.deps.events.subscribe((e) => {
       // Task A4: a persistent pool worker is observed even while UNTRACKED (idle,
       // unbound after turn_complete) — its terminal events must reach onAgentEvent
       // so a death while idle removes it from the pool instead of leaking the slot.
-      if (!this.tracked.has(e.agentId) && !this.poolIndex.has(e.agentId)) return;
+      if (!this.tracked.has(e.agentId) && !this.poolIndex.has(e.agentId)) {
+        if (["agent_started", "turn_complete", "result"].includes(e.kind) && this.deps.queues.list().some(q => q.existingAgentId === e.agentId))
+          setTimeout(() => { void this.tick().catch(() => {}); }, 0);
+        return;
+      }
       // F16.1 Phase 3 (WF-9): capture the summarize turn's text SYNCHRONOUSLY (before the
       // setTimeout(0) deferral below) — message_complete always precedes its turn_complete
       // in the same synchronous append, so by the time the deferred turn_complete handling
@@ -381,6 +392,7 @@ export class QueueScheduler {
   }
 
   detach(): void {
+    if (this.existingRecoveryTimer) { clearInterval(this.existingRecoveryTimer); this.existingRecoveryTimer = null; }
     this.unsub?.(); this.unsub = null;
     if (this.retick) { clearTimeout(this.retick); this.retick = null; }
     if (this.retryTimer) { clearTimeout(this.retryTimer); this.retryTimer = null; }
@@ -462,6 +474,68 @@ export class QueueScheduler {
     return task;
   }
 
+  validateExistingAgent(agentId: string): void {
+    const a = this.deps.supervisor.status(agentId);
+    if (a.agentId !== agentId || !["running", "paused"].includes(a.state) || !(a.spec.persistent || a.spec.conductor) || !a.spec.orchestration.allow)
+      throw new Error("Select the full ID of a running or paused persistent agent with Chimera tools enabled");
+    if (this.poolIndex.has(agentId)) throw new Error("A team pool worker cannot also be a fixed queue target");
+  }
+
+  private existingChecks(task: TaskRecord, agentId: string): ExplainCheck[] {
+    let available = true;
+    try { this.validateExistingAgent(agentId); } catch { available = false; }
+    return [
+      { name: "taskPending", ok: task.state === "pending", skipped: false, detail: "Task must be pending; assigned tasks require queue_complete_task from the target agent" },
+      { name: "queueNotPaused", ok: !this.deps.queues.get(task.queue).paused, skipped: false, detail: "Queue must be resumed to deliver new work" },
+      { name: "existingAgentAvailable", ok: available, skipped: false, detail: `Target ${agentId} must be a managed persistent agent; no replacement will be spawned` },
+      { name: "existingAgentFree", ok: !this.tracked.has(agentId) && !this.deps.queues.allTasks().some(t => t.state === "in_progress" && t.agentId === agentId), skipped: false, detail: "One queue task at a time per target agent, across all queues" },
+      { name: "dependenciesDone", ok: task.dependsOn.every(id => this.deps.queues.getTask(id).state === "done"), skipped: false, detail: "All dependencies must be done" },
+    ];
+  }
+
+  private async deliverExisting(task: TaskRecord): Promise<void> {
+    const agentId = task.agentId!;
+    const messageId = `queue:${task.taskId}:assignment`;
+    if (this.deps.supervisor.hasScheduledMessage(agentId, messageId)) {
+      await this.deps.supervisor.recoverScheduledAssignment(agentId, messageId,
+        `Recovery check for unfinished queue task ${task.taskId} (${task.queue}). This is the SAME assignment, not new work. A previous delivery or completion may have been interrupted. First inspect this conversation, run records, journals and existing results. Do not repeat completed external actions. If work is already verified, call queue_complete_task with taskId "${task.taskId}", the verified result and success true. Otherwise continue only the unfinished work and explicitly complete this task when finished.
+
+Original task:
+${task.prompt}`,
+        `queue:${task.queue}`, this.deps.existingRecoveryAfterMs ?? 5 * 60_000,
+        () => task.state === "in_progress" && task.agentId === agentId && !this.deps.queues.get(task.queue).paused);
+      this.deps.queues.clearExistingDeliveryError(task.taskId);
+      return;
+    }
+    // Persisted claim + durable mailbox ID closes restart/retry duplicate delivery.
+    // No turn_complete inference: this conversation also serves human and scheduled turns.
+    await this.deps.supervisor.sendScheduled(agentId,
+      `Queue task ${task.taskId} (${task.queue}). Work in this same conversation. When finished, call queue_complete_task with taskId "${task.taskId}", a verified result summary, and success true (or false if the task failed). Do not cancel the task to mark it complete.
+
+${task.prompt}`,
+      `queue:${task.queue}`, messageId, 1);
+    this.deps.queues.clearExistingDeliveryError(task.taskId);
+  }
+
+  private async drainExistingQueues(): Promise<void> {
+    for (const q of this.deps.queues.list()) {
+      if (!q.existingAgentId) continue;
+      // Preserve claims across restart; idle recovery reconciles outcomes before further work.
+      const assigned = this.deps.queues.allTasks().find(t => t.queue === q.name && t.state === "in_progress");
+      if (assigned) {
+        if (q.paused) continue;
+        try { this.validateExistingAgent(assigned.agentId!); await this.deliverExisting(assigned); }
+        catch { this.deps.queues.noteExistingDeliveryError(assigned.taskId); }
+        continue;
+      }
+      const task = this.safeNextPending(q.name);
+      if (!task || this.existingChecks(task, q.existingAgentId).some(c => !c.ok)) continue;
+      this.deps.queues.markInProgress(task.taskId, q.existingAgentId);
+      try { await this.deliverExisting(task); }
+      catch { this.deps.queues.noteExistingDeliveryError(task.taskId); }
+    }
+  }
+
   async tick(): Promise<void> {
     if (this.retick) { clearTimeout(this.retick); this.retick = null; }   // an explicit tick supersedes the fallback
     if (this.ticking) { this.tickQueued = true; return; }
@@ -527,6 +601,8 @@ export class QueueScheduler {
         this.emitFanOutBatchAdmitted(task, wf, fanOutIndex, task.stepIndex, branchIds, rest.length);
       }
 
+      await this.drainExistingQueues();
+
       // F15-DISPATCH-FENCE:BEGIN
       // Every reason a pending task does NOT start lives in DISPATCH_PREDICATES
       // (dispatch-predicates.ts) — the same array queue.explainTask replays, so a predicate can
@@ -538,7 +614,7 @@ export class QueueScheduler {
         // teamBound's live site is structural, not a predicate evaluation: with no queue there
         // is no task to build a DispatchContext from. The predicate still exists and still
         // fails on the explain path, where the TASK (not the team) is the input.
-        if (!team.queue) continue;
+        if (!team.queue || this.deps.queues.list().some(q => q.name === team.queue && q.existingAgentId)) continue;
         const queueName = team.queue;
         try {
           // QUEUE-PAUSE: a paused queue drains NO new agents — the queueNotPaused predicate
@@ -739,6 +815,20 @@ export class QueueScheduler {
    *  for an unknown id (queues.getTask's own error, already mapped by the RPC layer). */
   explainTask(taskId: string): TaskExplainResult {
     const task = this.deps.queues.getTask(taskId);
+    const existingAgentId = this.deps.queues.get(task.queue).existingAgentId;
+    if (existingAgentId) {
+      const checks = this.existingChecks(task, existingAgentId);
+      const blocked = checks.find(c => !c.ok);
+      return {
+        taskId, queue: task.queue, team: null, role: null,
+        dispatchable: !blocked, blockedBy: blocked?.name ?? null, detail: task.error?.slice(0, 240) ?? blocked?.detail ?? null,
+        checks, admission: [], evaluatedAt: Date.now(),
+        context: { state: task.state, agentId: task.agentId ?? existingAgentId, costUsd: null,
+          attempts: task.attempts, stepIndex: task.stepIndex, stepId: null, stepAttempts: task.stepAttempts,
+          error: task.error?.slice(0, 400) ?? null, recentSteps: task.stepHistory.slice(-3),
+          dependsOn: task.dependsOn.slice(0, 64).map(id => ({ taskId: id, state: this.deps.queues.getTask(id).state })) },
+      };
+    }
     const team = this.teamForQueue(task.queue);
     const roleName = team ? this.routingRoleFor(team, task) : null;
     const template = team && roleName ? this.resolveTeamRole(team, roleName) : null;

@@ -1086,3 +1086,26 @@ it("preserves context, provenance and task as separate blocks on the real ACP wi
     }, { timeout: 5000 });
   } finally { await handle.kill(); }
 });
+
+describe("Kimi execution modes", () => {
+  it("maps explicit operator choice independently of autonomy and rejects unsupported Plan", () => {
+    expect(kimiModeFor(kmSpec({ executionMode: "auto", permissionProfile: "readOnly", autonomy: "ask" }))).toBe("auto");
+    expect(kimiModeFor(kmSpec({ executionMode: "bypassPermissions", autonomy: "full" }))).toBe("yolo");
+    expect(kimiModeFor(kmSpec({ executionMode: "execute" }))).toBe("default");
+    expect(() => kimiModeFor(kmSpec({ executionMode: "plan" }))).toThrow("Plan");
+  });
+  it("awaits native ACK in the existing ACP session and propagates policy refusal", async () => {
+    const setMode = vi.fn(async (_mode: string) => {});
+    const factory: KimiFactory = () => ({ ready: Promise.resolve({ sessionId: "same-session", prompt: async () => ({ stopReason: "end_turn" }), cancel: async () => {}, close: async () => {}, setMode }), killNow() {} });
+    const backend = new KimiAgentBackend({ kimiFactory: factory });
+    const handle = backend.spawn(kmSpec({ persistent: true, resumeOnly: true, resume: "same-session" }), () => {}, async () => true);
+    try {
+      await handle.setExecutionMode!("auto", "full"); expect(setMode).toHaveBeenLastCalledWith("auto");
+      await handle.setExecutionMode!("bypassPermissions", "full"); expect(setMode).toHaveBeenLastCalledWith("yolo");
+      setMode.mockRejectedValueOnce(new Error("policy refusal"));
+      await expect(handle.setExecutionMode!("execute", "acceptEdits")).rejects.toThrow("policy refusal");
+      await expect(handle.setExecutionMode!("plan", "readOnly")).rejects.toThrow("Plan");
+      expect(setMode).toHaveBeenCalledTimes(3);
+    } finally { await handle.kill(); }
+  });
+});

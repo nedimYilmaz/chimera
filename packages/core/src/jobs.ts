@@ -1256,6 +1256,11 @@ export class JobScheduler {
     d: JobDispatch, prompt: string, maxBudgetUsd: number | null, principal: string, jobName: string,
   ): Promise<{ agentId?: string; taskId?: string }> {
     const budget = maxBudgetUsd !== null ? { maxBudgetUsd } : {};
+    if ("queue" in d) {
+      const task = this.deps.queues.push(d.queue, { prompt, overrides: budget, pushedBy: principal });
+      await this.deps.scheduler.tick();
+      return { taskId: task.taskId };
+    }
     if ("team" in d) {
       const team = this.deps.teams.get(d.team);   // throws UnknownTeamError if it vanished since create
       if (!team.queue) throw new JobError(`team "${d.team}" has no queue to run job "${jobName}" into`);
@@ -1572,8 +1577,10 @@ export class JobScheduler {
   // target's role name must already exist in the library (UnknownRoleError). An agentSpec
   // target needs no extra check here — its shape is already fully validated by
   // JobSpecSchema.parse (JobAgentTargetSchema === AgentSpecSchema minus prompt).
-  private validateTarget(target: JobSpec["target"]): void {
-    if ("existingAgentId" in target) {
+  private validateTarget(target: JobSpec["target"] | JobDispatch): void {
+    if ("queue" in target) {
+      this.deps.queues.get(target.queue);
+    } else if ("existingAgentId" in target) {
       this.deps.supervisor.status(target.existingAgentId);
     } else if ("team" in target) {
       const team = this.deps.teams.get(target.team);
@@ -1585,7 +1592,7 @@ export class JobScheduler {
       // dispatch it may trigger, though, IS resolvable now, and a trigger pointing at a team or
       // role that does not exist would otherwise surface only when the thing it watches for finally
       // happens: the worst possible moment to discover the alert goes nowhere.
-      if (target.trigger) this.validateTarget(target.trigger.dispatch as JobSpec["target"]);
+      if (target.trigger) this.validateTarget(target.trigger.dispatch);
       return;
     } else if (!("agentSpec" in target)) {
       this.deps.roles.get(target.role);
@@ -1599,6 +1606,8 @@ export class JobScheduler {
   private validatePrompt(spec: { target: JobTarget; schedule?: JobSchedule; prompt?: string; maxBudgetUsd?: number | null }): void {
     if ("existingAgentId" in spec.target && spec.maxBudgetUsd != null) throw new JobError("existing-agent jobs use the agent's own budget; maxBudgetUsd cannot be set on this job");
     if ("command" in spec.target && spec.target.sudo && spec.schedule && "watch" in spec.schedule) throw new JobError("Sudo command jobs require a timed schedule; watch mode is not supported.");
+    if ("command" in spec.target && spec.target.trigger && "queue" in spec.target.trigger.dispatch && spec.target.trigger.maxBudgetUsd != null && this.deps.queues.get(spec.target.trigger.dispatch.queue).existingAgentId)
+      throw new JobError("Existing-agent queue triggers use the target agent's budget; remove maxBudgetUsd");
     const isCommand = "command" in spec.target;
     if (!isCommand && (spec.prompt === undefined || spec.prompt.length === 0))
       throw new JobError("prompt is required for a team/agentSpec/role/existingAgentId job — it is what the agent is asked to do");

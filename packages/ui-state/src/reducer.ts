@@ -1,4 +1,4 @@
-import { ForkLineageSchema, PrincipalSchema } from "@chimera/protocol";
+import { EffortLevelSchema, ForkLineageSchema, PrincipalSchema } from "@chimera/protocol";
 import { mcpListenerTransitions } from "./mcpListener.js";
 import { ATTENTION_EVENT_KINDS, parseAgentAddress, ToolOutputImagesSchema, ToolOutputImageWarningsSchema, type ToolOutputImageWarning, type AccountQuotaWindow, type ContentBlock, type NormalizedEvent, type TaskState } from "@chimera/protocol";
 import { EVENT_BUFFER_MAX, initialState, NO_PROJECT_CONDUCTOR_KEY, TAB_ORDER, TOOLS_BUFFER_MAX, TRANSCRIPT_BUFFER_MAX, type Action, type AgentQuestion, type AgentRecordLite, type AgentView, type BackgroundTaskItem, type DeepLink, type Image, type McpServerView, type SlashCommandView, type TokenUsage, type TranscriptItem, type UiState } from "./types.js";
@@ -1593,7 +1593,7 @@ function projectEvent(state: UiState, e: NormalizedEvent, stampTs = false): UiSt
         ...(turnId !== undefined ? { turnId } : {}),
         ...at,
       });
-      goBusy(agent, e.ts);
+      if (e.data["operatorInitiated"] !== true) goBusy(agent, e.ts);
       // Native-CLI-parity Phase 1 (Task N2): ADDITIVE -- fold the same event into
       // the flowTree AFTER the existing tools/transcript updates above, which
       // must stay byte-identical.
@@ -1787,7 +1787,9 @@ function projectEvent(state: UiState, e: NormalizedEvent, stampTs = false): UiSt
       const contextUsage = legacyExec ? null : extractUsageField(e, "contextUsage");
       if (usage) { agent.usage = usage; agent.usageMeasuredAt = e.ts; }
       if (contextUsage || legacyExec || e.data["contextUsage"] === null) agent.ctxUsage = contextUsage;
-      goIdle(agent);
+      // A steering interruption hands off to a continuation, not an idle turn.
+      // Publishing idle here would release messages the operator left queued.
+      if (e.data["steering"] !== true) goIdle(agent);
       break;
     }
     case "result": {
@@ -2388,7 +2390,9 @@ function projectEvent(state: UiState, e: NormalizedEvent, stampTs = false): UiSt
       // fold each authoritative-when-present (like remoteControl above) so the AgentDetail
       // permission chip reflects a live agent.setPermission the instant it lands, with no wait
       // for the next agent.list snapshot (the app polls agent.list only once at bootstrap).
-      if (e.data["executionMode"] === "plan" || e.data["executionMode"] === "execute" || e.data["executionMode"] === "auto" || e.data["executionMode"] === null)
+      if (typeof e.data["executionModePending"] === "boolean") agent.executionModePending = e.data["executionModePending"];
+      if (["plan", "execute", "auto", "bypassPermissions"].includes(String(e.data["requestedExecutionMode"]))) agent.requestedExecutionMode = e.data["requestedExecutionMode"] as AgentView["executionMode"];
+      if (e.data["executionMode"] === "plan" || e.data["executionMode"] === "execute" || e.data["executionMode"] === "auto" || e.data["executionMode"] === "bypassPermissions" || e.data["executionMode"] === null)
         agent.executionMode = e.data["executionMode"] ?? undefined;
       const permissionApplication = e.data["permissionApplication"] as AgentView["permissionApplication"];
       const permissionFieldsCurrent = permissionApplication ? typeof permissionApplication.version === "number" && permissionApplication.version >= (agent.permissionApplication?.version ?? -1) : !agent.permissionApplication;
@@ -2596,6 +2600,11 @@ export function reduce(state: UiState, action: Action): UiState {
         // r.originConductorId, so a snapshot that omitted the field (older daemon / a poll that
         // raced ahead of the stamp) kept prev.originConductorId but dropped its indent bump --
         // a conductor-owned worker briefly un-nested. (Also flagged as latent debt.)
+        // Reconnects may not replay agent_started. The list still carries the provider's
+        // resolved model and the current configuration; absent legacy fields must not erase them.
+        const model = [r.actualModel, r.spec?.model].find((value): value is string =>
+          typeof value === "string" && !!value.trim() && !value.trim().startsWith("<"));
+        const effort = EffortLevelSchema.safeParse(r.spec?.effort);
         const mergedOwner = r.originConductorId !== undefined ? r.originConductorId : prev.originConductorId;
         const mergedDepth = typeof r.depth === "number" ? r.depth : prev.depth ?? 0;
         agents[r.agentId] = {
@@ -2618,6 +2627,8 @@ export function reduce(state: UiState, action: Action): UiState {
           // snapshot is still in flight and must not be erased by that older view.
           failure: r.state === "failed" ? (r.failure ?? prev.failure) : undefined,
           account: r.accountName,
+          model: model?.trim() ?? prev.model,
+          effort: effort.success ? effort.data : prev.effort,
           provider: r.provider,
           slashCommands: r.provider === "codex" ? [...CODEX_SLASH_COMMANDS] : r.provider === prev.provider ? prev.slashCommands : [],
           costUsd: r.costUsd || prev.costUsd,
@@ -2736,6 +2747,8 @@ export function reduce(state: UiState, action: Action): UiState {
           // snapshot carrying the spec updates the live permission scope; an absent field (older
           // daemon's summary path that drops spec) keeps the prior value so the chip never blanks.
           executionMode: r.executionMode,
+          requestedExecutionMode: r.spec?.executionMode,
+          executionModePending: r.executionModePending,
           permissionProfile: (r.permissionApplication ? r.permissionApplication.version >= (prev.permissionApplication?.version ?? -1) : !prev.permissionApplication) && typeof r.spec?.permissionProfile === "string" ? r.spec.permissionProfile : prev.permissionProfile,
           permissionRequest: (r.permissionApplication ? r.permissionApplication.version >= (prev.permissionApplication?.version ?? -1) : !prev.permissionApplication) && typeof r.spec?.on?.permissionRequest === "string" ? r.spec.on.permissionRequest : prev.permissionRequest,
           permissionApplication: r.permissionApplication && r.permissionApplication.version >= (prev.permissionApplication?.version ?? -1) ? r.permissionApplication : prev.permissionApplication,

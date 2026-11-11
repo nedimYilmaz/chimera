@@ -97,7 +97,7 @@ export function NativeVoiceControl({ agentId, onSend, requestsOnly = false }: { 
       disabled={!active && (!connected || !agentId || checking)} aria-pressed={active}
       title={active ? joined ? "End this voice room; coding work continues" : "Join this room: other rooms stay open but muted" : `Talk to this Codex agent in its existing context (${displayChord("alt+space")})`}
       onClick={() => { void toggle(); }}>
-      {active ? !joined ? "Join voice room" : voice.status === "connecting" ? "■ cancel voice connection" : "■ end native voice" : checking ? "checking voice…" : "◉ native Codex voice"}
+      {active ? !joined ? "Join voice room" : voice.status === "connecting" ? "■ cancel voice connection" : "■ End voice" : checking ? "checking voice…" : "◉ Voice"}
     </button>
     </>}
     {(error || voice.error) && <span role="alert" className={styles.error}>{error ?? voice.error}</span>}

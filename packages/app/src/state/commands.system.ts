@@ -665,6 +665,7 @@ const PRESENTATION: Record<EngineToolName, McpPresentation> = {
     note: "has nested overrides/dependsOn, an optional per-task workflow binding, and tags (labels hooks/subscriptions filter on) — edit the raw JSON params for the queue.push RPC.",
   },
   queue_status: { description: "Queue spec, per-state counts and task records", kind: "flat", rpc: "queue.status", fields: [{ key: "queue", label: "queue", type: "string", required: true }] },
+  queue_complete_task: { description: "Record the result of an existing-agent queue task", kind: "flat", rpc: "queue.completeTask", fields: [{ key: "taskId", label: "taskId", type: "string", required: true }, { key: "result", label: "result", type: "string", required: true }, { key: "success", label: "success", type: "boolean" }] },
   queue_cancel_task: { description: "Cancel a pending or blocked task", kind: "flat", rpc: "queue.cancelTask", fields: [{ key: "taskId", label: "taskId", type: "string", required: true }] },
   assign: {
     description: "Assign work to an agent (mailbox) OR a team (via its queue)", kind: "flat", rpc: "assign",

@@ -1,7 +1,7 @@
 import { OperatorWebSettings } from "../components/OperatorWebSettings";
 import { LocalSpeechSettings } from "../components/LocalSpeechSettings";
 import { useLocalStt } from "../voice/localStt";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import type { UiState } from "@chimera/ui-state";
 import { findMcpOAuthGateway, type McpOAuthGateway, type McpStoreServerSpec } from "@chimera/protocol";
 import { appStore } from "../state/store";
@@ -21,9 +21,7 @@ import {
   providerOptionsFor,
   keyBadgeLabel,
   credentialTypeLabel,
-  networkView,
   cloudflareView,
-  authKeyBadge,
   mcpListenerView,
   parseDailyCap,
   fmtDailyCap,
@@ -69,7 +67,7 @@ import { usePaneRow } from "../components/PaneDivider";
 // a left section rail (providers & accounts / network & federation / host tools
 // / general) + a right detail pane per section. All writes go to the config.d/
 // ui.json overlay via the daemon (config.patch / accounts.* / fed.*); the UI
-// refreshes ITSELF on config_changed / network_changed (no refresh button) and
+// refreshes ITSELF on config_changed (no refresh button) and
 // toasts on config_error. Token-only styling; every string English (F11).
 //
 // The tools section deliberately does NOT fork a host-tools UI — it reuses the
@@ -91,10 +89,9 @@ export function SettingsScreen() {
   const section = state.section;
 
   // tab entry: load every section's read data once, then keep them fresh off
-  // daemon events (F09 self-refresh — config_changed / network_changed).
+  // daemon events (F09 self-refresh — config_changed).
   useEffect(() => {
     void cmds.loadProviders();
-    void cmds.loadNetwork();
     void cmds.loadCloudflare();
     void cmds.loadGeneral();
     void cmds.loadMcpStore();
@@ -416,16 +413,7 @@ function ProvidersSection() {
 }
 
 // ---------------------------------------------------------------------------
-// CLOUDFLARE-APP-SURFACE — the Cloudflare federation block, mirroring the
-// tailscale block above exactly in structure: a domain + write-only API-token
-// input, a configure/provision button (fed.cloudflare.up), and a status
-// display switching on cloudflareView()'s 4 states. The token is a local draft
-// only (never stored in `state`) and is cleared the moment a submit succeeds —
-// same discipline as the tailscale auth-key field. The invite blob / the token
-// handed to the OTHER side is FederationPairing's existing shown-once idiom;
-// this block only ever shows MY OWN non-secret hostname once ready.
-// ---------------------------------------------------------------------------
-
+// The API token stays in a local draft and is cleared after a successful submit.
 function CloudflareSection() {
   const state = useSyncExternalStore(cmds.subscribe, cmds.getState);
   const view = cloudflareView(state.cloudflare);
@@ -491,90 +479,11 @@ function CloudflareSection() {
 }
 
 // ---------------------------------------------------------------------------
-// network & federation (mock lines 927-949) — tailscale block is W9; the
-// invite/join/peers pairing UI is W10 (seamed placeholder below).
-// ---------------------------------------------------------------------------
-
+// Network services and federation pairing.
 function NetworkSection() {
   const state = useSyncExternalStore(cmds.subscribe, cmds.getState);
-  const view = networkView(state.network);
-  const keyBadge = authKeyBadge(state.authKeyStored);
-  const [authKey, setAuthKey] = useState("");
-  const [busy, setBusy] = useState(false);
-  const authRef = useRef<HTMLInputElement | null>(null);
-
-  const submitAuthKey = async (): Promise<void> => {
-    if (!authKey || busy) return;
-    setBusy(true);
-    const ok = await cmds.setAuthKey(authKey);
-    setBusy(false);
-    if (ok) setAuthKey(""); // drop the secret draft
-  };
-
-  const toneClass = (tone: string): string =>
-    tone === "success" ? styles.ok : tone === "warn" ? styles.warn : tone === "danger" ? styles.danger : styles.muted;
-
   return (
     <div className={styles.section}>
-      <div className={styles.card} data-tailscale-block>
-        <div className={styles.cardHead}>
-          <span className={styles.cardTitle}>tailscale</span>
-          <span className={toneClass(view.statusTone)}>● {view.statusLabel}</span>
-          <span className={styles.spacer} />
-          <span className={styles.faint}>ssh: {view.sshLabel}</span>
-        </div>
-        {view.installed ? (
-          <>
-            <div className={styles.metaRow}>
-              <span>ip <span className={styles.value}>{view.ip4 ?? "—"}</span>
-                {view.ip4 && <button className={styles.linkBtn} onClick={() => copyWithToast(view.ip4!)}>c copy</button>}
-              </span>
-              <span>magicdns <span className={styles.value}>{view.magicDnsLabel}</span></span>
-            </div>
-            <div className={styles.authRow}>
-              <span className={styles.authLabel}>auth-key</span>
-              <input
-                ref={authRef}
-                className={styles.inputKey}
-                type="password"
-                value={authKey}
-                placeholder="tskey-auth-… (write-only)"
-                onChange={(e) => setAuthKey(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") void submitAuthKey(); }}
-                data-auth-key
-              />
-              <button className={styles.ghostBtn} disabled={busy || !authKey} onClick={() => void submitAuthKey()} data-auth-key-save>set</button>
-              <span className={keyBadge.tone === "success" ? styles.ok : styles.faint}>{keyBadge.label}</span>
-              <span className={styles.faint}>in Keychain · auto up --auth-key on next restart when logged out</span>
-            </div>
-            <div className={styles.authRow}>
-              <span className={styles.authLabel} />
-              <button className={styles.ghostBtn} onClick={() => void cmds.networkUp()} data-network-up>
-                {view.statusLabel === "connected" ? "re-check" : "connect / login"}
-              </button>
-              {state.authUrl && (
-                <span className={styles.authUrl}>
-                  open to authenticate:{" "}
-                  <span className={styles.value}>{state.authUrl}</span>
-                  <button className={styles.linkBtn} onClick={() => copyWithToast(state.authUrl!)}>copy</button>
-                </span>
-              )}
-            </div>
-          </>
-        ) : (
-          <>
-            <div className={styles.installHint}>{view.installHint ?? "…"}</div>
-            {view.installCmd && (
-              <div className={styles.installCmdRow}>
-                <code className={styles.installCmd}>{view.installCmd}</code>
-                <button className={styles.linkBtn} onClick={() => copyWithToast(view.installCmd!)}>copy</button>
-                {view.installUrl && <span className={styles.faint}>or {view.installUrl}</span>}
-              </div>
-            )}
-          </>
-        )}
-      </div>
-
       <CloudflareSection />
 
       {/* F49.2 — read-only mcp-listener block. Never renders a grant's bearer

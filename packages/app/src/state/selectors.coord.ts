@@ -813,7 +813,7 @@ export function buildTeamUpdatePatch(v: TeamFormValues, includeRoles: boolean): 
   };
 }
 
-export type QueueFormValues = { name: string; retryLimit: string };
+export type QueueFormValues = { name: string; retryLimit: string; existingAgentId?: string };
 
 /** First validation error for the create/edit-queue form, or null when
  * submittable (protocol QueueSpecSchema). */
@@ -829,18 +829,19 @@ export function validateQueueForm(v: QueueFormValues): string | null {
 export function buildQueueSpec(v: QueueFormValues): Record<string, unknown> {
   return {
     name: v.name.trim(),
+    ...(v.existingAgentId?.trim() ? { existingAgentId: v.existingAgentId.trim() } : {}),
     ...(v.retryLimit.trim() ? { retryLimit: Number(v.retryLimit) } : {}),
   };
 }
 
-/** queue.update patch (D11: only retryLimit is patchable). */
+/** Editable queue settings; blank target restores team dispatch. */
 export function buildQueueUpdatePatch(v: QueueFormValues): Record<string, unknown> {
-  return { retryLimit: Number(v.retryLimit.trim() || "0") };
+  return { retryLimit: Number(v.retryLimit.trim() || "0"), ...(v.existingAgentId !== undefined ? { existingAgentId: v.existingAgentId.trim() || null } : {}) };
 }
 
 /** queue.list item → the create-card's field shape, for the "e" edit prefill. */
 export function queueFormValuesFromSpec(spec: Record<string, unknown>): QueueFormValues {
-  return { name: str(spec["name"]), retryLimit: String(num(spec["retryLimit"])) };
+  return { name: str(spec["name"]), retryLimit: String(num(spec["retryLimit"])), ...(typeof spec["existingAgentId"] === "string" ? { existingAgentId: spec["existingAgentId"] } : {}) };
 }
 
 // W18 (F16 task workflows): `workflow` is the per-task override of the queue's

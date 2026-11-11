@@ -122,6 +122,18 @@
   color: var(--accent);
 }
 
+/* Fixed-size indicators leave the flexible name column readable. */
+.rowIndicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  box-sizing: border-box;
+}
+
 /* AGENT-MARK-VISIBILITY: the mark box carried .rowAction alone, so ☑ and ☐ both painted in
    --ghost (#3c424e) — the palette's "barely-there hints" tone. Against the row background a
    MARKED agent was indistinguishable from an unmarked one, which defeats the whole point of a
@@ -469,3 +481,21 @@
   overflow-wrap: anywhere;
 }
 .ungroupDrop[data-dragging="true"] { color: var(--accent); }
+
+.listHeading { display:flex; flex-direction:column; align-items:stretch; gap:8px; width:100%; min-width:0; }
+.summary { flex:0 0 auto; min-width:65px; font-size:var(--fs-meta); line-height:1.5; }
+.headerActions { display:flex; flex:0 1 auto; justify-content:flex-start; align-items:center; gap:3px; min-width:0; max-width:100%; flex-wrap:wrap; padding:3px; }
+.headerActions button { display:inline-flex; flex:0 0 30px; width:30px; height:30px; align-items:center; justify-content:center; padding:0; border:1px solid var(--line-soft); border-radius:50%; color:var(--fg-soft); background:var(--raised); cursor:pointer; }
+.headerActions button:hover, .headerActions button[aria-pressed="true"] { border-color:var(--accent); color:var(--accent); background:var(--sel-bg); }
+.headerActions button:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
+.iconLabel { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; border:0; }
+
+.headerActions button[data-agent-action="agents.spawnDefault"],
+.headerActions button[data-agents-unseen-toggle] { --action-tone:var(--info); }
+.headerActions button[data-agents-needs-operator-toggle] { --action-tone:var(--warn); }
+.headerActions button[data-agent-action="agents.closeAllSessions"],
+.headerActions button[data-agent-action="agents.purgeTerminalSessions"] { --action-tone:var(--danger); }
+.headerActions button { color:var(--action-tone,var(--fg-soft)); }
+.headerActions button:hover, .headerActions button[aria-pressed="true"] { color:var(--action-tone,var(--accent)); border-color:var(--action-tone,var(--accent)); background:color-mix(in srgb,var(--action-tone,var(--accent)) 15%,var(--raised)); }
+
+.spawnActions { display:flex; gap:3px; margin-left:auto; flex:0 0 auto; }

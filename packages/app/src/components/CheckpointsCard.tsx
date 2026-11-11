@@ -22,7 +22,7 @@ import styles from "./CheckpointsCard.module.css";
 // (its confirmId branch takes priority over its own open/closed list view) so
 // a press from either the strip or the card's own footer never double-mounts
 // the modal.
-function CheckpointsCard(_props: OverlayProps) {
+function CheckpointsCard({ bottomInset }: OverlayProps) {
   const cmds = getCheckpointsCommands(appStore, rpcCall);
   const state = useSyncExternalStore(cmds.subscribe, cmds.getState);
   const selected = useStore((s: UiState) => (s.selectedAgentId ? s.agents[s.selectedAgentId] : undefined));
@@ -71,7 +71,7 @@ function CheckpointsCard(_props: OverlayProps) {
   if (!state.open) return null;
 
   return (
-    <OverlayCard width={560} align="center" onClose={() => cmds.escape()}>
+    <OverlayCard bottomInset={bottomInset} width={560} align="center" onClose={() => cmds.escape()}>
       <div data-checkpoints-card>
         <OverlayCardHeader
           title="checkpoints"

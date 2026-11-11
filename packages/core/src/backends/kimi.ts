@@ -284,6 +284,10 @@ export function kimiEffortOptions(configOptions: SessionConfigOption[] | null | 
 }
 
 export function kimiModeFor(spec: ResolvedAgentSpec): KimiAcpMode {
+  if (spec.executionMode === "plan") throw new Error("Kimi does not advertise a native Plan mode");
+  if (spec.executionMode === "auto") return "auto";
+  if (spec.executionMode === "bypassPermissions") return "yolo";
+  if (spec.executionMode === "execute") return "default";
   if (spec.permissionProfile !== "full") return "default";
   return spec.autonomy === "full" ? "auto" : "yolo";
 }
@@ -489,7 +493,7 @@ export function normalizeKimiEvent(update: KimiAcpUpdate, ctx: KimiMapCtx): Back
       // as status so it is visible on the wire rather than silently dropped.
       return { kind: "status", data: { kimiEvent: "compaction_summary_chunk" }, raw: update };
     case "current_mode_update":
-      return { kind: "status", data: { kimiEvent: "current_mode_update", currentModeId: update.currentModeId }, raw: update };
+      return { kind: "status", data: { kimiEvent: "current_mode_update", currentModeId: update.currentModeId, ...({ auto: { executionMode: "auto" }, yolo: { executionMode: "bypassPermissions" }, default: { executionMode: "execute" } }[update.currentModeId as string] ?? {}) }, raw: update };
     default: {
       // Forward-compatible catch-all (mirrors codex.ts's `default:` for unrecognized item types),
       // including Kimi's own vendor extension notifications this npm client's strict schema
@@ -542,6 +546,7 @@ export function sanitizeKimiAcpLine(line: string): string {
 export type KimiTextBlock = Extract<ContentBlock, { type: "text" }>;
 export interface KimiAcpSessionLike {
   readonly sessionId: string;
+  setMode?(mode: KimiAcpMode): Promise<void>;
   // F49: the POST-handshake notice. Only the connection knows what the CLI actually advertised
   // and whether a grant was minted, so the pre-handshake guess KimiAgentBackend.spawn used to
   // build (mcpCapabilities undefined => always "stdio-unsupported") is no longer authoritative.
@@ -907,9 +912,10 @@ export const connectKimiAcp: KimiFactory = (spec, cwd, deps) => {
         (kimiEfforts.length > 0 ? { ...m, supportedEfforts: kimiEfforts } : m)));
     }
     const mode = kimiModeFor(spec);
-    if (mode !== "default") await conn.setSessionMode({ sessionId, modeId: mode });
+    if (mode !== "default" || spec.executionMode !== undefined) await conn.setSessionMode({ sessionId, modeId: mode });
     return {
       sessionId,
+      setMode: async mode => { await conn.setSessionMode({ sessionId, modeId: mode }); },
       mcpNotice: notice,
       prompt: (content) => conn.prompt({ sessionId, prompt: content }),
       cancel: async () => { await conn.cancel({ sessionId }); },
@@ -925,6 +931,7 @@ export const connectKimiAcp: KimiFactory = (spec, cwd, deps) => {
 };
 
 export class KimiAgentBackend implements AgentBackend {
+  readonly executionModes = ["auto", "execute", "bypassPermissions"] as const;
   readonly provider = "kimi";
   // CROSS-PROVIDER-MCP-STORE, CORRECTED (QA of c7c2bff1): this claimed supportsMcpServers:true
   // "now that buildKimiMcpServers() genuinely wires the chimera grant + spec.mcpServers through
@@ -1080,6 +1087,7 @@ export class KimiAgentBackend implements AgentBackend {
         kind: "agent_started",
         data: { sessionId: session.sessionId, ...(effectiveModel ? { model: effectiveModel } : {}), ...(spec.effort ? { effort: spec.effort } : {}) },
       });
+      if (spec.executionMode) sink({ kind: "status", data: { executionMode: spec.executionMode } });
       // CROSS-PROVIDER-MCP-STORE (SURFACING): operator-visible even when the agent's own first
       // turn already carries capabilityNoticeText (e.g. surfaced in a UI transcript/tail without
       // reading the prompt) -- and the ONLY signal at all on a resumeOnly reattach, which pushes
@@ -1149,6 +1157,13 @@ export class KimiAgentBackend implements AgentBackend {
     void run();
 
     return withMessageInput({
+      setExecutionMode: async mode => {
+        const session = await acpHandle.ready;
+        if (!session.setMode) throw new Error("This Kimi session cannot change native mode live");
+        const native = mode === "auto" ? "auto" : mode === "bypassPermissions" ? "yolo" : mode === "execute" ? "default" : null;
+        if (!native) throw new Error("Kimi does not advertise a native Plan mode");
+        await session.setMode(native);
+      },
       send: async (text: string, images?: import("../backend.js").Image[], content?: ContentBlock[], delivery?: AgentDelivery) => {
         if (loop.ended || loop.closed) throw new Error("input stream closed");
         const blocks = deliveryContent(text, images, content, delivery);

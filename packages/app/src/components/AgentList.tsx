@@ -1,7 +1,8 @@
+import { isReplayActive, useReplayActive } from "../state/commands.system";
 import { rememberFleetFilter, onFleetFilter, initialFleetFilter } from "../state/workspaceTools";
-import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { AgentView, TeamColorId } from "@chimera/ui-state";
-import { failureBadge, failureDetail, isKnownFailureCause, isUnseen, promptStallBadge, promptStallDetail, teamIcon, unseenAgentIds } from "@chimera/ui-state";
+import { pauseReasonLabel, failureBadge, failureDetail, isKnownFailureCause, isUnseen, promptStallDetail, teamIcon, unseenAgentIds } from "@chimera/ui-state";
 import { rpcCall } from "../rpc/bridge";
 import { appStore } from "../state/store";
 import { useStore, useStoreThrottled } from "../state/useStore";
@@ -38,6 +39,7 @@ import {
 import { displayChord, keyLabel, registerActionHandler, runAction } from "../keymap";
 import { useSystemLocal } from "../state/commands.system";
 import { Panel, PanelFooter } from "./Panel";
+import { FleetIcon } from "./FleetIcon";
 import { SearchBox } from "./SearchBox";
 import { WorkflowStepDots } from "./WorkflowStepDots";
 import styles from "./AgentList.module.css";
@@ -164,6 +166,8 @@ function useTickWhileStalled(active: boolean): number {
   return now;
 }
 
+const ListControlsDisabledContext = createContext(true);
+
 function Row({
   row, agent, name, selected, pinned, marked, workflowDots,
 }: {
@@ -209,11 +213,13 @@ function Row({
   // remaining state text; it lives in title+aria-label instead of being
   // painted, which also gives screen readers a state string that isn't
   // encoded by color alone.
-  const stateLabel = [st, busyRunning ? "busy" : null, overBudget ? "over budget" : null]
+  const stateLabel = [st, agent.state === "paused" ? pauseReasonLabel(agent.pauseReason) : null, busyRunning ? "busy" : null, overBudget ? "over budget" : null]
     .filter(Boolean)
     .join(" — ");
   // OPERATOR-RENAME: inline, in place, the same shape the group box's own rename uses — a name is
   // read where it is read, so it should be corrected there too rather than behind a dialog.
+  const controlsDisabled = useContext(ListControlsDisabledContext);
+  const [holdPending, setHoldPending] = useState(false);
   const [renamingAgent, setRenamingAgent] = useState(false);
   const [agentNameDraft, setAgentNameDraft] = useState(name);
   const commitRename = (): void => {
@@ -358,6 +364,16 @@ function Row({
                 is one because the intent is one. Never on a running agent, where it would be a
                 control whose only possible outcome is a refusal. Sits next to ✕ so what you can
                 do with a stopped row is in one place: pick it up, or make it go away. */}
+            {agent.state === "running" && !agent.shadow && <button
+              type="button" className={styles.rowAction} aria-label="hold agent" title="hold — pause this agent until you release it"
+              data-agent-action="agents.hold" disabled={controlsDisabled || holdPending}
+              onClick={ev => {
+                ev.stopPropagation();
+                if (!appStore.getState().connected || isReplayActive() || holdPending) return;
+                setHoldPending(true);
+                void agentCommands(appStore, rpcCall).bulkPause([agent.agentId]).finally(() => setHoldPending(false));
+              }}
+            >⏸</button>}
             {(isTerminalState(agent.state) || agent.state === "paused") && (
               <button
                 type="button"
@@ -367,9 +383,14 @@ function Row({
                   ? "release — lift the hold and let this agent carry on"
                   : "resume — continue in the same worktree and session (composer text becomes the brief)"}
                 data-agent-action="agents.resume"
+                disabled={controlsDisabled || holdPending}
                 onClick={(ev) => {
                   ev.stopPropagation();
-                  runAction("agents.resume", appStore);
+                  if (agent.state === "paused") {
+                    if (controlsDisabled || holdPending) return;
+                    setHoldPending(true);
+                    void agentCommands(appStore, rpcCall).bulkRelease([agent.agentId]).finally(() => setHoldPending(false));
+                  } else runAction("agents.resume", appStore);
                 }}
               >
                 ⟲
@@ -405,7 +426,7 @@ function Row({
           ? (agent.shadowInfo?.totalTokens !== undefined ? fmtTokens(agent.shadowInfo.totalTokens) : "—")
           : (agent.usage ? fmtTokens(agent.usage.input + agent.usage.output) : "—")}
       </div>
-      {overBudget ? <span className={styles.toneWarn} title="Soft turn limit exceeded; the agent is still running"> ⚠ soft</span> : null}
+      {overBudget ? <span className={`${styles.rowIndicator} ${styles.toneWarn}`} role="img" aria-label="Soft turn limit exceeded; the agent is still running" title="Soft turn limit exceeded; the agent is still running"><FleetIcon kind="alert" /></span> : null}
       {/* PAUSED-AGENTS-VISIBLE: the WHY + WHEN badge — the ⏸ glyph on the state cell
           already flags a paused row, but a bare "paused" word doesn't tell the operator
           whether it'll resolve itself (session limit / reattach recovery) or is stuck
@@ -416,25 +437,19 @@ function Row({
         // restart/idle holds, see pauseSummary) there is nothing left for it to say, and
         // drawing the bare glyph again just puts a second ⏸ at the end of the row.
         const why = pauseSummary(agent);
-        return why ? <span className={styles.toneWarn}>{` ⏸ ${why}`}</span> : null;
+        return why ? <span className={`${styles.rowIndicator} ${styles.toneWarn}`} role="img" aria-label={why} title={why}>⏸</span> : null;
       })() : null}
-      {/* F08: the ✗ glyph on the state cell already flags a failed row — this trailing badge
-          carries the WHY (rate-limited vs bad credential vs unretryable request), each of which
-          implies a different operator action, so unlike the pause badge there is no "nothing
-          worth the width" case here. */}
-      {/* F08.UI: the badge says the class AND whose move it is next ("needs you" vs "retries
-          spent"), because on a terminal row those two look identical otherwise; the full
-          sentence — what to do, and the RULE that classified it — rides the tooltip so the row
-          stays one line. An unknown cause from a newer daemon is drawn MUTED, not warn-toned: a
-          raw wire string must not pass itself off as a curated label (F08.QA). */}
+      {/* Details stay in the tooltip; unknown failure causes remain muted rather
+          than appearing as curated warnings. */}
       {agent.state === "failed" && agent.failure ? (
         <span
-          className={isKnownFailureCause(agent.failure.cause) ? styles.toneWarn : styles.toneMuted}
-          title={failureDetail(agent.failure)}
+          className={`${styles.rowIndicator} ${isKnownFailureCause(agent.failure.cause) ? styles.toneWarn : styles.toneMuted}`}
+          role="img"
+          title={`${failureBadge(agent.failure)} — ${failureDetail(agent.failure)}`}
           aria-label={failureDetail(agent.failure)}
           data-agent-failure={agent.failure.cause}
         >
-          {` ${failureBadge(agent.failure)}`}
+          <FleetIcon kind="alert" />
         </span>
       ) : null}
       {/* F09: the agent is idle with an unacknowledged message — NOT the fleet `stalled`
@@ -445,16 +460,16 @@ function Row({
       {agent.promptStall ? (
         <button
           type="button"
-          className={`${styles.rowAction} ${styles.toneWarn}`}
+          className={`${styles.rowAction} ${styles.rowIndicator} ${styles.toneWarn}`}
           data-agent-action="agents.resendPrompt"
           title={`${promptStallDetail(agent.promptStall, stallNow)} (click, or run “Resend unacknowledged prompt” from the command palette)`}
-          aria-label={promptStallDetail(agent.promptStall, stallNow)}
+          aria-label={`Resend unacknowledged prompt — ${promptStallDetail(agent.promptStall, stallNow)}`}
           onClick={(ev) => {
             ev.stopPropagation();
             void agentCommands(appStore, rpcCall).resendStalledPrompt(row.agentId);
           }}
         >
-          {`${promptStallBadge(agent.promptStall, stallNow)} · resend`}
+          <FleetIcon kind="alert" />
         </button>
       ) : null}
       {/* F47: the per-row attention badge doubles as its own mark-read affordance — the operator
@@ -773,6 +788,8 @@ export function AgentList() {
   // The others stay immediate on purpose. agentOrder/collapsed/teams/mainConductorId change when
   // the operator does something, not per event, so throttling them would only add lag; and
   // selectedAgentId drives the transcript, where any delay is felt directly as a slow click.
+  const connected = useStore(s => s.connected);
+  const replaying = useReplayActive();
   const agents = useStoreThrottled((s) => s.agents);
   const agentOrder = useStore((s) => s.agentOrder);
   const collapsed = useStore((s) => s.collapsed);
@@ -990,38 +1007,14 @@ export function AgentList() {
 
   return (
     <ListOrderingContext.Provider value={ordering}>
-    <Panel label={<TitleSummary s={summary} />} className={styles.pane}>
-      <SearchBox
-        value={query}
-        onChange={setQuery}
-        placeholder="search agents (name · id · state · team)"
-        count={{ shown: rows.length, total: summary.total, noun: "agents" }}
-        dataAttr="agents-search"
-      >
-        <button
-          type="button"
-          className={styles.spawnButton}
-          onClick={() => runAction("agents.spawnDefault", appStore)}
-          data-agent-action="agents.spawnDefault"
-          title="choose provider, account and model for a new chat"
-        >
-          + spawn
-        </button>
-        <button
-          type="button"
-          className={styles.doneToggle}
-          onClick={() => runAction("agents.spawn", appStore)}
-          data-agent-action="agents.spawn"
-          title="spawn with options (form)"
-        >
-          ⋯
-        </button>
+    <ListControlsDisabledContext.Provider value={!connected || replaying}>
+    <Panel label={<div className={styles.listHeading} data-agent-list-heading><div className={styles.summary}><TitleSummary s={summary} /></div><div className={styles.headerActions} role="toolbar" aria-label="Agent list actions">
         {/* SEARCHBOX-ACTION-ROW: the LIST's own chips, wrapped so they always occupy a row of
             their own. They used to sit loose in the search row and relied on its flex-wrap to
             push them down, so their position was an overflow artifact — it moved with the pane
             width and the wrapped line aligned to nothing. A basis of 100% makes the second row
             deliberate, with its own gap and a left edge matching the "/" above. */}
-        <div className={styles.listActions}>
+        <>
         {/* F47: the attention chrome hides entirely on an idle fleet — a standing "0 new" chip is
             a false alarm. The ONE exception is a filter the operator turned on and then emptied by
             reading everything: the toggle stays so it can be switched back off, because a narrowed
@@ -1034,7 +1027,7 @@ export function AgentList() {
             type="button"
             className={needsOperatorOnly ? `${styles.doneToggle} ${styles.doneToggleEmphasis}` : styles.doneToggle}
             onClick={() => setNeedsOperatorOnly((v) => !v)}
-            data-agents-needs-operator-toggle=""
+            data-agents-needs-operator-toggle="" aria-pressed={needsOperatorOnly}
             title={
               needsOperatorOnly
                 ? "show every agent again"
@@ -1042,7 +1035,7 @@ export function AgentList() {
             }
           >
             {/* SYMMETRIC-TOGGLE-LABEL, same COUNT · verb shape as the chips beside it. */}
-            {needsOperatorOnly ? `⚠ ${summary.needsOperator} needs you · all` : `⚠ ${summary.needsOperator} needs you · only`}
+            <FleetIcon kind="alert" /><span className={styles.iconLabel}>{needsOperatorOnly ? `⚠ ${summary.needsOperator} needs you · all` : `⚠ ${summary.needsOperator} needs you · only`}</span>
           </button>
         ) : null}
         {summary.unseen > 0 || unseenOnly ? (
@@ -1051,13 +1044,13 @@ export function AgentList() {
               type="button"
               className={unseenOnly ? `${styles.doneToggle} ${styles.doneToggleEmphasis}` : styles.doneToggle}
               onClick={() => setUnseenOnly((v) => !v)}
-              data-agents-unseen-toggle=""
+              data-agents-unseen-toggle="" aria-pressed={unseenOnly} aria-label={unseenOnly ? `${summary.unseen} new · all` : `${summary.unseen} new · only`}
               /* "new" is the badge word, not a concept the operator can look up — spell out what
                  it counts. */
               title={unseenOnly ? "show every agent again" : "show only agents with activity you have not read"}
             >
               {/* Same COUNT · verb shape as the done toggle beside it (SYMMETRIC-TOGGLE-LABEL). */}
-              {unseenOnly ? `◆ ${summary.unseen} new · all` : `◆ ${summary.unseen} new · only`}
+              <FleetIcon kind="unread" /><span className={styles.iconLabel}>{unseenOnly ? `◆ ${summary.unseen} new · all` : `◆ ${summary.unseen} new · only`}</span>
             </button>
             {/* Calls the command DIRECTLY rather than through runAction: AgentList is mounted in
                 tests (and could be reused) without AgentsScreen, whose registerActionHandler is
@@ -1071,7 +1064,7 @@ export function AgentList() {
               data-agent-action="agents.markAllSeen"
               title="mark every agent read"
             >
-              mark all seen
+              <FleetIcon kind="seen" /><span className={styles.iconLabel}>mark all seen</span>
             </button>
           ) : null}
           </>
@@ -1088,7 +1081,7 @@ export function AgentList() {
                 : styles.doneToggle
             }
             onClick={() => setShowDone((v) => !v)}
-            data-agents-done-toggle=""
+            data-agents-done-toggle="" aria-pressed={showDone} aria-label={showDone ? `${doneCount} done · hide` : `${hiddenDoneCount} done · show`} title={showDone ? `Hide ${doneCount} finished agents` : `Show ${hiddenDoneCount} finished agents`}
           >
             {/* SYMMETRIC-TOGGLE-LABEL: both states read the same shape — a COUNT, then the verb
                 that acts on it. "hide done" on its own is a bare verb with no count, and next to
@@ -1097,7 +1090,7 @@ export function AgentList() {
                 means. Reported as "why are done agents still visible, weren't we hiding them?"
                 while the toggle was simply switched on. A label that can be read as either the
                 current condition or the pending action cannot be fixed by explaining it. */}
-            {showDone ? `◍ ${doneCount} done · hide` : `◍ ${hiddenDoneCount} done · show`}
+            <FleetIcon kind="done" /><span className={styles.iconLabel}>{showDone ? `◍ ${doneCount} done · hide` : `◍ ${hiddenDoneCount} done · show`}</span>
           </button>
         ) : null}
         {/* Ad-hoc sessions design §6 "close all sessions" — only worth showing when
@@ -1107,9 +1100,9 @@ export function AgentList() {
             type="button"
             className={styles.doneToggle}
             onClick={() => runAction("agents.closeAllSessions", appStore)}
-            data-agent-action="agents.closeAllSessions"
+            data-agent-action="agents.closeAllSessions" title="Close all sessions"
           >
-            close all sessions
+            <FleetIcon kind="close" /><span className={styles.iconLabel}>close all sessions</span>
           </button>
         ) : null}
         {/* PURGE-TERMINAL-SESSIONS: the housekeeping counterpart beside it — that button ENDS
@@ -1124,7 +1117,7 @@ export function AgentList() {
             data-agent-action="agents.purgeTerminalSessions"
             title="delete the records, archived copies and mailboxes of finished agents"
           >
-            {`clean up ${terminalCount} finished`}
+            <FleetIcon kind="trash" /><span className={styles.iconLabel}>{`clean up ${terminalCount} finished`}</span>
           </button>
         ) : null}
         {/* AGENT-GROUPS Phase 1: the one create affordance — a plain inline text input rather
@@ -1159,11 +1152,38 @@ export function AgentList() {
             data-agent-action="groups.create"
             title="create a new operator group"
           >
-            + group
+            <FleetIcon kind="group" /><span className={styles.iconLabel}>Create group</span>
           </button>
         )}
-        </div>
-      </SearchBox>
+        </>
+<span className={styles.spawnActions}>
+        <button
+          type="button"
+          className={styles.spawnButton}
+          onClick={() => runAction("agents.spawnDefault", appStore)}
+          data-agent-action="agents.spawnDefault"
+          title="choose provider, account and model for a new chat"
+        >
+          <FleetIcon kind="spawn" /><span className={styles.iconLabel}>Spawn agent</span>
+        </button>
+        <button
+          type="button"
+          className={styles.doneToggle}
+          onClick={() => runAction("agents.spawn", appStore)}
+          data-agent-action="agents.spawn"
+          title="spawn with options (form)"
+        >
+          <FleetIcon kind="options" /><span className={styles.iconLabel}>Spawn with options</span>
+        </button>
+</span>
+</div></div>} className={styles.pane}>
+      <SearchBox
+        value={query}
+        onChange={setQuery}
+        placeholder="search agents (name · id · state · team)"
+        count={{ shown: rows.length, total: summary.total, noun: "agents" }}
+        dataAttr="agents-search"
+      />
       <div className={styles.columns}>
         <div className={styles.colGlyph} />
         <div className={styles.colAgent}>agent</div>
@@ -1256,6 +1276,7 @@ export function AgentList() {
         ↑↓ {keyLabel("up")} · ←→ {keyLabel("left")} · {displayChord("mod+o")} {keyLabel("mod+o")} · {displayChord("mod+shift+k")} {keyLabel("mod+shift+k")} · {displayChord("mod+r")} {keyLabel("mod+r")?.split(" ")[0]}
       </PanelFooter>
     </Panel>
+    </ListControlsDisabledContext.Provider>
     </ListOrderingContext.Provider>
   );
 }

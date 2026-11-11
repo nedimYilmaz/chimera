@@ -38,7 +38,8 @@
      transcript above, being flex:1, expands into whatever the composer is not using. Dragging the
      seam still governs the composer: it is the ceiling it grows to — as strips arrive and the
      input wraps — before it scrolls internally instead of pushing the transcript off screen. */
-  max-height: var(--pane-h, 148px);
+  /* Reserve the toolbar in addition to the resizable message area. */
+  max-height: calc(var(--pane-h, 148px) + 104px);
   min-height: 0;
   overflow: auto;
   padding-top: 6px;

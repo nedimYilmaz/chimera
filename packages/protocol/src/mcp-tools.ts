@@ -353,7 +353,7 @@ const MCP_TOOL_TABLE_BASE = [
       // Absent => "sdk", unchanged.
       runtime: z.enum(["sdk", "terminal"]).optional(),
       model: z.string().optional(), instructions: z.string().optional(),
-      executionMode: z.enum(["plan", "execute", "auto"]).optional().describe("Claude SDK native mode; auto explicitly selects automatic permission review, plan selects planning, execute uses the configured native mode."),
+      executionMode: z.enum(["plan", "execute", "auto", "bypassPermissions"]).optional().describe("Claude SDK native mode; auto explicitly selects automatic permission review, plan selects planning, execute uses the configured native mode; bypassPermissions explicitly requests native full access, subject to provider policy."),
       permissionProfile: z.enum(["readOnly", "acceptEdits", "full"]).optional(),
       // CODEX-GATE-EXPOSURE: required to spawn a codex agent with permissionProfile "full" —
       // see the tool description. No effect for other providers/profiles.
@@ -602,7 +602,7 @@ const MCP_TOOL_TABLE_BASE = [
   { name: "agent_add_groups", description: "Atomically add Inspector group memberships, preserving other memberships without respawning (maximum 8 total).", inputSchema: AgentChangeGroupsParamsSchema.shape, resolve: (a) => rpc("agent.addGroups", a) },
   { name: "agent_remove_groups", description: "Atomically remove Inspector group memberships, preserving other memberships without respawning.", inputSchema: AgentChangeGroupsParamsSchema.shape, resolve: (a) => rpc("agent.removeGroups", a) },
 
-  { name: "agent_set_mode", description: "Set Claude SDK planning mode on a live agent without restarting or replaying input. auto explicitly selects native auto permission review independent of role defaults; plan selects native planning; execute uses the configured native mode. Chimera permission restrictions remain enforced. Stopped agents save the selection for their next launch. Unsupported providers/transports fail explicitly.", inputSchema: { agentId: z.string().min(1), mode: z.enum(["plan", "execute", "auto"]) }, resolve: (a) => rpc("agent.reconfigure", { agentId: a.agentId, live: { executionMode: a.mode } }) },
+  { name: "agent_set_mode", description: "Set an agent's execution mode without restarting or replaying input. Claude uses native permission modes; Codex app-server applies native planning/access presets on the next turn; Kimi supports auto/execute/full but not plan; API providers enforce modes through Chimera tools. Full access remains subject to provider policy. Stopped agents save the choice for next launch. Codex full requires an explicit risk acknowledgment. Unsupported runtimes fail explicitly.", inputSchema: { agentId: z.string().min(1), mode: z.enum(["plan", "execute", "auto", "bypassPermissions"]), acknowledgeCodexFullAccessRisk: z.boolean().optional() }, resolve: (a) => rpc("agent.reconfigure", { agentId: a.agentId, live: { executionMode: a.mode }, ...(a.acknowledgeCodexFullAccessRisk === true ? { patch: { acknowledgeCodexFullAccessRisk: true } } : {}) }) },
 
   {
     name: "agent_reconfigure",
@@ -1209,7 +1209,7 @@ const MCP_TOOL_TABLE_BASE = [
   { name: "issues_link_list", description: "Read issue provenance and actual task/review status within your queue scope.", inputSchema: IssueLinkListRequestSchema.omit({ callerAgentId: true }).shape, resolve: (a, ctx) => rpc("issues.linkList", { ...a, callerAgentId: ctx.agentId }) },
   { name: "issues_post_comment", description: "Request an exact comment/close preview. Returns approval_required; only the operator can confirm it in the app. Closing requires accepted review.", inputSchema: IssuePostCommentRequestSchema.omit({ callerAgentId: true, phase: true, previewId: true }).shape, resolve: (a, ctx) => rpc("issues.postComment", { ...a, phase: "preview", callerAgentId: ctx.agentId }) },
 
-  { name: "queue_create", description: "Create a task queue (retryLimit = max retries; failover attempts count)", inputSchema: { spec: z.record(z.string(), z.unknown()) }, resolve: (a) => rpc("queue.create", a) },
+  { name: "queue_create", description: "Create a task queue; spec.existingAgentId binds one persistent conversation instead of team workers. retryLimit = max retries; failover attempts count", inputSchema: { spec: z.record(z.string(), z.unknown()) }, resolve: (a) => rpc("queue.create", a) },
 
   {
     name: "queue_push",
@@ -1234,13 +1234,14 @@ const MCP_TOOL_TABLE_BASE = [
       ? rpc("queue.status", { queue: a["queue"] })
       : rpc("queue.statusSummary", { queue: a["queue"], ...(a["limit"] !== undefined ? { limit: a["limit"] } : {}), ...(a["cursor"] !== undefined ? { cursor: a["cursor"] } : {}) }),
   },
-  { name: "queue_cancel_task", description: "Cancel a pending or blocked task (cancelling a blocked task cascade-fails its dependents). In-flight cancel: use agent_kill on the task's agent — the task then fails permanently (no retry)", inputSchema: { taskId: z.string() }, resolve: (a) => rpc("queue.cancelTask", a) },
+  { name: "queue_complete_task", description: "Finish YOUR assigned existing-agent queue task with a verified result (success:false records failure). Mailbox receipt or an unrelated turn does not complete it. No replacement agent is started.", inputSchema: { taskId: z.string(), result: z.string().trim().min(1).max(16000), success: z.boolean().optional() }, resolve: (a, ctx) => { if (!ctx.agentId) throw new Error("Authenticated agent required"); return rpc("queue.completeTask", { ...a, callerAgentId: ctx.agentId }); } },
+  { name: "queue_cancel_task", description: "Cancel a pending or blocked task (blocked cancellation fails its dependents). For an in-flight existing-agent task, the assigned agent should use queue_complete_task with success:false; do not kill the shared conversation. For team-spawned workers, agent_kill fails the task permanently", inputSchema: { taskId: z.string() }, resolve: (a) => rpc("queue.cancelTask", a) },
   { name: "queue_requeue", description: "Replay a dead-lettered task: resets its retry budget and reverts it to pending (workflow-bound tasks resume from their persisted step/checkpoint). Only valid on a task in the 'dead_letter' state.", inputSchema: { taskId: z.string() }, resolve: (a) => rpc("queue.requeue", a) },
   // QUEUE-PAUSE: durable pause/resume — while paused, the scheduler drains NO new agents from
   // this queue (running agents finish naturally, pending tasks stay pending); persisted in
   // QueueSpec.paused so it survives a daemon restart. Returns the updated QueueSpec.
-  { name: "queue_pause", description: "Pause a queue's drain: no NEW agents spawn from it. Already-running agents on it finish naturally; pending tasks stay pending, nothing is lost. Durable — survives a daemon restart.", inputSchema: { queue: z.string() }, resolve: (a) => rpc("queue.pause", a) },
-  { name: "queue_resume", description: "Resume a paused queue's drain — pending tasks immediately flow to the queue's team agents again.", inputSchema: { queue: z.string() }, resolve: (a) => rpc("queue.resume", a) },
+  { name: "queue_pause", description: "Pause new queue assignments. Assigned work finishes naturally; pending tasks stay pending. Durable across daemon restart.", inputSchema: { queue: z.string() }, resolve: (a) => rpc("queue.pause", a) },
+  { name: "queue_resume", description: "Resume a paused queue — pending tasks flow to its configured existing agent or team workers.", inputSchema: { queue: z.string() }, resolve: (a) => rpc("queue.resume", a) },
   {
     name: "queue_edit_task",
     description: "Edit a still-queued task IN PLACE instead of cancel+re-push (which loses the taskId and dependsOn linkage). Only pending or blocked tasks are editable — in_progress/terminal tasks are immutable (rejected). Sparse patch: only the fields you set change (prompt, role, priority, overrides, workflow binding, tags); others are untouched. Preserves taskId/dependsOn/createdAt/pushedBy and appends a version-history entry. The next spawn (incl. a retry after failure) uses the LATEST prompt — 'fix the brief, let the retry use it'. Returns the updated task record (its versions[] head is the new edit).",
@@ -1381,7 +1382,7 @@ const MCP_TOOL_TABLE_BASE = [
   },
 
   { name: "queue_list", description: "List all queues", inputSchema: {}, resolve: () => rpc("queue.list", {}) },
-  { name: "queue_update", description: "Update a queue's retryLimit/retryPolicy", inputSchema: { name: z.string(), patch: z.object({ retryLimit: z.number().int().min(0).optional(), retryPolicy: z.record(z.string(), z.unknown()).optional() }) }, resolve: (a) => rpc("queue.update", a) },
+  { name: "queue_update", description: "Update a queue: existingAgentId pins one managed conversation (null restores team dispatch); active assignments prevent retargeting.", inputSchema: { name: z.string(), patch: z.object({ existingAgentId: z.string().min(1).nullable().optional(), workflow: z.string().nullable().optional(), retryLimit: z.number().int().min(0).optional(), retryPolicy: z.record(z.string(), z.unknown()).optional() }) }, resolve: (a) => rpc("queue.update", a) },
   { name: "queue_delete", description: "Delete a queue by name (refused while it holds any non-terminal task)", inputSchema: { name: z.string() }, resolve: (a) => rpc("queue.delete", a) },
 
   { name: "plugins_list", description: "List discovered Claude Code plugins/commands (optionally scoped to a project cwd)", inputSchema: { cwd: z.string().optional() }, resolve: (a) => rpc("plugins.list", { ...(a["cwd"] !== undefined ? { cwd: a["cwd"] } : {}) }) },

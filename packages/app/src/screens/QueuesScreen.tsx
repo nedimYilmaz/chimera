@@ -850,6 +850,7 @@ export function QueuesScreen() {
               <div className={styles.detailTitleRow}>
                 <span className={styles.detailName}>{detailName}</span>
                 <span className={styles.retryLimitMeta}>retry limit {num(detail.spec["retryLimit"])}</span>
+                {typeof detail.spec["existingAgentId"] === "string" && <span>existing agent · {detail.spec["existingAgentId"]}</span>}
                 {detail.spec["paused"] === true && <span className={styles.toneWarn}> ⏸ paused</span>}
                 <span className={styles.spacer} />
                 <span className={styles.toneWarn}>{num(detail.counts["pending"])} pending</span>
@@ -1175,12 +1176,14 @@ export function QueuesScreen() {
       })()}
       {mode === "queueForm" && editingQueueSpec === null && (
         <QueueFormCard
+          agents={Object.entries(appStore.getState().agents).filter(([, a]) => !a.shadow).map(([id, a]) => ({ id, name: a.displayLabel ?? a.label ?? id }))}
           onSubmit={(spec) => coord.createQueue(spec)}
           onClose={closeQueueForm}
         />
       )}
       {mode === "queueForm" && editingQueueSpec !== null && (
         <QueueFormCard
+          agents={Object.entries(appStore.getState().agents).filter(([, a]) => !a.shadow).map(([id, a]) => ({ id, name: a.displayLabel ?? a.label ?? id }))}
           mode="edit"
           initial={queueFormValuesFromSpec(editingQueueSpec)}
           onSubmit={(patch) => coord.updateQueue(str(editingQueueSpec["name"]), patch)}

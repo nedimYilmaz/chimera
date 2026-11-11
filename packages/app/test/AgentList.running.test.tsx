@@ -228,8 +228,13 @@ describe("AgentList Row — F09 unacknowledged-prompt badge", () => {
     expect(row).toBeDefined();
     // QA U1: the badge follows the clock off sinceTs — it must not paint the frozen sinceMs
     // snapshot. Both this assertion and the resend affordance are part of the same badge.
-    expect(flattenText(row)).toContain("⚠ start unconfirmed");
-    expect(flattenText(row)).toContain("resend");
+    expect(flattenText(row)).not.toContain("start unconfirmed");
+    expect(flattenText(row)).not.toContain("resend");
+    let warning: TreeNode | undefined;
+    walk(row!, node => { if (node.props["data-agent-action"] === "agents.resendPrompt") warning = node; });
+    expect(warning?.type).toBe("button");
+    expect(warning?.props.title).toContain("no turn-start confirmation yet");
+    expect(warning?.props["aria-label"]).toContain("Resend unacknowledged prompt");
   });
 });
 
@@ -248,6 +253,9 @@ describe("soft limit is not a pause", () => {
     expect(glyph).toBeDefined();
     expect(String(glyph!.props.className)).not.toMatch(/toneWarn/);
     expect(String(glyph!.props.className)).toMatch(busy ? /busyPulse/ : /toneSuccess/);
-    expect(flattenText(row)).toContain("soft");
+    let warning: TreeNode | undefined;
+    walk(row, node => { if (String(node.props.title).startsWith("Soft turn limit")) warning = node; });
+    expect(warning).toBeDefined();
+    expect(flattenText(warning)).toBe("");
   });
 });

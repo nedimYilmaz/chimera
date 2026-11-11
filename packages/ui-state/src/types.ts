@@ -376,7 +376,9 @@ export type AgentView = {
   // `permissionProfile` is readOnly|acceptEdits|full; `permissionRequest` is auto|poke:caller|tui.
   permissionProfile?: string;
   permissionRequest?: string;
-  executionMode?: "plan" | "execute" | "auto";
+  executionMode?: "plan" | "execute" | "auto" | "bypassPermissions";
+  requestedExecutionMode?: "plan" | "execute" | "auto" | "bypassPermissions";
+  executionModePending?: boolean;
   permissionApplication?: PermissionApplication;
   /** Legacy provider response; newer daemons also report independently acknowledged posture. */
   permissionAppliedToRunningProcess?: boolean;
@@ -919,8 +921,11 @@ export type ConfirmAction =
 // of the raw `shadow:...` id. Optional/defensive: a real agent has neither, so it
 // renders exactly as before.
 export type AgentRecordLite = {
+  actualModel?: string;
   agentId: string; state: string; accountName: string; provider: string;
-  executionMode?: "plan" | "execute" | "auto";
+  executionMode?: "plan" | "execute" | "auto" | "bypassPermissions";
+  requestedExecutionMode?: "plan" | "execute" | "auto" | "bypassPermissions";
+  executionModePending?: boolean;
   permissionApplication?: PermissionApplication;
   displayLabel?: string;
   // CONDUCTOR-FULL-ACCESS: agent.list returns the FULL AgentRecord (spec included), so the
@@ -929,7 +934,7 @@ export type AgentRecordLite = {
   // `spec.on.permissionRequest` (see protocol AgentSpecSchema). Both optional/defensive: an
   // older daemon's agent.listSummary path drops the spec entirely, leaving them undefined.
   costUsd: number; createdAt: number;
-  spec?: { conductor?: boolean; session?: boolean; displayLabel?: string; permissionProfile?: string; on?: { permissionRequest?: string } };
+  spec?: { model?: string; effort?: EffortLevel; executionMode?: "plan" | "execute" | "auto" | "bypassPermissions"; conductor?: boolean; session?: boolean; displayLabel?: string; permissionProfile?: string; on?: { permissionRequest?: string } };
   treeId?: string; depth?: number; membership?: { team: string; role: string };
   // ROLES-TAB S1: rides the SAME agent.list snapshot (AgentRecord.sessionRole).
   // Optional/defensive: absent for an older daemon / a non-session-role spawn.

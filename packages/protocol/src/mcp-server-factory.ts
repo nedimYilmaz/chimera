@@ -160,7 +160,9 @@ async function registerDirectStoreTools(server: McpServer, dispatch: ChimeraMcpD
 // its own top-level MCP tool name. Applies uniformly to BOTH consumers of this factory: the
 // stdio server (packages/mcp/src/server.ts) and core's in-process bridge (generic-mcp.ts).
 export async function createChimeraMcpServer(dispatch: ChimeraMcpDispatch, ctx: ChimeraMcpCtx): Promise<McpServer> {
-  const server = new McpServer({ name: "chimera", version: "0.1.0" });
+  // Bound nested validation work before Zod parses tool arguments, including HTTP requests
+  // below the listener byte cap. Strings (prompts/documents) count as one member.
+  const server = new McpServer({ name: "chimera", version: "0.1.0" }, { maxToolInputElements: 10_000 });
   // Depth/env identify a candidate grant, not authority. Resolve the child edge
   // against the daemon before even publishing its baseline tools.
   if (ctx.access === "coordination" && !await coordinationCaller(dispatch, ctx)) return server;

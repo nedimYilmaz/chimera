@@ -70,8 +70,7 @@ const rowIds = (): string[] =>
 const chip = () => mounted!.root.findByProps({ "data-agents-unseen-toggle": "" });
 const chipLabel = (): string => {
   const c = chip();
-  return (Array.isArray(c.props["children"]) ? c.props["children"] : [c.props["children"]])
-    .filter((x: unknown) => typeof x === "string").join("");
+  return c.props["aria-label"];
 };
 const seenCalls = (): unknown[][] => vi.mocked(rpcCall).mock.calls.filter((c) => c[0] === "agent.markSeen");
 

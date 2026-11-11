@@ -4,6 +4,6 @@
   "type": "module",
   "main": "src/main.ts",
   "exports": { ".": "./src/main.ts", "./server": "./src/server.ts", "./federation": "./src/federation.ts", "./ssh-tunnel": "./src/ssh-tunnel.ts", "./cloudflared-tunnel": "./src/cloudflared-tunnel.ts" },
-  "dependencies": { "@chimera/core": "workspace:*", "@chimera/protocol": "workspace:*", "zod": "^4.4.3" },
+  "dependencies": { "@chimera/core": "workspace:*", "@chimera/protocol": "workspace:*", "zod": "^4.6.7" },
   "devDependencies": { "@chimera/client": "workspace:*" }
 }

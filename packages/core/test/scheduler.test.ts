@@ -91,9 +91,9 @@ describe("QueueScheduler drain", () => {
     expect(spec.instructions).not.toContain("Check the parser boundary.");
     expect(spec.instructions).toContain("foreground");
     expect(spec.instructions).toContain("Commit before long checks");
-    expect(spec.instructions).not.toContain("memory_search");
+    expect(spec.instructions!.match(/CHIMERA MEMORY FIRST/g)).toHaveLength(1);
     expect(spec.instructions).not.toContain("memory_search before starting");
-    expect(spec.instructions!.length).toBeLessThan(1_800);
+    expect(spec.instructions!.length).toBeLessThan(2_200);
   });
 
   it("respects priority then FIFO order with maxConcurrent 1", async () => {

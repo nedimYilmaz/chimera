@@ -239,11 +239,6 @@ if (cfg.accounts.length > 0) {
 
 engine.scheduler.tick().catch((err) => logError("scheduler", "initial tick failed", err));   // re-drain queue tasks reverted to pending (spec §3); never crash-loop the daemon on persisted state
 
-// D6 (Network & tailscale): if a tailscale auth key is stored and we are not logged in, join the
-// tailnet now (`tailscale up --auth-key`) and BURN the key on success; a failure emits
-// network_error (message scrubbed of the key) and never crashes boot.
-engine.autoJoinNetwork().catch((err) => logError("network", "auto-join tailnet failed", err));
-
 // FEATURE-4: crash-safe, DEBOUNCED snapshot (write-temp + fsync + rename + fsync-dir, on a
 // bounded cadence rather than every single event — see SnapshotScheduler for the full
 // rationale). Boot-time replay (reattachFromState) folds any events since the last flush back
