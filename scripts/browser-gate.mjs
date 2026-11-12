@@ -10,6 +10,22 @@ export const RESULT_PREFIX = "__CHIMERA_BROWSER_GATE_RESULT__=";
 // may be added, but removing or skipping any existing ID must fail both boundaries.
 export const REQUIRED_CHECK_IDS = {
   "ui": [
+    "ui.shadow-activity-390px-shows-cli-phases-and-metrics",
+    "ui.shadow-activity-390px-filters-phase-members",
+    "ui.shadow-activity-390px-drills-into-exact-agent",
+    "ui.shadow-activity-390px-fits-viewport",
+    "ui.shadow-activity-768px-shows-cli-phases-and-metrics",
+    "ui.shadow-activity-768px-filters-phase-members",
+    "ui.shadow-activity-768px-drills-into-exact-agent",
+    "ui.shadow-activity-768px-fits-viewport",
+    "ui.shadow-activity-1440px-shows-cli-phases-and-metrics",
+    "ui.shadow-activity-1440px-filters-phase-members",
+    "ui.shadow-activity-1440px-drills-into-exact-agent",
+    "ui.shadow-activity-1440px-fits-viewport",
+    "ui.shadow-activity-polling-updates-progress",
+    "ui.shadow-activity-refresh-failure-labels-stale-data",
+    "ui.shadow-activity-selection-isolates-native-transcript",
+
     "ui.agent-controls-390px-warning-keeps-agent-readable",
     "ui.agent-controls-390px-warning-resends-only-its-agent",
     "ui.agent-controls-768px-warning-keeps-agent-readable",

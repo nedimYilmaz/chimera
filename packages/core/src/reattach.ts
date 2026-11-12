@@ -25,6 +25,7 @@ export type ReattachEngine = {
     spawn: AgentSupervisor["spawn"];
     reattachPaused?: AgentSupervisor["reattachPaused"];
     reattachTerminal?: AgentSupervisor["reattachTerminal"];
+    reattachShadow?: AgentSupervisor["reattachShadow"];
     // LAZY-REATTACH: absent ⇒ the caller is a lightweight test stub, and reattachConductors
     // falls back to the eager re-spawn it always did.
     reattachDormant?: AgentSupervisor["reattachDormant"];
@@ -79,8 +80,9 @@ export function reattachConductors(
 ): void {
   const isTerminal = (a: AgentRecord) => a.state === "done" || a.state === "failed" || a.state === "killed";
 
+  const byId = new Map(priorAgents.map(a => [a.agentId, a]));
   for (const a of priorAgents) {
-    if (a.shadow === true) continue;
+    if (a.shadow === true) { engine.supervisor.reattachShadow?.(a, a.parentId ? byId.get(a.parentId) : undefined); continue; }
     // Session-limit HOLD (restart-survival): re-register a prior PAUSED agent and re-arm its
     // auto-resume (or resume now if the reset already passed). Runs BEFORE the running-only
     // guard below — paused is not "running". Same membership guard as the running case.

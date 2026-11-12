@@ -23,13 +23,14 @@ export function useWorkflowInspect(
   innerAgentId: string | null,
   intervalMs = 2500,
 ): InspectState {
-  const [state, setState] = useState<InspectState>({ data: null, error: null, loading: true });
+  const target = JSON.stringify([agentId, innerAgentId]);
+  const [state, setState] = useState<InspectState & { target: string }>({ target, data: null, error: null, loading: true });
 
   useEffect(() => {
     let alive = true;
     // Reset to a loading state whenever the target changes so a stale roster never flashes under
     // a freshly-selected shadow.
-    setState({ data: null, error: null, loading: true });
+    setState({ target, data: null, error: null, loading: true });
     let inFlight = false;
     const poll = async () => {
       if (!alive || inFlight) return;
@@ -39,9 +40,9 @@ export function useWorkflowInspect(
           agentId,
           ...(innerAgentId ? { innerAgentId } : {}),
         });
-        if (alive) setState({ data, error: null, loading: false });
+        if (alive) setState({ target, data, error: null, loading: false });
       } catch (e) {
-        if (alive) setState((s) => ({ data: s.data, error: errorText(e), loading: false }));
+        if (alive) setState((s) => ({ target, data: s.data, error: errorText(e), loading: false }));
       } finally {
         inFlight = false;
       }
@@ -52,7 +53,9 @@ export function useWorkflowInspect(
       alive = false;
       clearInterval(id);
     };
-  }, [agentId, innerAgentId, intervalMs]);
+  }, [agentId, innerAgentId, intervalMs, target]);
 
-  return state;
+  // Effects run after rendering: hide the previous inner-agent tail immediately,
+  // including the render before the next effect resets the polling state.
+  return state.target === target ? state : { data: null, error: null, loading: true };
 }

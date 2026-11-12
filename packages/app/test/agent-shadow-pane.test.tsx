@@ -105,11 +105,7 @@ describe("AgentShadowPane — attached-workflow view (R2 item 3)", () => {
   });
 });
 
-// SHADOW-WORKFLOW-VISIBILITY: the AgentShadowPane body branch — a workflow shadow mounts the live
-// AgentWorkflowInspect inner-agent inspector in place of the static "no transcript of its own" note;
-// a native sub-agent (subagentType, no workflowName) keeps that static note. AgentWorkflowInspect's
-// own polling degrades to its "read on demand from the run's transcript directory" note until a
-// snapshot lands (rpcCall is mocked to a bare array above), which is the marker we assert on.
+// Both workflow and native shadows mount the polling inspector, including event-only rows.
 describe("AgentShadowPane — workflow shadow mounts AgentWorkflowInspect (SHADOW-WORKFLOW-VISIBILITY)", () => {
   it("a workflow shadow renders the AgentWorkflowInspect inspector, not the static 'no transcript' note", () => {
     const text = renderPane(baseAgent({
@@ -121,10 +117,10 @@ describe("AgentShadowPane — workflow shadow mounts AgentWorkflowInspect (SHADO
     expect(text).not.toContain("the shadow has no transcript of its own");
   });
 
-  it("a native sub-agent (subagentType, no workflowName) keeps the static 'no transcript' note", () => {
+  it("a native sub-agent also polls its own activity", () => {
     const text = renderPane(baseAgent({ shadowInfo: { subagentType: "code-reviewer" } }));
-    expect(text).toContain("the shadow has no transcript of its own");
-    expect(text).not.toContain("read on demand");
+    expect(text).not.toContain("the shadow has no transcript of its own");
+    expect(text).toContain("read on demand");
   });
 });
 

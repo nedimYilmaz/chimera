@@ -201,3 +201,20 @@
   margin-top: 6px;
   color: var(--muted);
 }
+
+.metaRow { flex-wrap: wrap; }
+.wrap, .lineText { min-width: 0; }
+.phases { display: flex; gap: 6px; flex-wrap: wrap; flex-shrink: 0; }
+.phases button { font: inherit; color: var(--fg); background: var(--raised); border: 1px solid var(--line-soft); padding: 6px 8px; border-radius: var(--radius-chip); display: flex; gap: 8px; flex-wrap: wrap; }
+.phases button[aria-pressed="true"] { border-color: var(--accent); }
+.activity { max-height: 35%; overflow: auto; flex-shrink: 0; }
+.step { display: flex; gap: 8px; overflow-wrap: anywhere; }
+.logs { max-height: 25%; overflow: auto; }
+.logs pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.rowMeta { flex-wrap: wrap; justify-content: flex-end; max-width: 45%; }
+@media (max-width: 600px) {
+  .row { flex-wrap: wrap; }
+  .rowMain { min-width: 65%; }
+  .rowMeta { max-width: 100%; justify-content: flex-start; padding-left: 20px; }
+  .role { width: 42px; font-size: 9px; }
+}

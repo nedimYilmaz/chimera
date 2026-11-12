@@ -72,7 +72,7 @@ describe("AgentWorkflowInspect — degrade path", () => {
     mockRpc.mockReturnValue(new Promise(() => {})); // never resolves — stays in the initial loading state
     let renderer!: ReturnType<typeof create>;
     act(() => { renderer = create(React.createElement(AgentWorkflowInspect, { agent: agent() })); });
-    expect(textOf(renderer)).toContain("loading workflow activity…");
+    expect(textOf(renderer)).toContain("loading activity…");
   });
 });
 
@@ -97,14 +97,14 @@ describe("AgentWorkflowInspect — roster", () => {
       agents: [inner({ agentId: "a1", state: "running" }), inner({ agentId: "a2", state: "done" })],
     }));
     const text = textOf(await renderInspect());
-    expect(text).toContain("2 inner agents");
+    expect(text).toContain("1/2 agents complete");
     expect(text).toContain("1 running");
   });
 
   it("renders the empty-roster note when the workflow is available but no inner agents have started", async () => {
     mockRpc.mockResolvedValue(resp({ agents: [] }));
     const text = textOf(await renderInspect());
-    expect(text).toContain("no inner agents have started yet.");
+    expect(text).toContain("No inner agents have been reported yet.");
   });
 
   it("shows the run id when the daemon reports one", async () => {
@@ -139,7 +139,7 @@ describe("AgentWorkflowInspect — drill-down transcript", () => {
     });
     const r = await renderInspect();
     // Before drilling in, the hint prompts for a selection.
-    expect(textOf(r)).toContain("select an inner agent to view its transcript");
+    expect(textOf(r)).toContain("Select an agent to inspect its tool calls and transcript.");
 
     const button = (r.root.findAllByType("button")).find((b) => (b.props.title as string)?.includes("a1"))!;
     await act(async () => { (button.props.onClick as () => void)(); });

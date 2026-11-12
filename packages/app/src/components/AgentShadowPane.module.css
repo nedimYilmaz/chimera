@@ -125,3 +125,6 @@
 .toneWarn { color: var(--warn); }
 .toneDanger { color: var(--danger); }
 .toneMuted { color: var(--muted); }
+
+.headerTop { flex-wrap: wrap; }
+.body { overflow: auto; }

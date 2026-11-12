@@ -483,13 +483,12 @@ function AgentsWorkspace({ fleetView, setFleetView, focus }: { fleetView: Inspec
           >
             <TranscriptPanel agent={undefined} workflow={workflowData} controlsHost={controlsHost} />
           </ErrorBoundary>
-        ) : selected?.shadow && selected.transcript.length === 0 ? (
-          // R2 (inline sub-agent/workflow surfacing): a shadow with a real captured transcript
-          // (supervisor.ts now routes subagent-tagged events into it) falls through to the normal
-          // TranscriptPanel branch below like any other agent — its AgentView is structurally
-          // identical, no TranscriptPanel change needed. AgentShadowPane stays the fallback for a
-          // shadow with no transcript yet (still-starting, an older CLI, or skipTranscript).
-          <AgentShadowPane agent={selected} />
+        ) : selected?.shadow ? (
+          <AgentShadowPane key={selected.agentId} agent={selected}>
+            {selected.transcript.length > 0 ? <ErrorBoundary key={selected.agentId} label="shadow transcript">
+              <TranscriptPanel agent={selected} controlsHost={controlsHost} />
+            </ErrorBoundary> : null}
+          </AgentShadowPane>
         ) : (
           // Defense-in-depth: a transcript render crash degrades to a fallback
           // pane instead of unmounting the whole tree / blanking the window.

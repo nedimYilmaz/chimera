@@ -1556,6 +1556,19 @@ function projectEvent(state: UiState, e: NormalizedEvent, stampTs = false): UiSt
       // own "upgrade only on a strong name" rule.
       if (e.agentId.startsWith("shadow:")) {
         agent.state = shadowTaskState(e.data);
+        // Desktop snapshots load on connect, not on every task update. Fold the
+        // activity fields here too, otherwise newly created shadows stay blank.
+        const info = { ...agent.shadowInfo };
+        for (const key of ["description", "lastToolName", "summary", "error", "subagentType", "workflowName"] as const) {
+          const value = e.data[key];
+          if (typeof value === "string" && value.trim()) info[key] = value.replace(/[\x00-\x1f\x7f]/g, " ").trim();
+        }
+        const usage = e.data["usage"];
+        if (usage && typeof usage === "object") for (const key of ["totalTokens", "toolUses", "durationMs"] as const) {
+          const value = (usage as Record<string, unknown>)[key];
+          if (typeof value === "number" && Number.isFinite(value) && value >= 0) info[key] = value;
+        }
+        agent.shadowInfo = info;
         const strong = shadowTaskLabel(e.data);
         if (strong) agent.label = strong;
         else if (!agent.label && typeof e.data["description"] === "string" && e.data["description"]) {

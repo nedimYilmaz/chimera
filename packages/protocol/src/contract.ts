@@ -525,18 +525,16 @@ export const AgentHealthSchema = z.object({
 const ReplayAgentsAsOfRequestSchema = z.object({ toSeq: z.number().int().positive().optional() });
 
 // ---------- shadow.workflowInspect (SHADOW-WORKFLOW-VISIBILITY) ----------
-// A WORKFLOW shadow row has no transcript of its own: the workflow's inner agents run as
-// separate harness-side processes whose events never flow through the parent SDK session, so
-// nothing reaches the parent's transcript. Their activity lives ONLY on disk under the
-// workflow's transcriptDir (journal.jsonl + per-agent agent-<id>.jsonl), whose path the parent's
-// Workflow tool_result prints. This RPC parses that dir ON DEMAND (no watchers, v1 poll) so a UI
-// can show the inner-agent roster and drill into one inner agent's transcript tail. UI-only,
-// LOCAL-ONLY (never an agent MCP tool, never a peer method).
+// Live CLI phase/agent progress plus on-demand, session-scoped transcript inspection.
+// Native subagents return their own tail; workflows return a roster and an optional
+// selected inner-agent tail. Older runtimes can fall back to saved workflow snapshots
+// or the directory reported by a Workflow tool result. UI-only and local-only:
+// this method is never an agent MCP tool or a peer method.
 const ShadowWorkflowInspectRequestSchema = z.object({
   agentId: z.string().min(1),
   // When set, additionally return this inner agent's transcript tail (drill-down).
   innerAgentId: z.string().min(1).optional(),
-  // Tail length for the inner-agent transcript (ignored without innerAgentId). Default 200.
+  // Tail length for the native or selected inner-agent transcript. Default 200.
   tailLines: z.number().int().positive().max(2000).optional(),
 }).strict();
 
@@ -557,13 +555,19 @@ const SubListRequestSchema = z.object({ subscriberId: z.string().min(1) }).stric
 export const WorkflowInnerAgentSchema = z.object({
   agentId: z.string(),
   agentType: z.string().nullable(),   // agent-<id>.meta.json agentType (e.g. "general-purpose")
-  label: z.string().nullable(),        // first user-prompt line, truncated (no explicit label is persisted on disk)
-  phase: z.string().nullable(),        // reserved — the workflow phase() group is not persisted on disk (always null in v1)
-  state: z.enum(["running", "done"]),  // "done" once journal.jsonl carries a result record for this agent
+  label: z.string().nullable(),        // reported workflow label, falling back to the first user-prompt line
+  phase: z.string().nullable(),        // reported phase title; null when the runtime has no phase metadata
+  state: z.enum(["pending", "running", "done", "failed", "killed", "paused", "unknown"]),
   resultPreview: z.string().nullable(),
   lastActivityTs: z.number().nullable(),   // epoch ms — newest transcript record, else the transcript file mtime
   spawnDepth: z.number().nullable(),
   model: z.string().nullable(),
+  phaseIndex: z.number().optional(),
+  tokens: z.number().optional(),
+  toolCalls: z.number().optional(),
+  durationMs: z.number().optional(),
+  lastToolName: z.string().optional(),
+  lastToolSummary: z.string().optional(),
 }).strict();
 export type WorkflowInnerAgent = z.infer<typeof WorkflowInnerAgentSchema>;
 export const WorkflowTranscriptLineSchema = z.object({
@@ -572,17 +576,35 @@ export const WorkflowTranscriptLineSchema = z.object({
   ts: z.number().nullable(),
 }).strict();
 export type WorkflowTranscriptLine = z.infer<typeof WorkflowTranscriptLineSchema>;
+export const ShadowActivitySchema = z.object({
+  lastActivityTs: z.number().nullable(),
+  lastTool: z.string().nullable(),
+  steps: z.array(z.object({
+    title: z.string(),
+    status: z.enum(["pending", "in_progress", "completed"]),
+  }).strict()),
+  truncated: z.boolean(),
+}).strict();
+export type ShadowActivity = z.infer<typeof ShadowActivitySchema>;
 export const ShadowWorkflowInspectResponseSchema = z.object({
-  available: z.boolean(),        // false + reason when not a workflow / dir unknown / dir gone
+  source: z.enum(["subagent", "workflow"]).optional(),
+  activity: ShadowActivitySchema.optional(),
+  workflow: z.object({
+    name: z.string().nullable(),
+    status: z.string().nullable(),
+    durationMs: z.number().nullable(),
+    totalTokens: z.number().nullable(),
+    totalToolCalls: z.number().nullable(),
+    phases: z.array(z.object({ index: z.number(), title: z.string(), detail: z.string().nullable() }).strict()),
+  }).strict().optional(),
+  available: z.boolean(),        // false + reason when activity is unavailable or explicitly disabled
   reason: z.string().nullable(),
   runId: z.string().nullable(),
   transcriptDir: z.string().nullable(),
   agents: z.array(WorkflowInnerAgentSchema),
-  // Reserved: workflow log() narrator lines are not persisted to the workflow dir in this
-  // runtime, so v1 always returns []. Kept in the contract so surfacing them later needs no
-  // schema/UI change.
+  // Narrator lines from a saved workflow snapshot, when available.
   narratorLines: z.array(z.string()),
-  transcript: z.array(WorkflowTranscriptLineSchema).nullable(),   // present only when innerAgentId requested
+  transcript: z.array(WorkflowTranscriptLineSchema).nullable(),   // native subagent tail, or the selected workflow agent tail
 }).strict();
 export type ShadowWorkflowInspectResponse = z.infer<typeof ShadowWorkflowInspectResponseSchema>;
 

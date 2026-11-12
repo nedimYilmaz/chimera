@@ -1,3 +1,4 @@
+import { ShadowActivityProbe, shadowFixture, shadowRpc } from "./shadow-activity";
 import "../../src/components/CheckpointsCard";
 import { agentControlsFixture } from "./agent-controls";
 import { systemCommands, systemLocal } from "../../src/state/commands.system";
@@ -177,7 +178,7 @@ declare global {
 type EdgeCase = "external-focus" | "cancel-focus" | "inline-child" | "portal-child" | "no-close" | "guard-popup";
 type ActionScenario = "confirm-actions" | "team-actions" | "queue-actions";
 type MainScreen = "review" | "welcome" | "projects" | "memory" | "events" | "roles" | "inbox" | "slo" | "runs" | "help" | "agents" | "settings" | "teams" | "queues";
-type Scenario = "agent-controls" | "schedule-command" | "codex-full-settings" | "history-recovery" | "remote-control" | "html-preview" | "media-preview" | "native-mcp-settings" | "message-identity" | "project-delete" | "qa-recovery" | "qa-liveboard" | "project-canvas" | "inspector-registry" | "operator-settings" | "operator-read" | "operator-control" | "conversation-fork" | "context-links" | "stt" | "git-review" | "issue-board" | "resources" | "output-images" | "teams-stability" | "team-roles-stability" | "roles-stability" | "desktop-preview" | "workflow-transcript" | "computer-use" | "background-task" | "project-import" | "slash-codex" | "slash-claude" | "group-order" | "quick-spawn" | "workspace-tools" | "keyboard" | `screen-${MainScreen}` | "metrics" | "accounts" | "local-links" | "design" | "design-error" | "design-large" | "secrets" | "live-names" | EdgeCase | ActionScenario | "topbar" | "modal" | "voice" | "ptt" | "transcript" | "pane" | "queues" | "teams" | "settings" | "spawn";
+type Scenario = "shadow-activity" | "agent-controls" | "schedule-command" | "codex-full-settings" | "history-recovery" | "remote-control" | "html-preview" | "media-preview" | "native-mcp-settings" | "message-identity" | "project-delete" | "qa-recovery" | "qa-liveboard" | "project-canvas" | "inspector-registry" | "operator-settings" | "operator-read" | "operator-control" | "conversation-fork" | "context-links" | "stt" | "git-review" | "issue-board" | "resources" | "output-images" | "teams-stability" | "team-roles-stability" | "roles-stability" | "desktop-preview" | "workflow-transcript" | "computer-use" | "background-task" | "project-import" | "slash-codex" | "slash-claude" | "group-order" | "quick-spawn" | "workspace-tools" | "keyboard" | `screen-${MainScreen}` | "metrics" | "accounts" | "local-links" | "design" | "design-error" | "design-large" | "secrets" | "live-names" | EdgeCase | ActionScenario | "topbar" | "modal" | "voice" | "ptt" | "transcript" | "pane" | "queues" | "teams" | "settings" | "spawn";
 
 type PttSnapshot = { starts: number; stops: number; sends: string[]; backgroundActions: number };
 let sttActive = false;
@@ -294,6 +295,7 @@ function contextRpc(method: string, params: Record<string, unknown> = {}) {
   return row;
 }
 window.__UI_QA_RPC__ = (method, params) => {
+  if (shadowFixture.active && method === "shadow.workflowInspect") return shadowRpc(params ?? {});
   if (agentControlsFixture.active) { const result = agentControlsFixture.rpc(method, params ?? {}); if (result !== undefined) return result; }
   if (method === "job.sudoPlan") {
     scheduleCommandFixture.plans.push(params as Record<string, unknown>);
@@ -906,6 +908,7 @@ function ScenarioView({ name }: { name: Scenario }) {
   if (name === "resources" || name === "context-links" || name === "conversation-fork") return <MainScreenProbe name="agents" />;
   if (name === "inspector-registry") return <MainScreenProbe name="agents" />;
   if (name === "group-order") return <MainScreenProbe name="agents" />;
+  if (name === "shadow-activity") return <ShadowActivityProbe />;
   if (name === "workflow-transcript") return <WorkflowTranscriptProbe />;
   if (name === "background-task") return <BackgroundTaskProbe />;
   if (name === "project-import") return <Stage><ImportCard teams={["crew"]} importDirHint="/synthetic/projects" onClose={() => {}} onSubmit={async (values) => { projectImports.push(values); }} /></Stage>;
@@ -976,6 +979,8 @@ const computerRequest = async (command: string, args?: Record<string, unknown>) 
   return computerStatus;
 };
 function show(name: Scenario): void {
+  shadowFixture.active = name === "shadow-activity";
+  shadowFixture.completed = false; shadowFixture.fail = false;
   // Remove the previous scenario subscriptions before resetting shared stores.
   // Otherwise its listeners can start requests against the next scenario.
   root?.unmount();

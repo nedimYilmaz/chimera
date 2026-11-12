@@ -309,3 +309,12 @@ describe("background task completion reaches the transcript", () => {
     ]);
   });
 });
+
+
+it("preserves live workflow phases supplied outside older SDK declarations", async () => {
+  const progress = [{ type: "workflow_phase", index: 1, title: "Context" },
+    { type: "workflow_agent", index: 1, agentId: "inner", phaseIndex: 1, state: "progress", tokens: 55600 }];
+  const events = await run([{ type: "system", subtype: "task_progress", task_id: "review", session_id: "session",
+    subagent_type: "ai-review-staged", workflow_progress: progress }]);
+  expect(events.find(e => e.kind === "agent_task")?.data).toMatchObject({ sessionId: "session", workflowProgress: progress });
+});

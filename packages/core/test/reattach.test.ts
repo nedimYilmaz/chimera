@@ -192,7 +192,7 @@ describe("reattachConductors (Task CR2) — eager mode", () => {
     expect(e.supervisor.list().map((a) => a.agentId)).toEqual(expect.arrayContaining(["done-1", "failed-1", "killed-1"]));
   });
 
-  it("REATTACH-TERMINAL-RECORDS: a shadow row stays skipped even though shadow ≠ a real state", async () => {
+  it("REATTACH-TERMINAL-RECORDS: a terminal shadow stays inspectable without being respawned", async () => {
     const fake = new FakeAgentBackend([]);
     const e = engineWithFake(fake);
     const prior = priorAgent({ agentId: "shadow:done:1", treeId: "p", conductor: false, state: "done", shadow: true });
@@ -200,7 +200,7 @@ describe("reattachConductors (Task CR2) — eager mode", () => {
     reattachConductors(e, [prior], "eager");
     await new Promise((r) => setTimeout(r, 20));
 
-    expect(() => e.supervisor.status("shadow:done:1")).toThrow();
+    expect(e.supervisor.getShadow("shadow:done:1")).toMatchObject({ shadow: true, state: "done" });
   });
 
   it("MEMORY-BOUNDED-DISK-COMPLETE: reattach re-registers EVERY prior terminal record, no cap (state.json is disk-complete; the hot-set cap only bounds what stays FULL in memory, via snapshotAgents' own archive-then-lighten sweep, not what's visible)", async () => {
@@ -771,4 +771,13 @@ describe("reattachConductors — seen stamps survive (F47.FIX L-1)", () => {
     expect(rec.attentionAt).toBeUndefined();
     expect(rec.reviewedAt).toBeUndefined();
   });
+});
+
+it("restores shadow inspection records without spawning a separate CLI", () => {
+  const parent = priorAgent({ sessionId: "parent-session" });
+  const shadow = priorAgent({ agentId: "shadow:agent-1:gate", parentId: parent.agentId, shadow: true, label: "ai-review-staged" });
+  const spawn = vi.fn(); const reattachShadow = vi.fn(); const reattachDormant = vi.fn();
+  reattachConductors({ supervisor: { spawn, reattachShadow, reattachDormant }, events: { append: vi.fn() } } as unknown as ReattachEngine, [shadow, parent]);
+  expect(reattachShadow).toHaveBeenCalledWith(shadow, parent);
+  expect(spawn).not.toHaveBeenCalled();
 });

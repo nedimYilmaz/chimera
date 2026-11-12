@@ -14,9 +14,11 @@
 // label and stats the file for the last-activity time — because the UI polls this while a shadow
 // row is selected. The full transcript is read only for the single drilled-into inner agent.
 
-import { open, readFile, readdir, stat } from "node:fs/promises";
+import { open, readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { containedPath, inspectSubagentFile, readBoundedTail } from "./shadow-transcript.js";
+import type { ShadowActivity } from "@chimera/protocol/contract";
 
 // Parse the "Transcript dir:" / "Run ID:" lines a Workflow tool_result prints, so the supervisor
 // can stash the on-disk location on the workflow's shadow record. Tolerant of surrounding text and
@@ -90,7 +92,7 @@ export function parseTranscript(text: string): ParsedTranscriptLine[] {
     const content = m["content"];
     if (typeof content === "string") {
       const s = content.trim();
-      if (s) out.push({ role, text: s, ts });
+      if (s) out.push({ role, text: s.slice(0, 16000), ts });
       continue;
     }
     if (!Array.isArray(content)) continue;
@@ -99,12 +101,14 @@ export function parseTranscript(text: string): ParsedTranscriptLine[] {
       const blk = b as Record<string, unknown>;
       if (blk["type"] === "text" && typeof blk["text"] === "string") {
         const s = blk["text"].trim();
-        if (s) out.push({ role, text: s, ts });
+        if (s) out.push({ role, text: s.slice(0, 16000), ts });
       } else if (blk["type"] === "tool_use" && typeof blk["name"] === "string") {
-        out.push({ role: "tool", text: `⚙ ${blk["name"]}`, ts });
+        const input = blk["input"];
+        const detail = input && typeof input === "object" && Object.keys(input).length ? JSON.stringify(input).slice(0, 4000) : "";
+        out.push({ role: "tool", text: `⚙ ${blk["name"]}${detail ? `\n${detail}` : ""}`, ts });
       } else if (blk["type"] === "tool_result") {
         const rt = toolResultPreview(blk["content"]);
-        if (rt) out.push({ role: "tool", text: rt, ts });
+        if (rt) out.push({ role: "tool", text: `${blk["is_error"] === true ? "error · " : ""}${rt}`, ts });
       }
     }
   }
@@ -130,6 +134,7 @@ export type ParsedInnerAgent = {
 export type InspectResult = {
   agents: ParsedInnerAgent[];
   transcript: ParsedTranscriptLine[] | null;
+  activity?: ShadowActivity;
 };
 
 // Read + assemble the whole inspect view for one workflow dir. Throws only if the dir itself is
@@ -140,22 +145,25 @@ export async function inspectWorkflowDir(
   opts: { innerAgentId?: string; tailLines?: number } = {},
 ): Promise<InspectResult> {
   const entries = await readdir(dir);
-  const journalText = await readFileSafe(join(dir, "journal.jsonl"));
+  const journalPath = await containedPath(dir, join(dir, "journal.jsonl"));
+  const journalText = journalPath ? await readFileSafe(journalPath) : null;
   const journal = journalText !== null ? parseJournal(journalText) : new Map<string, JournalEntry>();
 
   // Roster = union of meta-file ids (authoritative — every spawned inner agent has one) and any
   // journal id (belt-and-suspenders for a race where the meta file lags the journal record).
   const ids = new Set<string>();
   for (const f of entries) {
-    if (f.startsWith("agent-") && f.endsWith(".meta.json")) ids.add(f.slice("agent-".length, -".meta.json".length));
+    if (/^agent-[\w-]+\.meta\.json$/.test(f)) ids.add(f.slice("agent-".length, -".meta.json".length));
   }
-  for (const id of journal.keys()) ids.add(id);
+  for (const id of journal.keys()) if (/^[\w-]+$/.test(id)) ids.add(id);
 
   const agents: ParsedInnerAgent[] = [];
   for (const id of ids) {
-    const meta = parseMeta((await readFileSafe(join(dir, `agent-${id}.meta.json`))) ?? "");
+    const metaPath = await containedPath(dir, join(dir, `agent-${id}.meta.json`));
+    const transcriptPath = await containedPath(dir, join(dir, `agent-${id}.jsonl`));
+    const meta = parseMeta((metaPath ? await readFileSafe(metaPath) : null) ?? "");
     // Bounded prefix read (not the whole transcript) — enough to capture the first user prompt.
-    const prefix = await readFilePrefix(join(dir, `agent-${id}.jsonl`), 64 * 1024);
+    const prefix = transcriptPath ? await readFilePrefix(transcriptPath, 64 * 1024) : null;
     const label = prefix !== null ? firstPromptLabel(parseTranscript(prefix)) : null;
     const j = journal.get(id);
     agents.push({
@@ -164,7 +172,7 @@ export async function inspectWorkflowDir(
       label,
       state: j?.state ?? "running",
       resultPreview: j?.resultPreview ?? null,
-      lastActivityTs: await mtimeOf(join(dir, `agent-${id}.jsonl`)),
+      lastActivityTs: transcriptPath ? await mtimeOf(transcriptPath) : null,
       spawnDepth: meta.spawnDepth,
       model: meta.model,
     });
@@ -173,6 +181,7 @@ export async function inspectWorkflowDir(
   agents.sort((a, b) => (b.lastActivityTs ?? 0) - (a.lastActivityTs ?? 0));
 
   let transcript: ParsedTranscriptLine[] | null = null;
+  let activity: ShadowActivity | undefined;
   if (opts.innerAgentId) {
     // Only serve a transcript for an inner agent that actually appears in this run's roster.
     // Besides being correct (you can only drill into a real inner agent), gating on the
@@ -180,14 +189,15 @@ export async function inspectWorkflowDir(
     // unvalidated — a defense-in-depth guard against a `../`-style traversal even though this RPC
     // is local-only and off both the peer and agent-MCP surfaces.
     if (ids.has(opts.innerAgentId)) {
-      const text = await readFileSafe(join(dir, `agent-${opts.innerAgentId}.jsonl`));
-      const n = opts.tailLines ?? 200;
-      transcript = text !== null ? parseTranscript(text).slice(-n) : [];
+      const path = await containedPath(dir, join(dir, `agent-${opts.innerAgentId}.jsonl`));
+      const inspected = path ? await inspectSubagentFile(path, opts.tailLines).catch(() => null) : null;
+      transcript = inspected?.transcript ?? [];
+      activity = inspected?.activity;
     } else {
       transcript = [];
     }
   }
-  return { agents, transcript };
+  return { agents, transcript, ...(activity ? { activity } : {}) };
 }
 
 function previewOf(result: unknown, max = 500): string | null {
@@ -201,7 +211,7 @@ function previewOf(result: unknown, max = 500): string | null {
   return flat.length > max ? `${flat.slice(0, max)}…` : flat;
 }
 
-function toolResultPreview(content: unknown, max = 200): string | null {
+function toolResultPreview(content: unknown, max = 16000): string | null {
   let s: string | null = null;
   if (typeof content === "string") s = content;
   else if (Array.isArray(content)) {
@@ -226,7 +236,7 @@ function tsOf(v: unknown): number | null {
 }
 
 async function readFileSafe(path: string): Promise<string | null> {
-  try { return await readFile(path, "utf8"); } catch { return null; }
+  try { return (await readBoundedTail(path, 4 * 1024 * 1024)).text; } catch { return null; }
 }
 
 async function readFilePrefix(path: string, maxBytes: number): Promise<string | null> {

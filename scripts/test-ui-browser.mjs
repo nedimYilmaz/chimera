@@ -1,3 +1,4 @@
+import { probeShadowActivity } from "./probes/shadow-activity.mjs";
 import { probeControlStyle } from "./probes/control-style.mjs";
 import { probeAgentControls } from "./probes/agent-controls.mjs";
 import { probeHtmlPreview } from "./probes/html-preview.mjs";
@@ -256,6 +257,9 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
   check("network guard blocks external fetch and websocket", networkGuard.fetchBlocked && networkGuard.websocketBlocked
     && networkGuard.attempts.length === 2 && networkGuard.attempts.every((attempt) => attempt.blocked), networkGuard);
 
+
+  await probeShadowActivity({ viewport, show, waitFor, check, evaluate, click, screenshot });
+  if (process.env.CHIMERA_BROWSER_GATE_SHADOW_ONLY === "1") return;
 
   if (process.env.CHIMERA_BROWSER_GATE_CONTROL_STYLE_ONLY === "1") {
     await probeControlStyle({ viewport, show, settleRender, evaluate, check, screenshot, key });
@@ -2481,6 +2485,7 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
   await call("Input.setInterceptDrags", { enabled: false }, sessionId);
   stopDragListener();
 
+
   await show("workflow-transcript");
   await waitFor(`document.querySelector('[data-agent-link="shadow:workflow-owner:old"]')`);
   check("native workflows stay out of fleet list", await evaluate(`!!document.querySelector('[data-agent-row="workflow-owner"]') && !document.querySelector('[data-agent-row^="shadow:workflow-owner:"]') && document.querySelectorAll('[data-workflow-probe] [data-agent-link^="shadow:workflow-owner:"]').length === 2`));
@@ -2504,7 +2509,9 @@ const suiteExitCode = await runBrowserSuiteCli("ui", async ({ reporter, signal }
       }
     }
   }
-}, { requiredCheckIds: process.env.CHIMERA_BROWSER_GATE_CONTROL_STYLE_ONLY === "1"
+}, { requiredCheckIds: process.env.CHIMERA_BROWSER_GATE_SHADOW_ONLY === "1"
+  ? REQUIRED_CHECK_IDS.ui.filter(id => id.startsWith("ui.shadow-activity-") || id === "ui.network-guard-blocks-external-fetch-and-websocket")
+  : process.env.CHIMERA_BROWSER_GATE_CONTROL_STYLE_ONLY === "1"
   ? REQUIRED_CHECK_IDS.ui.filter(id => id.startsWith("ui.control-style-") || id === "ui.network-guard-blocks-external-fetch-and-websocket")
   : process.env.CHIMERA_BROWSER_GATE_AGENT_CONTROLS_ONLY === "1"
   ? REQUIRED_CHECK_IDS.ui.filter(id => id.startsWith("ui.agent-controls-") || id.startsWith("ui.composer-commands-") || id.startsWith("ui.toolbar-toggles-") || id.startsWith("ui.inspector-layout-") || id === "ui.network-guard-blocks-external-fetch-and-websocket")

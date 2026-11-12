@@ -92,7 +92,7 @@ describe("shadow.workflowInspect (end-to-end)", () => {
     expect(snap.reason).toMatch(/not been reported yet/i);
   });
 
-  it("rejects a native sub-agent shadow (no workflowName) as not-a-workflow", async () => {
+  it("reports missing session logs for a native sub-agent instead of rejecting its type", async () => {
     const e = engineWith([
       { emit: { kind: "agent_started", data: {} } },
       { task: { taskId: "T2", toolUseId: "sub-1", subagentType: "code-reviewer" } },
@@ -103,7 +103,7 @@ describe("shadow.workflowInspect (end-to-end)", () => {
     await tick();
     const snap = (await e.handle("shadow.workflowInspect", { agentId: `shadow:${parent.agentId}:T2` })) as ShadowWorkflowInspectResponse;
     expect(snap.available).toBe(false);
-    expect(snap.reason).toMatch(/native sub-agent/i);
+    expect(snap.reason).toMatch(/spawning Claude session/i);
   });
 
   it("returns not-a-known-shadow for an unknown agentId", async () => {
@@ -112,4 +112,25 @@ describe("shadow.workflowInspect (end-to-end)", () => {
     expect(snap.available).toBe(false);
     expect(snap.reason).toMatch(/not a known shadow/i);
   });
+});
+
+it("serves CLI phases from live task_progress before any Workflow tool result or transcript file", async () => {
+  const e = engineWith([
+    { emit: { kind: "agent_started", data: { sessionId: "s-live" } } },
+    { task: { taskId: "gate", subagentType: "ai-review-staged" } },
+    { emit: { kind: "agent_task", data: { taskId: "gate", status: "running", workflowProgress: [
+      { type: "workflow_phase", index: 1, title: "code-review:ai-review-context" },
+      { type: "workflow_agent", index: 1, agentId: "pre", label: "pre-gather", phaseIndex: 1, phaseTitle: "code-review:ai-review-context", state: "done", tokens: 55600 },
+      { type: "workflow_agent", index: 2, agentId: "judge", label: "context (judgment)", phaseIndex: 1, state: "progress", model: "opus", tokens: 91700 },
+    ] } } },
+    { awaitSend: true },
+  ]);
+  const parent = await e.handle("agent.spawn", { spec: { prompt: "x", cwd: "/tmp", isolation: "none" } }) as { agentId: string };
+  await tick();
+  try {
+    const result = await e.handle("shadow.workflowInspect", { agentId: `shadow:${parent.agentId}:gate` }) as ShadowWorkflowInspectResponse;
+    expect(result.available).toBe(true); expect(result.source).toBe("workflow");
+    expect(result.workflow?.phases[0]?.title).toBe("code-review:ai-review-context");
+    expect(result.agents.map(a => [a.label, a.state, a.tokens])).toEqual([["pre-gather", "done", 55600], ["context (judgment)", "running", 91700]]);
+  } finally { await e.handle("agent.kill", { agentId: parent.agentId }); }
 });

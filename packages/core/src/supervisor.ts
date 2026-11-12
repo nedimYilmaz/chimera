@@ -368,6 +368,9 @@ export type AgentRecord = {
   // Deliberately NOT on the agent.list wire snapshot — the inspect RPC reads it straight off this
   // record, and the UI already knows a shadow is a workflow via shadowInfo.workflowName.
   workflowTranscriptDir?: string;
+  // Pin disk inspection to the spawning session/account, even if the parent later switches.
+  shadowTranscriptContext?: { taskId: string; sessionId?: string; configDir: string; cwd: string; toolUseId?: string; skipTranscript?: boolean };
+  shadowWorkflowProgress?: unknown[];
   workflowRunId?: string;
   // WD Stage 1 (coverage B12, sessions-table branch column): the git branch of the
   // spec's cwd, stamped ASYNCHRONOUSLY at spawn (never blocks/gates the spawn) and
@@ -2575,11 +2578,25 @@ export class AgentSupervisor {
     // the task is skipTranscript (ambient/housekeeping — the SDK's own "hide this from the inline
     // transcript" intent, see SDKTaskStartedMessage's doc). Runs on every sighting (task_started,
     // task_progress, task_updated can each independently supply toolUseId), not just creation.
-    if (typeof data["toolUseId"] === "string" && data["toolUseId"] !== "" && data["skipTranscript"] !== true) {
+    if (typeof data["toolUseId"] === "string" && data["toolUseId"] !== "" && data["skipTranscript"] !== true && !this.shadowAgents.get(id)?.shadowTranscriptContext?.skipTranscript) {
       this.subagentToolUseIndex.set(data["toolUseId"], id);
     }
     const existing = this.shadowAgents.get(id);
+    const context = existing?.shadowTranscriptContext ?? {
+      taskId,
+      sessionId: typeof data["sessionId"] === "string" ? data["sessionId"] : parent.sessionId,
+      configDir: this.deps.registry.get(parent.accountName)?.auth.homeDir ?? process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude"),
+      cwd: resolveWorkdirPath({ ...parent.spec, agentId: parent.agentId }),
+    };
+    if (typeof data["toolUseId"] === "string") context.toolUseId = data["toolUseId"];
+    if (data["skipTranscript"] === true) {
+      context.skipTranscript = true;
+      for (const [toolId, shadowId] of this.subagentToolUseIndex) if (shadowId === id) this.subagentToolUseIndex.delete(toolId);
+    }
+    if (!context.sessionId && typeof data["sessionId"] === "string") context.sessionId = data["sessionId"];
     if (existing) {
+      existing.shadowTranscriptContext = context;
+      if (Array.isArray(data["workflowProgress"])) existing.shadowWorkflowProgress = data["workflowProgress"].slice(0, 2000);
       existing.state = state;                                // running -> terminal on a later task_updated (incl. killed)
       if (strong) existing.label = strong;                   // upgrade only on a strong name; never clobber it with a transient description
       // Task SHADOW-ACT: last-known-value-wins per field — a task_progress carrying
@@ -2612,6 +2629,8 @@ export class AgentSupervisor {
       originConductorId: parent.originConductorId,
       projectId: parent.projectId,
       shadow: true,
+      shadowTranscriptContext: context,
+      ...(Array.isArray(data["workflowProgress"]) ? { shadowWorkflowProgress: data["workflowProgress"].slice(0, 2000) } : {}),
       label: strong,                                         // non-null past the creation gate above
       // Task SHADOW-ACT: seed the activity fields from the first sighting (omit the
       // key entirely when nothing rich landed yet, so a bare task_started shadow
@@ -2651,6 +2670,22 @@ export class AgentSupervisor {
   // workflowTranscriptDir/workflowRunId off the record). Returns undefined for a non-shadow id.
   getShadow(agentId: string): AgentRecord | undefined {
     return this.shadowAgents.get(agentId);
+  }
+
+  reattachShadow(prior: AgentRecord, parent?: AgentRecord): void {
+    const record = { ...prior };
+    // A saved running state is not proof that a CLI process survived the restart.
+    if (record.state === "running") record.state = "paused";
+    if (!record.shadowTranscriptContext && parent && prior.provider === "claude") {
+      const prefix = `shadow:${parent.agentId}:`;
+      if (prior.agentId.startsWith(prefix)) record.shadowTranscriptContext = {
+        taskId: prior.agentId.slice(prefix.length), sessionId: parent.sessionId,
+        configDir: this.deps.registry.get(prior.accountName)?.auth.homeDir ?? process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude"),
+        cwd: resolveWorkdirPath({ ...parent.spec, agentId: parent.agentId }),
+      };
+    }
+    this.shadowAgents.set(record.agentId, record);
+    this.generation++;
   }
 
   // Task SHADOW-ACT: read the rich progress fields off an agent_task's data into a

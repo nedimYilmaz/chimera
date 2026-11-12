@@ -1021,6 +1021,9 @@ export class ClaudeAgentBackend implements AgentBackend {
               raw,
               data: {
                 taskId: m["task_id"],
+                sessionId: m["session_id"],
+                // CLI task_progress includes this even though older SDK declarations omit it.
+                ...(Array.isArray(m["workflow_progress"]) ? { workflowProgress: m["workflow_progress"] } : {}),
                 toolUseId: m["tool_use_id"],
                 subagentType: identity["subagent_type"],
                 taskType: identity["task_type"],
